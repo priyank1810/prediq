@@ -149,6 +149,10 @@ class XGBoostPredictor:
         if self._model_is_fresh(model_path):
             saved = joblib.load(model_path)
             model = saved["model"]
+            feature_cols = saved.get("feature_cols", feature_cols)
+            X = feat_df[feature_cols].values
+            split = int(len(X) * 0.8)
+            X_test = X[split:]
         else:
             model = XGBRegressor(
                 n_estimators=200,
@@ -363,6 +367,10 @@ class XGBoostPredictor:
         if self._model_is_fresh(model_path):
             saved = joblib.load(model_path)
             model = saved["model"]
+            feature_cols = saved.get("feature_cols", feature_cols)
+            X = feat_df[feature_cols].values
+            split = int(len(X) * 0.8)
+            X_test = X[split:]
         else:
             model = XGBRegressor(
                 n_estimators=150,
