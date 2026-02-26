@@ -30,15 +30,39 @@ const Options = {
         });
     },
 
+    _renderLoading() {
+        const container = document.getElementById('optionChainContainer');
+        container.innerHTML = `
+            <div class="text-center py-12">
+                <div class="animate-spin w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div>
+                <p class="text-gray-400 text-sm mt-3">Fetching option chain from NSE...</p>
+            </div>`;
+    },
+
+    _renderError(message) {
+        const container = document.getElementById('optionChainContainer');
+        const summary = document.getElementById('optionSummary');
+        summary.classList.add('hidden');
+        container.innerHTML = `
+            <div class="text-center py-10 px-6">
+                <div class="text-yellow-400 text-3xl mb-3">&#9888;</div>
+                <p class="text-gray-300 text-sm mb-2">${message}</p>
+                <p class="text-gray-600 text-xs mb-4">Tip: NSE option chain works best during market hours (Mon-Fri, 9:15 AM - 3:30 PM IST) from a non-cloud network.</p>
+                <button onclick="Options.currentSymbol && Options.load(Options.currentSymbol)"
+                    class="px-4 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium">
+                    Retry
+                </button>
+            </div>`;
+    },
+
     async load(symbol) {
         if (this.isLoading) return;
         this.isLoading = true;
         this.currentSymbol = symbol;
 
-        const container = document.getElementById('optionChainContainer');
         const summary = document.getElementById('optionSummary');
-        container.innerHTML = '<div class="text-center py-8 text-gray-400">Loading option chain...</div>';
         summary.classList.add('hidden');
+        this._renderLoading();
 
         try {
             const data = await API.getOptionChain(symbol);
@@ -46,7 +70,7 @@ const Options = {
             this._populateExpiries(data.expiry_dates, data.expiry);
             this.renderChain(data);
         } catch (e) {
-            container.innerHTML = `<div class="text-center py-8 text-red-400">${e.message}</div>`;
+            this._renderError(e.message);
         } finally {
             this.isLoading = false;
         }
@@ -57,14 +81,13 @@ const Options = {
         this.isLoading = true;
         this.currentExpiry = expiry;
 
-        const container = document.getElementById('optionChainContainer');
-        container.innerHTML = '<div class="text-center py-8 text-gray-400">Loading...</div>';
+        this._renderLoading();
 
         try {
             const data = await API.getOptionChain(symbol, expiry);
             this.renderChain(data);
         } catch (e) {
-            container.innerHTML = `<div class="text-center py-8 text-red-400">${e.message}</div>`;
+            this._renderError(e.message);
         } finally {
             this.isLoading = false;
         }

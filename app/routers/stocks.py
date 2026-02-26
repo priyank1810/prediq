@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.services.data_fetcher import data_fetcher
+from app.services.market_movers import market_movers_service
 from app.utils.helpers import market_status
 
 router = APIRouter()
@@ -32,6 +33,12 @@ def get_data_source():
     except Exception:
         pass
     return {"source": "yfinance", "label": "Delayed 15-20 min", "delay": 15}
+
+
+@router.get("/market-movers")
+def get_market_movers(count: int = Query(10, ge=1, le=50)):
+    """Return top gainers and losers from the broader market."""
+    return market_movers_service.get_market_movers(count)
 
 
 @router.post("/quotes/bulk")

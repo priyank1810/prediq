@@ -48,7 +48,8 @@ ALERT_CHECK_INTERVAL = 30  # seconds
 CACHE_TTL_INTRADAY = 30
 CACHE_TTL_SENTIMENT = 300
 CACHE_TTL_GLOBAL = 60
-CACHE_TTL_OPTION_CHAIN = 30
+CACHE_TTL_OPTION_CHAIN = 120
+CACHE_TTL_MARKET_MOVERS = 120
 SIGNAL_REFRESH_INTERVAL = 60
 
 SIGNAL_WEIGHT_TECHNICAL = 0.50
@@ -83,6 +84,20 @@ NEGATIVE_KEYWORDS = [
     "crash", "fall", "downgrade", "bearish", "loss", "weak", "sell",
     "underperform", "decline", "risk", "drop", "negative", "low",
     "plunge", "down", "cut", "warning", "fear", "pessimistic", "slump",
+]
+
+# NIFTY 50 symbols (yfinance fallback for market movers)
+NIFTY_50_SYMBOLS = [
+    "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+    "HINDUNILVR", "SBIN", "BHARTIARTL", "KOTAKBANK", "ITC",
+    "LT", "AXISBANK", "BAJFINANCE", "MARUTI", "TITAN",
+    "ASIANPAINT", "SUNPHARMA", "HCLTECH", "WIPRO", "ULTRACEMCO",
+    "NTPC", "POWERGRID", "ONGC", "TATAMOTORS", "TATASTEEL",
+    "ADANIENT", "ADANIPORTS", "COALINDIA", "BPCL", "IOC",
+    "JSWSTEEL", "TECHM", "INDUSINDBK", "HDFCLIFE", "SBILIFE",
+    "BAJAJFINSV", "GRASIM", "DIVISLAB", "DRREDDY", "CIPLA",
+    "EICHERMOT", "HEROMOTOCO", "APOLLOHOSP", "TATACONSUM", "NESTLEIND",
+    "BRITANNIA", "M&M", "HINDALCO", "UPL", "SHRIRAMFIN",
 ]
 
 # Popular NSE stocks for quick access

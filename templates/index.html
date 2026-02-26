@@ -234,6 +234,25 @@
                     </div>
                 </div>
 
+                <!-- Top Gainers / Top Losers -->
+                <div class="grid grid-cols-2 gap-6 mb-4">
+                    <div>
+                        <h3 class="text-sm text-gray-400 mb-2 font-medium flex items-center gap-2">
+                            Top Gainers
+                            <span class="text-[10px] text-gray-600 font-normal" id="moversSource"></span>
+                        </h3>
+                        <div id="gainersGrid" class="space-y-1">
+                            <div class="text-center py-4 text-gray-600 text-sm">Loading...</div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-sm text-gray-400 mb-2 font-medium">Top Losers</h3>
+                        <div id="losersGrid" class="space-y-1">
+                            <div class="text-center py-4 text-gray-600 text-sm">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- High-Confidence AI Signals -->
                 <div class="bg-dark-800 rounded-lg p-4">
                     <div class="flex items-center justify-between mb-3">
@@ -267,6 +286,9 @@
                     <div id="macdChart" style="height: 120px;"></div>
                 </div>
             </div>
+
+            <!-- F&O Summary Card (auto-loaded when stock selected) -->
+            <div id="optionSummaryCard" class="hidden mt-4 bg-dark-800 rounded-lg p-4"></div>
 
             <!-- Prediction Panel -->
             <div id="predictionPanel" class="hidden mt-4 bg-dark-800 rounded-lg p-4">
@@ -534,16 +556,16 @@
     <!-- Toast Container -->
     <div id="toastContainer" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
 
-    <script src="/static/js/auth.js?v=3"></script>
-    <script src="/static/js/api.js?v=3"></script>
-    <script src="/static/js/chart.js?v=3"></script>
-    <script src="/static/js/search.js?v=3"></script>
-    <script src="/static/js/predictions.js?v=3"></script>
-    <script src="/static/js/watchlist.js?v=3"></script>
-    <script src="/static/js/insights.js?v=3"></script>
-    <script src="/static/js/signals.js?v=3"></script>
-    <script src="/static/js/notifications.js?v=3"></script>
-    <script src="/static/js/options.js?v=3"></script>
-    <script src="/static/js/app.js?v=3"></script>
+    <script src="/static/js/auth.js?v=5"></script>
+    <script src="/static/js/api.js?v=5"></script>
+    <script src="/static/js/chart.js?v=5"></script>
+    <script src="/static/js/search.js?v=5"></script>
+    <script src="/static/js/predictions.js?v=5"></script>
+    <script src="/static/js/watchlist.js?v=5"></script>
+    <script src="/static/js/insights.js?v=5"></script>
+    <script src="/static/js/signals.js?v=5"></script>
+    <script src="/static/js/notifications.js?v=5"></script>
+    <script src="/static/js/options.js?v=5"></script>
+    <script src="/static/js/app.js?v=5"></script>
 </body>
 </html>

@@ -137,12 +137,14 @@ const App = {
     async loadMarketOverview() {
         this._overviewSymbols = [...this._allIndices, ...this._popularStocks];
 
-        // Fetch quotes and smart alerts in parallel
+        // Fetch quotes, smart alerts, and market movers in parallel
         try {
             const [quotes, smartAlerts] = await Promise.all([
                 API.getMultipleQuotes(this._overviewSymbols),
                 API.scanHighConfidence(60).catch(() => []),
             ]);
+            // Fire market movers load non-blocking
+            this.loadMarketMovers();
 
             // Store quotes for in-place updates
             quotes.forEach(q => { this._overviewQuotes[q.symbol] = q; });
@@ -156,6 +158,7 @@ const App = {
             this.renderGrid('stocksGrid', stockQuotes);
             this.renderSmartAlerts(smartAlerts);
             this.updateOverviewTimestamp();
+
 
             // Subscribe to all overview symbols on WebSocket
             API.subscribeTo(this._overviewSymbols);
@@ -179,6 +182,7 @@ const App = {
             this.renderGrid('indicesGrid', indexQuotes);
             this.renderGrid('stocksGrid', stockQuotes);
             this.updateOverviewTimestamp();
+            this.loadMarketMovers();
         } catch (e) {
             console.error('Overview refresh failed:', e);
         }
@@ -280,6 +284,51 @@ const App = {
         }).join('');
     },
 
+    async loadMarketMovers() {
+        try {
+            const data = await API.getMarketMovers(10);
+            this.renderMovers('gainersGrid', data.gainers, true);
+            this.renderMovers('losersGrid', data.losers, false);
+            const srcEl = document.getElementById('moversSource');
+            if (srcEl && data.source) {
+                srcEl.textContent = `(${data.source} \u2022 ${data.total_stocks} stocks)`;
+            }
+        } catch (e) {
+            console.error('Market movers failed:', e);
+            const g = document.getElementById('gainersGrid');
+            const l = document.getElementById('losersGrid');
+            if (g) g.innerHTML = '<div class="text-center py-4 text-gray-600 text-sm">Unavailable</div>';
+            if (l) l.innerHTML = '<div class="text-center py-4 text-gray-600 text-sm">Unavailable</div>';
+        }
+    },
+
+    renderMovers(containerId, stocks, isGainer) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (!stocks || stocks.length === 0) {
+            container.innerHTML = '<div class="text-center py-4 text-gray-600 text-sm">No data</div>';
+            return;
+        }
+        container.innerHTML = stocks.map((s, i) => {
+            const pct = s.pct_change || 0;
+            const color = isGainer ? 'text-green-400' : 'text-red-400';
+            const bgHover = isGainer ? 'hover:border-green-800' : 'hover:border-red-800';
+            const sign = pct >= 0 ? '+' : '';
+            const arrow = pct >= 0 ? '&#9650;' : '&#9660;';
+            const rank = i + 1;
+            const ltp = s.ltp ? '\u20b9' + s.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '-';
+            return `
+                <div class="flex items-center gap-2 bg-dark-800 rounded-lg px-3 py-2 cursor-pointer hover:bg-dark-700 border border-transparent ${bgHover} transition"
+                     onclick="Search.select('${s.symbol}', '${s.symbol}')">
+                    <span class="text-[10px] text-gray-600 w-4 text-right">${rank}</span>
+                    <span class="text-xs text-white font-medium flex-1 truncate">${s.symbol}</span>
+                    <span class="text-xs text-gray-400">${ltp}</span>
+                    <span class="text-xs ${color} min-w-[60px] text-right">${arrow} ${sign}${pct.toFixed(2)}%</span>
+                </div>
+            `;
+        }).join('');
+    },
+
     showMarketOverview() {
         this.currentSymbol = null;
         document.getElementById('stockInfoBar').classList.add('hidden');
@@ -288,6 +337,8 @@ const App = {
         document.getElementById('signalPanel').classList.add('hidden');
         document.getElementById('predictionPanel').classList.add('hidden');
         document.getElementById('indicatorPanels').classList.add('hidden');
+        const optCard = document.getElementById('optionSummaryCard');
+        if (optCard) optCard.classList.add('hidden');
         document.getElementById('marketOverview').classList.remove('hidden');
         const liveBadge = document.getElementById('liveBadge');
         if (liveBadge) liveBadge.classList.add('hidden');
@@ -296,8 +347,19 @@ const App = {
 
     // --- Stock View ---
 
+    _switchToDashboardTab() {
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        const dashTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
+        if (dashTab) dashTab.classList.add('active');
+        document.getElementById('tab-dashboard').classList.remove('hidden');
+    },
+
     async loadStock(symbol, name = '') {
         this.currentSymbol = symbol;
+
+        // Always switch to dashboard tab first
+        this._switchToDashboardTab();
 
         // Hide overview, show stock view
         document.getElementById('marketOverview').classList.add('hidden');
@@ -321,14 +383,112 @@ const App = {
             // Subscribe to live updates
             API.subscribeTo([symbol]);
 
-            // Load indicators if enabled
-            if (this.showIndicators) this.loadIndicators(symbol);
+            // Auto-enable and load indicators for full dashboard view
+            if (!this.showIndicators) {
+                this.showIndicators = true;
+                const btn = document.getElementById('btnIndicators');
+                const panels = document.getElementById('indicatorPanels');
+                btn.classList.add('bg-accent-blue', 'text-white');
+                btn.classList.remove('bg-dark-600', 'text-gray-300');
+                panels.classList.remove('hidden');
+            }
+            this.loadIndicators(symbol);
 
             // Auto-load 15-min signal
             Signals.loadSignal(symbol);
+
+            // Auto-load F&O summary (non-blocking)
+            this.loadOptionSummary(symbol);
         } catch (e) {
             this.showToast('Failed to load stock data: ' + e.message, 'error');
         }
+    },
+
+    async loadOptionSummary(symbol) {
+        const container = document.getElementById('optionSummaryCard');
+        if (!container) return;
+        container.classList.remove('hidden');
+        container.innerHTML = `
+            <div class="flex items-center gap-2 py-2">
+                <div class="animate-spin w-4 h-4 border-2 border-accent-blue border-t-transparent rounded-full"></div>
+                <span class="text-xs text-gray-400">Loading F&O data...</span>
+            </div>`;
+        try {
+            const data = await API.getOptionChain(symbol);
+            if (data && data.data && data.data.length > 0) {
+                const pcrColor = data.pcr > 1 ? 'text-green-400' : (data.pcr < 0.7 ? 'text-red-400' : 'text-yellow-400');
+                const pcrLabel = data.pcr > 1.2 ? 'Bullish' : (data.pcr < 0.7 ? 'Bearish' : 'Neutral');
+                container.innerHTML = `
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-medium text-white">F&O Snapshot</h4>
+                        <button onclick="App.openFullOptionChain('${symbol}')"
+                            class="text-xs text-accent-blue hover:text-blue-400 transition">
+                            View Full Chain &rarr;
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 text-center">
+                        <div>
+                            <div class="text-[10px] text-gray-500 uppercase">PCR</div>
+                            <div class="${pcrColor} font-bold text-lg">${data.pcr}</div>
+                            <div class="text-[10px] ${pcrColor}">${pcrLabel}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-gray-500 uppercase">Max Pain</div>
+                            <div class="text-white font-bold text-lg">${data.max_pain ? '\u20b9' + data.max_pain.toLocaleString('en-IN') : '-'}</div>
+                            <div class="text-[10px] text-gray-500">Strike</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-gray-500 uppercase">CE OI</div>
+                            <div class="text-red-400 font-bold text-lg">${this._fmtOI(data.total_ce_oi)}</div>
+                            <div class="text-[10px] text-gray-500">Total</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-gray-500 uppercase">PE OI</div>
+                            <div class="text-green-400 font-bold text-lg">${this._fmtOI(data.total_pe_oi)}</div>
+                            <div class="text-[10px] text-gray-500">Total</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-[10px] text-gray-600 text-right">Expiry: ${data.expiry || '-'}</div>`;
+            } else {
+                container.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-500">F&O data unavailable</span>
+                        <button onclick="App.openFullOptionChain('${symbol}')"
+                            class="text-xs text-accent-blue hover:text-blue-400 transition">
+                            Try Full Chain &rarr;
+                        </button>
+                    </div>`;
+            }
+        } catch (e) {
+            container.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-gray-500">F&O: ${e.message.length > 60 ? e.message.substring(0, 60) + '...' : e.message}</span>
+                    <button onclick="App.openFullOptionChain('${symbol}')"
+                        class="text-xs text-accent-blue hover:text-blue-400 transition">
+                        Try Full Chain &rarr;
+                    </button>
+                </div>`;
+        }
+    },
+
+    openFullOptionChain(symbol) {
+        // Switch to F&O tab and auto-load the symbol
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        const optionsTab = document.querySelector('.nav-tab[data-tab="options"]');
+        if (optionsTab) optionsTab.classList.add('active');
+        document.getElementById('tab-options').classList.remove('hidden');
+        // Pre-fill and load
+        document.getElementById('optionSymbolInput').value = symbol;
+        Options.load(symbol);
+    },
+
+    _fmtOI(n) {
+        if (!n) return '-';
+        if (n >= 10000000) return (n / 10000000).toFixed(1) + 'Cr';
+        if (n >= 100000) return (n / 100000).toFixed(1) + 'L';
+        if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+        return n.toLocaleString('en-IN');
     },
 
     displayQuote(quote) {

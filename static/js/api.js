@@ -61,6 +61,9 @@ const API = {
         });
     },
 
+    // Market Movers (public)
+    getMarketMovers(count = 10) { return this.request(`/api/stocks/market-movers?count=${count}`); },
+
     // Predictions (auth required)
     getPredictions(symbol, horizon = '1d') {
         return this.request(`/api/predictions/${encodeURIComponent(symbol)}`, {

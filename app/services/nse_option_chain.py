@@ -12,6 +12,7 @@ import logging
 import time
 from datetime import datetime
 from app.utils.cache import cache
+from app.utils.helpers import market_status
 from app.config import CACHE_TTL_OPTION_CHAIN
 
 logger = logging.getLogger(__name__)
@@ -23,18 +24,52 @@ NSE_OPTION_CHAIN_INDEX = f"{NSE_BASE_URL}/api/option-chain-indices"
 # Symbols that use the index option chain endpoint
 INDEX_OPTION_SYMBOLS = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTYNXT50"}
 
+# Max retry attempts per fetch
+_MAX_FETCH_RETRIES = 2
+# Cooldown after consecutive failures (seconds)
+_FAILURE_COOLDOWN = 60
+_FAILURE_THRESHOLD = 3
+
+
+class OptionChainError(Exception):
+    """Structured error for option chain failures."""
+
+    def __init__(self, message: str, error_type: str = "no_data"):
+        """
+        Args:
+            message: Human-readable error message.
+            error_type: One of "blocked", "market_closed", "no_data".
+        """
+        super().__init__(message)
+        self.error_type = error_type
+
 
 class NSEOptionChainService:
     def __init__(self):
         self._session = None
         self._session_time = 0
         self._session_ttl = 240
+        self._consecutive_failures = 0
+        self._last_failure_time = 0
 
-    def _ensure_session(self):
-        """Create a session with Chrome TLS fingerprint using curl_cffi."""
+    def _ensure_session(self) -> bool:
+        """Create a session with Chrome TLS fingerprint using curl_cffi.
+
+        Returns True if a usable session exists, False otherwise.
+        """
         now = time.time()
+
+        # Cooldown: if we've failed too many times recently, back off
+        if (self._consecutive_failures >= _FAILURE_THRESHOLD
+                and (now - self._last_failure_time) < _FAILURE_COOLDOWN):
+            logger.debug(
+                f"NSE session in cooldown ({self._consecutive_failures} consecutive failures). "
+                f"Retrying in {int(_FAILURE_COOLDOWN - (now - self._last_failure_time))}s"
+            )
+            return False
+
         if self._session and (now - self._session_time) < self._session_ttl:
-            return
+            return True
 
         try:
             from curl_cffi import requests as cffi_requests
@@ -46,7 +81,9 @@ class NSEOptionChainService:
                 self._session = session
                 self._session_time = now
                 logger.debug("NSE session established via curl_cffi")
-                return
+                return True
+            else:
+                logger.warning(f"NSE homepage returned {resp.status_code}")
         except ImportError:
             logger.warning("curl_cffi not installed, falling back to requests")
         except Exception as e:
@@ -66,6 +103,7 @@ class NSEOptionChainService:
             pass
         self._session = session
         self._session_time = now
+        return True
 
     def _normalize_symbol(self, symbol: str) -> tuple:
         """Normalize symbol and determine if it's an index.
@@ -91,7 +129,10 @@ class NSEOptionChainService:
         return data.get("records", {}).get("expiryDates", [])
 
     def get_option_chain(self, symbol: str, expiry: str = None) -> dict:
-        """Fetch and parse option chain data."""
+        """Fetch and parse option chain data.
+
+        Raises OptionChainError with context-aware messages.
+        """
         cache_key = f"option_chain:{symbol}:{expiry or 'nearest'}"
         cached = cache.get(cache_key)
         if cached:
@@ -99,57 +140,109 @@ class NSEOptionChainService:
 
         data = self._fetch_raw(symbol)
         if not data or not data.get("records", {}).get("data"):
-            raise ValueError(
-                f"Option chain data not available for {symbol}. "
-                "NSE may restrict access outside market hours (9:15 AM - 3:30 PM IST)."
-            )
+            self._raise_contextual_error(symbol)
 
         result = self._parse_chain(data, symbol, expiry)
         cache.set(cache_key, result, CACHE_TTL_OPTION_CHAIN)
         return result
 
+    def _raise_contextual_error(self, symbol: str):
+        """Raise an OptionChainError with market-hours and failure context."""
+        status = market_status()
+
+        if self._consecutive_failures >= _FAILURE_THRESHOLD:
+            raise OptionChainError(
+                f"NSE is blocking option chain requests for {symbol}. "
+                "This typically happens on cloud servers (e.g. Render, Railway). "
+                "NSE restricts access from data-centre IPs. "
+                "Try again later or access from a local machine.",
+                error_type="blocked",
+            )
+
+        if status in ("post_market", "closed_weekend"):
+            raise OptionChainError(
+                f"Option chain data for {symbol} is not available right now. "
+                "Indian markets are closed. NSE option chain data is most reliable "
+                "during market hours (Mon-Fri, 9:15 AM - 3:30 PM IST).",
+                error_type="market_closed",
+            )
+
+        if status == "pre_market":
+            raise OptionChainError(
+                f"Option chain data for {symbol} is not available yet. "
+                "Markets haven't opened. Data will be available after 9:15 AM IST.",
+                error_type="market_closed",
+            )
+
+        raise OptionChainError(
+            f"Option chain data not available for {symbol}. "
+            "NSE may be temporarily unreachable. Please try again in a minute.",
+            error_type="no_data",
+        )
+
     def _fetch_raw(self, symbol: str) -> dict:
-        """Fetch raw option chain JSON from NSE."""
+        """Fetch raw option chain JSON from NSE with retry."""
         cache_key = f"nse_raw_chain:{symbol}"
         cached = cache.get(cache_key)
         if cached:
             return cached
 
-        self._ensure_session()
+        if not self._ensure_session():
+            return {}
         if not self._session:
             return {}
 
         api_symbol, is_index = self._normalize_symbol(symbol)
         url = NSE_OPTION_CHAIN_INDEX if is_index else NSE_OPTION_CHAIN_EQUITY
 
-        try:
-            resp = self._session.get(
-                url,
-                params={"symbol": api_symbol},
-                timeout=15,
-            )
-
-            if resp.status_code in (401, 403):
-                self._session_time = 0
-                self._ensure_session()
+        for attempt in range(_MAX_FETCH_RETRIES):
+            try:
                 resp = self._session.get(
                     url,
                     params={"symbol": api_symbol},
                     timeout=15,
                 )
 
-            if resp.status_code != 200:
-                logger.warning(f"NSE returned {resp.status_code} for {symbol}")
-                return {}
+                if resp.status_code in (401, 403):
+                    logger.info(f"NSE returned {resp.status_code} for {symbol}, refreshing session (attempt {attempt + 1})")
+                    self._session_time = 0
+                    if not self._ensure_session():
+                        continue
+                    resp = self._session.get(
+                        url,
+                        params={"symbol": api_symbol},
+                        timeout=15,
+                    )
 
-            data = resp.json() if hasattr(resp, 'json') and callable(resp.json) else {}
-            if isinstance(data, dict) and data.get("records", {}).get("data"):
-                cache.set(cache_key, data, CACHE_TTL_OPTION_CHAIN)
-            return data
+                if resp.status_code != 200:
+                    logger.warning(f"NSE returned {resp.status_code} for {symbol} (attempt {attempt + 1})")
+                    if attempt < _MAX_FETCH_RETRIES - 1:
+                        time.sleep(1)
+                    continue
 
-        except Exception as e:
-            logger.error(f"NSE option chain fetch failed for {symbol}: {e}")
-            return {}
+                data = resp.json() if hasattr(resp, 'json') and callable(resp.json) else {}
+                if isinstance(data, dict) and data.get("records", {}).get("data"):
+                    cache.set(cache_key, data, CACHE_TTL_OPTION_CHAIN)
+                    # Reset failure tracking on success
+                    self._consecutive_failures = 0
+                    return data
+
+                logger.warning(f"NSE returned empty data for {symbol} (attempt {attempt + 1})")
+
+            except Exception as e:
+                logger.error(f"NSE option chain fetch failed for {symbol} (attempt {attempt + 1}): {e}")
+
+            if attempt < _MAX_FETCH_RETRIES - 1:
+                time.sleep(1)
+
+        # All retries exhausted — track failure
+        self._consecutive_failures += 1
+        self._last_failure_time = time.time()
+        logger.warning(
+            f"NSE option chain: all {_MAX_FETCH_RETRIES} attempts failed for {symbol}. "
+            f"Consecutive failures: {self._consecutive_failures}"
+        )
+        return {}
 
     def _parse_chain(self, raw: dict, symbol: str, expiry: str = None) -> dict:
         """Parse raw NSE API response into structured option chain data."""
