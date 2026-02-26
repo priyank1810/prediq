@@ -6,6 +6,7 @@
     transition: all 0.2s;
     cursor: pointer;
     background: none;
+    white-space: nowrap;
 }
 .nav-tab:hover { color: #e5e7eb; }
 .nav-tab.active {
@@ -22,6 +23,7 @@
     cursor: pointer;
     border: none;
     transition: all 0.2s;
+    white-space: nowrap;
 }
 .period-btn:hover, .chart-type-btn:hover, .horizon-btn:hover {
     background: #16213e;
@@ -84,4 +86,22 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+/* ---- Mobile Responsive ---- */
+
+/* Nav tabs: horizontal scroll on small screens */
+@media (max-width: 639px) {
+    .nav-tab {
+        padding: 0.5rem 0.65rem;
+        font-size: 0.75rem;
+    }
+    .period-btn, .chart-type-btn, .horizon-btn {
+        padding: 0.2rem 0.5rem;
+        font-size: 0.65rem;
+    }
+    .toast {
+        max-width: calc(100vw - 2rem);
+        font-size: 0.75rem;
+    }
 }

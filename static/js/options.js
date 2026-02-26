@@ -121,7 +121,7 @@ const Options = {
         const pcrColor = data.pcr > 1 ? 'text-green-400' : (data.pcr < 0.7 ? 'text-red-400' : 'text-yellow-400');
         summary.classList.remove('hidden');
         summary.innerHTML = `
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 text-sm">
                 <div>
                     <span class="text-gray-400">Spot Price</span>
                     <div class="text-white font-bold text-lg">${data.spot_price.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</div>

@@ -211,7 +211,7 @@ const App = {
             const sign = up ? '+' : '';
             const arrow = up ? '&#9650;' : '&#9660;';
             return `
-                <div class="flex-shrink-0 bg-dark-800 border ${borderColor} rounded-lg px-4 py-2 cursor-pointer hover:bg-dark-700 transition min-w-[160px]"
+                <div class="flex-shrink-0 bg-dark-800 border ${borderColor} rounded-lg px-3 sm:px-4 py-2 cursor-pointer hover:bg-dark-700 transition min-w-[130px] sm:min-w-[160px]"
                      data-live-symbol="${q.symbol}"
                      onclick="Search.select('${q.symbol}', '${q.symbol}')">
                     <div class="text-xs text-gray-400 truncate">${q.symbol}</div>
@@ -426,7 +426,7 @@ const App = {
                             View Full Chain &rarr;
                         </button>
                     </div>
-                    <div class="grid grid-cols-4 gap-4 text-center">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-center">
                         <div>
                             <div class="text-[10px] text-gray-500 uppercase">PCR</div>
                             <div class="${pcrColor} font-bold text-lg">${data.pcr}</div>

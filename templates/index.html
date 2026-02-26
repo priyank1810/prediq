@@ -23,7 +23,7 @@
 <body class="bg-dark-900 text-gray-200 min-h-screen">
     <!-- Auth Modal -->
     <div id="authModal" class="fixed inset-0 bg-black/70 z-[100] flex items-center justify-center hidden" style="backdrop-filter: blur(4px);">
-        <div class="bg-dark-800 rounded-xl p-8 w-96 border border-gray-700 shadow-2xl">
+        <div class="bg-dark-800 rounded-xl p-6 sm:p-8 w-full max-w-sm mx-4 border border-gray-700 shadow-2xl">
             <h2 class="text-xl font-bold text-white mb-1 text-center">
                 <span class="text-accent-blue">Stock</span>AI
             </h2>
@@ -61,19 +61,19 @@
     </div>
 
     <!-- Header -->
-    <header class="bg-dark-800 border-b border-gray-700 px-6 py-3">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <h1 class="text-xl font-bold text-white">
+    <header class="bg-dark-800 border-b border-gray-700 px-3 sm:px-6 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <h1 class="text-lg sm:text-xl font-bold text-white">
                 <span class="text-accent-blue">Stock</span>AI
-                <span class="text-xs text-gray-500 ml-2">Indian Market Tracker</span>
+                <span class="text-xs text-gray-500 ml-1 sm:ml-2 hidden sm:inline">Indian Market Tracker</span>
             </h1>
             <!-- Search -->
-            <div class="relative w-96">
-                <input type="text" id="searchInput" placeholder="Search stocks or indices... (e.g. RELIANCE, NIFTY 50)"
-                    class="w-full bg-dark-700 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-accent-blue text-white placeholder-gray-500">
+            <div class="relative w-full sm:w-96 order-3 sm:order-2">
+                <input type="text" id="searchInput" placeholder="Search stocks... (e.g. RELIANCE)"
+                    class="w-full bg-dark-700 border border-gray-600 rounded-lg px-3 sm:px-4 py-2 text-sm focus:outline-none focus:border-accent-blue text-white placeholder-gray-500">
                 <div id="searchResults" class="absolute top-full left-0 w-full bg-dark-700 border border-gray-600 rounded-b-lg mt-1 hidden z-50 max-h-64 overflow-y-auto"></div>
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 sm:gap-4 order-2 sm:order-3">
                 <!-- Notification Bell -->
                 <div class="relative">
                     <button id="notificationBell" class="relative p-2 text-gray-400 hover:text-white transition">
@@ -83,7 +83,7 @@
                         </svg>
                         <span id="notificationCount" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">0</span>
                     </button>
-                    <div id="notificationDropdown" class="hidden absolute right-0 top-full mt-2 w-80 bg-dark-700 border border-gray-600 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+                    <div id="notificationDropdown" class="hidden absolute right-0 top-full mt-2 w-72 sm:w-80 bg-dark-700 border border-gray-600 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
                         <div class="px-4 py-2 border-b border-gray-600 flex justify-between items-center">
                             <span class="text-sm font-medium text-white">AI Signals</span>
                             <button id="clearNotifications" class="text-xs text-gray-400 hover:text-white">Clear all</button>
@@ -94,21 +94,21 @@
                     </div>
                 </div>
                 <!-- Data Source Badge -->
-                <div id="dataSourceBadge" class="px-2 py-0.5 rounded text-[10px] font-medium bg-yellow-900/50 text-yellow-400 border border-yellow-800/50">
+                <div id="dataSourceBadge" class="hidden sm:block px-2 py-0.5 rounded text-[10px] font-medium bg-yellow-900/50 text-yellow-400 border border-yellow-800/50">
                     Delayed
                 </div>
                 <!-- Market Status -->
-                <div id="marketStatus" class="flex items-center gap-2">
+                <div id="marketStatus" class="flex items-center gap-1 sm:gap-2">
                     <div id="marketDot" class="w-2 h-2 rounded-full bg-gray-500"></div>
-                    <span id="marketText" class="text-xs text-gray-400">Loading...</span>
+                    <span id="marketText" class="text-xs text-gray-400 hidden sm:inline">Loading...</span>
                 </div>
                 <!-- User Menu -->
                 <div id="userMenu" class="hidden relative">
-                    <button id="userMenuBtn" class="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition">
+                    <button id="userMenuBtn" class="flex items-center gap-1 sm:gap-2 text-sm text-gray-300 hover:text-white transition">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
-                        <span id="userEmail" class="truncate max-w-[120px] text-xs"></span>
+                        <span id="userEmail" class="truncate max-w-[80px] sm:max-w-[120px] text-xs hidden sm:inline"></span>
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                         </svg>
@@ -138,8 +138,8 @@
     </header>
 
     <!-- Navigation -->
-    <nav class="bg-dark-800 border-b border-gray-700">
-        <div class="max-w-7xl mx-auto flex gap-1 px-6">
+    <nav class="bg-dark-800 border-b border-gray-700 overflow-x-auto">
+        <div class="max-w-7xl mx-auto flex gap-0 sm:gap-1 px-3 sm:px-6">
             <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
             <button class="nav-tab" data-tab="watchlist">Watchlist</button>
             <button class="nav-tab" data-tab="insights">AI Insights</button>
@@ -148,37 +148,37 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-6 py-4">
+    <main class="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
         <!-- Dashboard Tab -->
         <div id="tab-dashboard" class="tab-content">
             <!-- Stock Info Bar (hidden until stock selected) -->
-            <div id="stockInfoBar" class="hidden bg-dark-800 rounded-lg p-4 mb-4">
-                <div class="flex items-center justify-between">
+            <div id="stockInfoBar" class="hidden bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                         <div class="flex items-center gap-3">
-                            <h2 id="stockSymbol" class="text-2xl font-bold text-white"></h2>
+                            <h2 id="stockSymbol" class="text-xl sm:text-2xl font-bold text-white"></h2>
                             <button id="btnBackToOverview" class="text-xs text-gray-500 hover:text-white border border-gray-700 rounded px-2 py-0.5 transition">
                                 &larr; Overview
                             </button>
                         </div>
                         <span id="stockName" class="text-sm text-gray-400"></span>
                     </div>
-                    <div class="text-right">
-                        <div id="stockPrice" class="text-3xl font-bold text-white"></div>
+                    <div class="sm:text-right">
+                        <div id="stockPrice" class="text-2xl sm:text-3xl font-bold text-white"></div>
                         <div id="stockChange" class="text-sm"></div>
                     </div>
-                    <div class="grid grid-cols-4 gap-6 text-sm">
-                        <div><span class="text-gray-500">Open</span><div id="stockOpen" class="text-white"></div></div>
-                        <div><span class="text-gray-500">High</span><div id="stockHigh" class="text-white"></div></div>
-                        <div><span class="text-gray-500">Low</span><div id="stockLow" class="text-white"></div></div>
-                        <div><span class="text-gray-500">Volume</span><div id="stockVolume" class="text-white"></div></div>
+                    <div class="grid grid-cols-4 gap-3 sm:gap-6 text-sm">
+                        <div><span class="text-gray-500 text-xs sm:text-sm">Open</span><div id="stockOpen" class="text-white text-xs sm:text-sm"></div></div>
+                        <div><span class="text-gray-500 text-xs sm:text-sm">High</span><div id="stockHigh" class="text-white text-xs sm:text-sm"></div></div>
+                        <div><span class="text-gray-500 text-xs sm:text-sm">Low</span><div id="stockLow" class="text-white text-xs sm:text-sm"></div></div>
+                        <div><span class="text-gray-500 text-xs sm:text-sm">Volume</span><div id="stockVolume" class="text-white text-xs sm:text-sm"></div></div>
                     </div>
                 </div>
             </div>
 
             <!-- Chart Controls (hidden until stock selected) -->
-            <div id="chartControls" class="hidden flex items-center gap-2 mb-2">
-                <div class="flex gap-1">
+            <div id="chartControls" class="hidden flex flex-wrap items-center gap-2 mb-2">
+                <div class="flex gap-1 overflow-x-auto">
                     <button class="period-btn" data-period="1d">1D</button>
                     <button class="period-btn" data-period="5d">1W</button>
                     <button class="period-btn active" data-period="1mo">1M</button>
@@ -188,18 +188,18 @@
                     <button class="period-btn" data-period="2y">2Y</button>
                     <button class="period-btn" data-period="5y">5Y</button>
                 </div>
-                <div class="flex gap-1 ml-4">
-                    <button id="btnCandlestick" class="chart-type-btn active">Candlestick</button>
+                <div class="flex gap-1">
+                    <button id="btnCandlestick" class="chart-type-btn active">Candle</button>
                     <button id="btnLine" class="chart-type-btn">Line</button>
                 </div>
-                <div class="ml-auto flex gap-2">
-                    <button id="btnSignal" class="px-3 py-1 bg-green-700 text-white text-sm rounded hover:bg-green-600 transition font-medium">
-                        15m Signal
+                <div class="flex gap-2 sm:ml-auto">
+                    <button id="btnSignal" class="px-2 sm:px-3 py-1 bg-green-700 text-white text-xs sm:text-sm rounded hover:bg-green-600 transition font-medium">
+                        Signal
                     </button>
-                    <button id="btnPredict" class="px-3 py-1 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition">
-                        AI Predict
+                    <button id="btnPredict" class="px-2 sm:px-3 py-1 bg-accent-blue text-white text-xs sm:text-sm rounded hover:bg-blue-600 transition">
+                        Predict
                     </button>
-                    <button id="btnIndicators" class="px-3 py-1 bg-dark-600 text-gray-300 text-sm rounded hover:bg-dark-700 transition">
+                    <button id="btnIndicators" class="px-2 sm:px-3 py-1 bg-dark-600 text-gray-300 text-xs sm:text-sm rounded hover:bg-dark-700 transition">
                         Indicators
                     </button>
                 </div>
@@ -213,13 +213,13 @@
                         <h3 class="text-sm text-gray-400 font-medium">Market Indices</h3>
                         <span id="overviewLastUpdated" class="text-[10px] text-gray-600"></span>
                     </div>
-                    <div id="indicesTicker" class="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                    <div id="indicesTicker" class="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-thin">
                         <div class="text-center py-8 text-gray-600 text-sm w-full">Loading market data...</div>
                     </div>
                 </div>
 
                 <!-- Two-column: Indices + Top Stocks -->
-                <div class="grid grid-cols-2 gap-6 mb-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
                     <div>
                         <h3 class="text-sm text-gray-400 mb-2 font-medium">Indices</h3>
                         <div id="indicesGrid" class="grid grid-cols-2 gap-2">
@@ -235,7 +235,7 @@
                 </div>
 
                 <!-- Top Gainers / Top Losers -->
-                <div class="grid grid-cols-2 gap-6 mb-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
                     <div>
                         <h3 class="text-sm text-gray-400 mb-2 font-medium flex items-center gap-2">
                             Top Gainers
@@ -254,7 +254,7 @@
                 </div>
 
                 <!-- High-Confidence AI Signals -->
-                <div class="bg-dark-800 rounded-lg p-4">
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="text-sm font-medium text-white">High-Confidence AI Signals</h3>
                         <span id="smartAlertCount" class="text-xs text-gray-500">scanning...</span>
@@ -266,34 +266,34 @@
             </div>
 
             <!-- Chart (hidden until stock selected) -->
-            <div id="chartContainer" class="hidden bg-dark-800 rounded-lg overflow-hidden relative" style="height: 450px;">
+            <div id="chartContainer" class="hidden bg-dark-800 rounded-lg overflow-hidden relative h-[300px] sm:h-[450px]">
                 <div id="liveBadge" class="hidden absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-dark-900/80 rounded-full px-2.5 py-1">
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                     <span class="text-[10px] text-green-400 font-medium">LIVE</span>
                     <span id="liveTimestamp" class="text-[10px] text-gray-500"></span>
                 </div>
-                <div id="priceChart" style="height: 450px;"></div>
+                <div id="priceChart" class="h-full"></div>
             </div>
 
             <!-- Indicators Panel (RSI, MACD) -->
             <div id="indicatorPanels" class="hidden mt-2 space-y-2">
                 <div class="bg-dark-800 rounded-lg overflow-hidden">
                     <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">RSI (14)</div>
-                    <div id="rsiChart" style="height: 120px;"></div>
+                    <div id="rsiChart" class="h-[100px] sm:h-[120px]"></div>
                 </div>
                 <div class="bg-dark-800 rounded-lg overflow-hidden">
                     <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">MACD</div>
-                    <div id="macdChart" style="height: 120px;"></div>
+                    <div id="macdChart" class="h-[100px] sm:h-[120px]"></div>
                 </div>
             </div>
 
             <!-- F&O Summary Card (auto-loaded when stock selected) -->
-            <div id="optionSummaryCard" class="hidden mt-4 bg-dark-800 rounded-lg p-4"></div>
+            <div id="optionSummaryCard" class="hidden mt-4 bg-dark-800 rounded-lg p-3 sm:p-4"></div>
 
             <!-- Prediction Panel -->
-            <div id="predictionPanel" class="hidden mt-4 bg-dark-800 rounded-lg p-4">
-                <h3 class="text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
-                <div class="flex gap-2 mb-4">
+            <div id="predictionPanel" class="hidden mt-4 bg-dark-800 rounded-lg p-3 sm:p-4">
+                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
+                <div class="flex flex-wrap gap-2 mb-4">
                     <button class="horizon-btn" data-horizon="15m">15 Min</button>
                     <button class="horizon-btn" data-horizon="1h">1 Hour</button>
                     <button class="horizon-btn active" data-horizon="1d">1 Day</button>
@@ -305,41 +305,41 @@
                     <p class="text-gray-400 text-sm mt-2">Training AI models...</p>
                 </div>
                 <div id="predictionResults" class="hidden">
-                    <div class="grid grid-cols-4 gap-4">
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                         <div class="bg-dark-700 rounded-lg p-3">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-sm font-medium text-accent-blue">LSTM Neural Network</span>
-                                <span id="lstmConfidence" class="text-xs px-2 py-0.5 rounded-full bg-blue-900 text-blue-300"></span>
+                                <span class="text-xs sm:text-sm font-medium text-accent-blue">LSTM</span>
+                                <span id="lstmConfidence" class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-900 text-blue-300"></span>
                             </div>
-                            <div id="lstmPrediction" class="text-2xl font-bold text-white"></div>
+                            <div id="lstmPrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
                             <div id="lstmMape" class="text-xs text-gray-500 mt-1"></div>
                         </div>
                         <div class="bg-dark-700 rounded-lg p-3">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-sm font-medium text-green-400">Prophet (Meta)</span>
-                                <span id="prophetConfidence" class="text-xs px-2 py-0.5 rounded-full bg-green-900 text-green-300"></span>
+                                <span class="text-xs sm:text-sm font-medium text-green-400">Prophet</span>
+                                <span id="prophetConfidence" class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-green-900 text-green-300"></span>
                             </div>
-                            <div id="prophetPrediction" class="text-2xl font-bold text-white"></div>
+                            <div id="prophetPrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
                             <div id="prophetBand" class="text-xs text-gray-500 mt-1"></div>
                         </div>
                         <div class="bg-dark-700 rounded-lg p-3">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-sm font-medium text-purple-400">XGBoost</span>
-                                <span id="xgbConfidence" class="text-xs px-2 py-0.5 rounded-full bg-purple-900 text-purple-300"></span>
+                                <span class="text-xs sm:text-sm font-medium text-purple-400">XGBoost</span>
+                                <span id="xgbConfidence" class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-purple-900 text-purple-300"></span>
                             </div>
-                            <div id="xgbPrediction" class="text-2xl font-bold text-white"></div>
+                            <div id="xgbPrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
                             <div id="xgbMape" class="text-xs text-gray-500 mt-1"></div>
                         </div>
                         <div class="bg-dark-700 rounded-lg p-3">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-sm font-medium text-accent-yellow">Ensemble Average</span>
+                                <span class="text-xs sm:text-sm font-medium text-accent-yellow">Ensemble</span>
                             </div>
-                            <div id="ensemblePrediction" class="text-2xl font-bold text-white"></div>
+                            <div id="ensemblePrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
                             <div id="ensembleChange" class="text-xs mt-1"></div>
                         </div>
                     </div>
                     <!-- Explanation Panel -->
-                    <div id="predictionExplanation" class="hidden mt-4 bg-dark-700 rounded-lg p-4">
+                    <div id="predictionExplanation" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
                         <h4 class="text-white font-semibold mb-3">Why <span id="explDirection" class="font-bold">-</span>?</h4>
                         <p id="explSummary" class="text-gray-300 text-sm mb-3"></p>
                         <div id="explDrivers" class="space-y-2 mb-3"></div>
@@ -365,30 +365,30 @@
 
             <!-- Intraday Signal Panel -->
             <div id="signalPanel" class="hidden mt-4">
-                <div id="signalLoading" class="hidden bg-dark-800 rounded-lg p-8 text-center">
+                <div id="signalLoading" class="hidden bg-dark-800 rounded-lg p-6 sm:p-8 text-center">
                     <div class="animate-spin w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full mx-auto"></div>
                     <p class="text-gray-400 text-sm mt-2">Analyzing trends, news & global markets...</p>
                 </div>
 
                 <div id="signalResults" class="hidden">
-                    <div class="bg-dark-800 rounded-lg p-6 mb-4">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-lg font-semibold text-white">15-Min Directional Signal</h3>
+                    <div class="bg-dark-800 rounded-lg p-4 sm:p-6 mb-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                            <h3 class="text-base sm:text-lg font-semibold text-white">15-Min Directional Signal</h3>
                             <div class="flex items-center gap-2">
                                 <span id="marketBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">-</span>
                                 <span id="signalTimestamp" class="text-xs text-gray-500"></span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-8">
-                            <div class="text-center min-w-[120px]">
-                                <div id="signalArrow" class="text-6xl text-gray-500">&#9654;</div>
-                                <div id="signalDirection" class="text-2xl font-bold text-gray-400">-</div>
+                        <div class="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
+                            <div class="text-center min-w-[100px] sm:min-w-[120px]">
+                                <div id="signalArrow" class="text-5xl sm:text-6xl text-gray-500">&#9654;</div>
+                                <div id="signalDirection" class="text-xl sm:text-2xl font-bold text-gray-400">-</div>
                                 <div id="signalConfidence" class="text-sm text-gray-500 mt-1">-</div>
                             </div>
-                            <div class="flex-1 space-y-3">
+                            <div class="flex-1 w-full space-y-3">
                                 <div>
                                     <div class="flex justify-between items-center mb-1">
-                                        <span class="text-xs text-gray-400">Technical Analysis (50%)</span>
+                                        <span class="text-xs text-gray-400">Technical (50%)</span>
                                         <span id="technicalScore" class="text-sm font-mono text-gray-400">-</span>
                                     </div>
                                     <div id="technicalBar" class="h-2 bg-dark-600 rounded-full"></div>
@@ -396,14 +396,14 @@
                                 </div>
                                 <div>
                                     <div class="flex justify-between items-center mb-1">
-                                        <span class="text-xs text-gray-400">News Sentiment (25%)</span>
+                                        <span class="text-xs text-gray-400">Sentiment (25%)</span>
                                         <span id="sentimentScore" class="text-sm font-mono text-gray-400">-</span>
                                     </div>
                                     <div id="sentimentBar" class="h-2 bg-dark-600 rounded-full"></div>
                                 </div>
                                 <div>
                                     <div class="flex justify-between items-center mb-1">
-                                        <span class="text-xs text-gray-400">Global Markets (25%)</span>
+                                        <span class="text-xs text-gray-400">Global (25%)</span>
                                         <span id="globalScore" class="text-sm font-mono text-gray-400">-</span>
                                     </div>
                                     <div id="globalBar" class="h-2 bg-dark-600 rounded-full"></div>
@@ -411,23 +411,23 @@
                             </div>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                         <div class="bg-dark-800 rounded-lg overflow-hidden">
                             <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">15-Min Candles (Intraday)</div>
-                            <div id="intradayChart" style="height: 250px;"></div>
+                            <div id="intradayChart" class="h-[200px] sm:h-[250px]"></div>
                         </div>
                         <div class="bg-dark-800 rounded-lg overflow-hidden">
                             <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">News Headlines</div>
-                            <div id="newsHeadlines" class="p-3 max-h-64 overflow-y-auto"></div>
+                            <div id="newsHeadlines" class="p-3 max-h-48 sm:max-h-64 overflow-y-auto"></div>
                         </div>
                     </div>
                     <div class="bg-dark-800 rounded-lg p-3 mb-4">
                         <div class="text-xs text-gray-400 mb-2">Global Markets</div>
                         <div id="globalTicker" class="flex flex-wrap gap-2"></div>
                     </div>
-                    <div class="bg-dark-800 rounded-lg overflow-hidden">
+                    <div class="bg-dark-800 rounded-lg overflow-x-auto">
                         <div class="px-3 py-2 text-xs text-gray-400 border-b border-gray-700">Signal History</div>
-                        <table class="w-full text-sm">
+                        <table class="w-full text-sm min-w-[400px]">
                             <thead>
                                 <tr class="text-gray-400 border-b border-gray-700">
                                     <th class="text-left px-3 py-2 text-xs">Time</th>
@@ -446,30 +446,30 @@
 
         <!-- Watchlist Tab -->
         <div id="tab-watchlist" class="tab-content hidden">
-            <div class="bg-dark-800 rounded-lg p-4 mb-4">
-                <div class="flex items-center justify-between">
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <h3 class="text-lg font-semibold text-white">My Watchlist</h3>
                     <form id="addWatchlistForm" class="flex gap-2 items-center">
-                        <input type="text" id="watchlistSymbolInput" placeholder="Add symbol (e.g. RELIANCE, NIFTY 50)"
-                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white w-56 placeholder-gray-500 focus:outline-none focus:border-accent-blue">
-                        <button type="submit" class="px-3 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium">
+                        <input type="text" id="watchlistSymbolInput" placeholder="Add symbol (e.g. RELIANCE)"
+                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white flex-1 sm:w-56 placeholder-gray-500 focus:outline-none focus:border-accent-blue">
+                        <button type="submit" class="px-3 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium whitespace-nowrap">
                             + Add
                         </button>
                     </form>
                 </div>
             </div>
-            <div class="bg-dark-800 rounded-lg overflow-hidden">
-                <table class="w-full text-sm">
+            <div class="bg-dark-800 rounded-lg overflow-x-auto">
+                <table class="w-full text-sm min-w-[600px]">
                     <thead>
                         <tr class="text-gray-400 border-b border-gray-700">
-                            <th class="text-left px-4 py-3">Symbol</th>
-                            <th class="text-left px-4 py-3">Type</th>
-                            <th class="text-right px-4 py-3">Price</th>
-                            <th class="text-right px-4 py-3">Change</th>
-                            <th class="text-center px-4 py-3">Signal</th>
-                            <th class="text-right px-4 py-3">Confidence</th>
-                            <th class="text-center px-4 py-3">Action</th>
-                            <th class="px-4 py-3"></th>
+                            <th class="text-left px-3 sm:px-4 py-3">Symbol</th>
+                            <th class="text-left px-3 sm:px-4 py-3 hidden sm:table-cell">Type</th>
+                            <th class="text-right px-3 sm:px-4 py-3">Price</th>
+                            <th class="text-right px-3 sm:px-4 py-3">Change</th>
+                            <th class="text-center px-3 sm:px-4 py-3">Signal</th>
+                            <th class="text-right px-3 sm:px-4 py-3 hidden sm:table-cell">Confidence</th>
+                            <th class="text-center px-3 sm:px-4 py-3">Action</th>
+                            <th class="px-3 sm:px-4 py-3"></th>
                         </tr>
                     </thead>
                     <tbody id="watchlistTable"></tbody>
@@ -483,37 +483,39 @@
         <!-- AI Insights Tab -->
         <div id="tab-insights" class="tab-content hidden">
             <!-- High Confidence Signals -->
-            <div class="bg-dark-800 rounded-lg p-4 mb-4">
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-lg font-semibold text-white">High-Confidence Signals</h3>
+                    <h3 class="text-base sm:text-lg font-semibold text-white">High-Confidence Signals</h3>
                     <span class="text-xs text-gray-400">Confidence &gt; 60%</span>
                 </div>
-                <div id="insightsHighConfidence" class="grid grid-cols-3 gap-3">
-                    <div class="text-center py-4 text-gray-500 text-sm col-span-3">Loading...</div>
+                <div id="insightsHighConfidence" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div class="text-center py-4 text-gray-500 text-sm col-span-full">Loading...</div>
                 </div>
             </div>
 
             <!-- Signal Accuracy Leaderboard -->
-            <div class="bg-dark-800 rounded-lg p-4 mb-4">
-                <h3 class="text-lg font-semibold text-white mb-3">Signal Accuracy Leaderboard</h3>
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="text-gray-400 border-b border-gray-700">
-                            <th class="text-left px-4 py-2">Symbol</th>
-                            <th class="text-right px-4 py-2">Total Signals</th>
-                            <th class="text-right px-4 py-2">Correct</th>
-                            <th class="text-right px-4 py-2">Accuracy</th>
-                        </tr>
-                    </thead>
-                    <tbody id="accuracyTable">
-                        <tr><td colspan="4" class="text-center py-4 text-gray-500">Loading...</td></tr>
-                    </tbody>
-                </table>
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Signal Accuracy Leaderboard</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm min-w-[350px]">
+                        <thead>
+                            <tr class="text-gray-400 border-b border-gray-700">
+                                <th class="text-left px-3 sm:px-4 py-2">Symbol</th>
+                                <th class="text-right px-3 sm:px-4 py-2">Signals</th>
+                                <th class="text-right px-3 sm:px-4 py-2">Correct</th>
+                                <th class="text-right px-3 sm:px-4 py-2">Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accuracyTable">
+                            <tr><td colspan="4" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Recent Signal Feed -->
-            <div class="bg-dark-800 rounded-lg p-4">
-                <h3 class="text-lg font-semibold text-white mb-3">Recent Signal Activity</h3>
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Recent Signal Activity</h3>
                 <div id="insightsRecentFeed" class="space-y-2 max-h-96 overflow-y-auto">
                     <div class="text-center py-4 text-gray-500 text-sm">Loading...</div>
                 </div>
@@ -523,18 +525,18 @@
         <!-- F&O Tab -->
         <div id="tab-options" class="tab-content hidden">
             <!-- Symbol + Expiry Controls -->
-            <div class="bg-dark-800 rounded-lg p-4 mb-4">
-                <div class="flex items-center justify-between flex-wrap gap-3">
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <h3 class="text-lg font-semibold text-white">Option Chain</h3>
-                    <div class="flex gap-2 items-center flex-wrap">
-                        <input type="text" id="optionSymbolInput" placeholder="Symbol (e.g. RELIANCE, NIFTY)"
-                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white w-52 placeholder-gray-500 focus:outline-none focus:border-accent-blue">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input type="text" id="optionSymbolInput" placeholder="Symbol (e.g. NIFTY)"
+                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white flex-1 sm:w-44 min-w-[120px] placeholder-gray-500 focus:outline-none focus:border-accent-blue">
                         <select id="optionExpirySelect"
-                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-accent-blue">
+                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-accent-blue flex-1 sm:flex-none">
                             <option value="">Select expiry...</option>
                         </select>
                         <button id="optionLoadBtn"
-                            class="px-4 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium">
+                            class="px-4 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium whitespace-nowrap">
                             Load
                         </button>
                     </div>
@@ -542,11 +544,11 @@
             </div>
 
             <!-- Summary Bar -->
-            <div id="optionSummary" class="hidden bg-dark-800 rounded-lg p-4 mb-4"></div>
+            <div id="optionSummary" class="hidden bg-dark-800 rounded-lg p-3 sm:p-4 mb-4"></div>
 
             <!-- Option Chain Table -->
-            <div id="optionChainContainer" class="bg-dark-800 rounded-lg overflow-hidden">
-                <div class="text-center py-8 text-gray-500">
+            <div id="optionChainContainer" class="bg-dark-800 rounded-lg overflow-x-auto">
+                <div class="text-center py-8 text-gray-500 text-sm">
                     Enter a symbol and click Load to view the option chain.
                 </div>
             </div>
@@ -554,18 +556,18 @@
     </main>
 
     <!-- Toast Container -->
-    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+    <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 space-y-2"></div>
 
-    <script src="/static/js/auth.js?v=5"></script>
-    <script src="/static/js/api.js?v=5"></script>
-    <script src="/static/js/chart.js?v=5"></script>
-    <script src="/static/js/search.js?v=5"></script>
-    <script src="/static/js/predictions.js?v=5"></script>
-    <script src="/static/js/watchlist.js?v=5"></script>
-    <script src="/static/js/insights.js?v=5"></script>
-    <script src="/static/js/signals.js?v=5"></script>
-    <script src="/static/js/notifications.js?v=5"></script>
-    <script src="/static/js/options.js?v=5"></script>
-    <script src="/static/js/app.js?v=5"></script>
+    <script src="/static/js/auth.js?v=6"></script>
+    <script src="/static/js/api.js?v=6"></script>
+    <script src="/static/js/chart.js?v=6"></script>
+    <script src="/static/js/search.js?v=6"></script>
+    <script src="/static/js/predictions.js?v=6"></script>
+    <script src="/static/js/watchlist.js?v=6"></script>
+    <script src="/static/js/insights.js?v=6"></script>
+    <script src="/static/js/signals.js?v=6"></script>
+    <script src="/static/js/notifications.js?v=6"></script>
+    <script src="/static/js/options.js?v=6"></script>
+    <script src="/static/js/app.js?v=6"></script>
 </body>
 </html>
