@@ -3,15 +3,13 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import PriceAlertCreate
 from app.services.alert_service import alert_service
-from app.auth import get_current_active_user
-from app.models import User
 
 router = APIRouter()
 
 
 @router.get("")
-def list_alerts(db: Session = Depends(get_db), user: User = Depends(get_current_active_user)):
-    alerts = alert_service.get_alerts(db, user_id=user.id)
+def list_alerts(db: Session = Depends(get_db)):
+    alerts = alert_service.get_alerts(db)
     return [
         {
             "id": a.id,
@@ -30,9 +28,8 @@ def list_alerts(db: Session = Depends(get_db), user: User = Depends(get_current_
 def create_alert(
     data: PriceAlertCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user),
 ):
-    alert = alert_service.create_alert(db, data.model_dump(), user_id=user.id)
+    alert = alert_service.create_alert(db, data.model_dump())
     return {"id": alert.id, "message": "Alert created"}
 
 
@@ -40,9 +37,8 @@ def create_alert(
 def delete_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user),
 ):
-    success = alert_service.delete_alert(db, alert_id, user_id=user.id)
+    success = alert_service.delete_alert(db, alert_id)
     if not success:
         raise HTTPException(status_code=404, detail="Alert not found")
     return {"message": "Alert deleted"}

@@ -4,12 +4,11 @@ from app.services.data_fetcher import data_fetcher
 
 
 class PortfolioService:
-    def get_holdings(self, db: Session, user_id: int) -> list[dict]:
-        holdings = (
-            db.query(PortfolioHolding)
-            .filter(PortfolioHolding.user_id == user_id)
-            .all()
-        )
+    def get_holdings(self, db: Session, user_id: int = None) -> list[dict]:
+        query = db.query(PortfolioHolding)
+        if user_id is not None:
+            query = query.filter(PortfolioHolding.user_id == user_id)
+        holdings = query.all()
         result = []
         for h in holdings:
             current_price = None
@@ -39,7 +38,7 @@ class PortfolioService:
             })
         return result
 
-    def get_summary(self, db: Session, user_id: int) -> dict:
+    def get_summary(self, db: Session, user_id: int = None) -> dict:
         holdings = self.get_holdings(db, user_id=user_id)
         total_invested = sum(h["quantity"] * h["buy_price"] for h in holdings)
         current_value = sum(
@@ -56,19 +55,18 @@ class PortfolioService:
             "holdings_count": len(holdings),
         }
 
-    def add_holding(self, db: Session, data: dict, user_id: int) -> PortfolioHolding:
+    def add_holding(self, db: Session, data: dict, user_id: int = None) -> PortfolioHolding:
         holding = PortfolioHolding(**data, user_id=user_id)
         db.add(holding)
         db.commit()
         db.refresh(holding)
         return holding
 
-    def delete_holding(self, db: Session, holding_id: int, user_id: int) -> bool:
-        holding = (
-            db.query(PortfolioHolding)
-            .filter(PortfolioHolding.id == holding_id, PortfolioHolding.user_id == user_id)
-            .first()
-        )
+    def delete_holding(self, db: Session, holding_id: int, user_id: int = None) -> bool:
+        query = db.query(PortfolioHolding).filter(PortfolioHolding.id == holding_id)
+        if user_id is not None:
+            query = query.filter(PortfolioHolding.user_id == user_id)
+        holding = query.first()
         if not holding:
             return False
         db.delete(holding)

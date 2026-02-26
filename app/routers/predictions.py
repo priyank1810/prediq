@@ -1,9 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from app.schemas import PredictionRequest
 from app.services.prediction_service import prediction_service
-from app.auth import get_current_active_user
 from app.rate_limit import rate_limit
-from app.models import User
 
 router = APIRouter()
 
@@ -12,7 +10,6 @@ router = APIRouter()
 def predict_stock(
     symbol: str,
     request: PredictionRequest,
-    user: User = Depends(get_current_active_user),
     _rate=rate_limit(max_calls=5, window_seconds=60),
 ):
     try:

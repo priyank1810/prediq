@@ -5,27 +5,24 @@ from app.services.data_fetcher import data_fetcher
 
 
 class AlertService:
-    def get_alerts(self, db: Session, user_id: int) -> list[PriceAlert]:
-        return (
-            db.query(PriceAlert)
-            .filter(PriceAlert.user_id == user_id)
-            .order_by(PriceAlert.created_at.desc())
-            .all()
-        )
+    def get_alerts(self, db: Session, user_id: int = None) -> list[PriceAlert]:
+        query = db.query(PriceAlert)
+        if user_id is not None:
+            query = query.filter(PriceAlert.user_id == user_id)
+        return query.order_by(PriceAlert.created_at.desc()).all()
 
-    def create_alert(self, db: Session, data: dict, user_id: int) -> PriceAlert:
+    def create_alert(self, db: Session, data: dict, user_id: int = None) -> PriceAlert:
         alert = PriceAlert(**data, user_id=user_id)
         db.add(alert)
         db.commit()
         db.refresh(alert)
         return alert
 
-    def delete_alert(self, db: Session, alert_id: int, user_id: int) -> bool:
-        alert = (
-            db.query(PriceAlert)
-            .filter(PriceAlert.id == alert_id, PriceAlert.user_id == user_id)
-            .first()
-        )
+    def delete_alert(self, db: Session, alert_id: int, user_id: int = None) -> bool:
+        query = db.query(PriceAlert).filter(PriceAlert.id == alert_id)
+        if user_id is not None:
+            query = query.filter(PriceAlert.user_id == user_id)
+        alert = query.first()
         if not alert:
             return False
         db.delete(alert)

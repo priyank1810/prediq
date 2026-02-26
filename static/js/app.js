@@ -11,9 +11,6 @@ const App = {
     _lastOverviewUpdate: null,
 
     async init() {
-        // Initialize auth first
-        Auth.init();
-
         this.chart = new StockChart('priceChart');
         this.rsiChart = new IndicatorChart('rsiChart');
         this.macdChart = new IndicatorChart('macdChart');
@@ -29,7 +26,6 @@ const App = {
         this.setupNavigation();
         this.setupChartControls();
 
-        // Public data loads regardless of auth
         this.loadMarketStatus();
         this.loadDataSource();
         this.loadMarketOverview();

@@ -6,36 +6,12 @@ const API = {
         try {
             const headers = {
                 'Content-Type': 'application/json',
-                ...(typeof Auth !== 'undefined' ? Auth.getAuthHeaders() : {}),
             };
 
             const res = await fetch(this.baseUrl + url, {
                 headers,
                 ...options
             });
-
-            // Handle 401 — try token refresh + retry once
-            if (res.status === 401 && typeof Auth !== 'undefined' && Auth.refreshToken) {
-                const refreshed = await Auth.tryRefresh();
-                if (refreshed) {
-                    const retryRes = await fetch(this.baseUrl + url, {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...Auth.getAuthHeaders(),
-                        },
-                        ...options
-                    });
-                    if (retryRes.ok) return await retryRes.json();
-                    if (retryRes.status === 401) {
-                        Auth.logout();
-                        throw new Error('Session expired. Please log in again.');
-                    }
-                    const err = await retryRes.json().catch(() => ({ detail: retryRes.statusText }));
-                    throw new Error(err.detail || 'Request failed');
-                }
-                Auth.logout();
-                throw new Error('Session expired. Please log in again.');
-            }
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -64,7 +40,7 @@ const API = {
     // Market Movers (public)
     getMarketMovers(count = 10) { return this.request(`/api/stocks/market-movers?count=${count}`); },
 
-    // Predictions (auth required)
+    // Predictions
     getPredictions(symbol, horizon = '1d') {
         return this.request(`/api/predictions/${encodeURIComponent(symbol)}`, {
             method: 'POST',
@@ -75,7 +51,7 @@ const API = {
     // Indicators (public)
     getIndicators(symbol) { return this.request(`/api/indicators/${encodeURIComponent(symbol)}`); },
 
-    // Watchlist (auth required)
+    // Watchlist
     getWatchlist() { return this.request('/api/watchlist'); },
     getWatchlistOverview() { return this.request('/api/watchlist/overview'); },
     addToWatchlist(data) { return this.request('/api/watchlist', { method: 'POST', body: JSON.stringify(data) }); },
