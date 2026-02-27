@@ -79,14 +79,18 @@ const Signals = {
         const techDet = document.getElementById('technicalDetails');
         if (data.technical.details && Object.keys(data.technical.details).length > 0) {
             const d = data.technical.details;
+            const maCrossColor = d.ma_cross === 'bullish' ? 'text-green-400' : (d.ma_cross === 'bearish' ? 'text-red-400' : 'text-gray-500');
+            const volColor = d.volume_ratio > 1.5 ? 'text-yellow-400' : 'text-gray-500';
             techDet.innerHTML = `
                 <span class="text-xs text-gray-500">RSI: ${d.rsi || '-'}</span>
                 <span class="mx-1 text-gray-600">|</span>
-                <span class="text-xs text-gray-500">MACD: ${d.macd_diff || '-'}</span>
+                <span class="text-xs ${volColor}">Vol: ${d.volume_ratio ? d.volume_ratio.toFixed(1) + 'x' : '-'}</span>
+                <span class="mx-1 text-gray-600">|</span>
+                <span class="text-xs text-gray-500">BB: ${d.bb_position != null ? (d.bb_position * 100).toFixed(0) + '%' : '-'}</span>
                 <span class="mx-1 text-gray-600">|</span>
                 <span class="text-xs text-gray-500">VWAP: ₹${d.vwap || '-'}</span>
                 <span class="mx-1 text-gray-600">|</span>
-                <span class="text-xs text-gray-500">Momentum: ${d.momentum_3bar ? (d.momentum_3bar > 0 ? '+' : '') + d.momentum_3bar + '%' : '-'}</span>
+                <span class="text-xs ${maCrossColor}">MA 5/9: ${d.ma_cross || '-'}</span>
             `;
         }
 
