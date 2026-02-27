@@ -264,19 +264,37 @@ class DataFetcher:
     def _fetch_from_yfinance(self, symbol: str) -> dict:
         yf_symbol = yfinance_symbol(symbol)
         ticker = yf.Ticker(yf_symbol)
-        info = ticker.fast_info
 
         try:
-            ltp = info.last_price
-            prev_close = info.previous_close
-            change = ltp - prev_close if ltp and prev_close else 0
-            pct_change = (change / prev_close * 100) if prev_close else 0
+            # fast_info can raise KeyError intermittently; fall back to history
+            try:
+                info = ticker.fast_info
+                ltp = info.last_price
+                prev_close = info.previous_close
+            except (KeyError, AttributeError):
+                ltp = None
+                prev_close = None
 
             hist = ticker.history(period="1d")
-            open_price = float(hist["Open"].iloc[-1]) if not hist.empty else 0
-            high = float(hist["High"].iloc[-1]) if not hist.empty else 0
-            low = float(hist["Low"].iloc[-1]) if not hist.empty else 0
-            volume = int(hist["Volume"].iloc[-1]) if not hist.empty else 0
+            if hist.empty and ltp is None:
+                raise ValueError(f"No data available for {yf_symbol}")
+
+            if not hist.empty:
+                open_price = float(hist["Open"].iloc[-1])
+                high = float(hist["High"].iloc[-1])
+                low = float(hist["Low"].iloc[-1])
+                close = float(hist["Close"].iloc[-1])
+                volume = int(hist["Volume"].iloc[-1])
+                if ltp is None:
+                    ltp = close
+                if prev_close is None:
+                    prev_close = float(hist["Close"].iloc[0]) if len(hist) > 1 else ltp
+            else:
+                open_price = high = low = volume = 0
+                close = prev_close or 0
+
+            change = ltp - prev_close if ltp and prev_close else 0
+            pct_change = (change / prev_close * 100) if prev_close else 0
 
             return {
                 "symbol": symbol,
@@ -290,6 +308,8 @@ class DataFetcher:
                 "pct_change": round(pct_change, 2),
                 "timestamp": datetime.now().isoformat(),
             }
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError(f"Failed to fetch quote for {symbol}: {e}")
 
