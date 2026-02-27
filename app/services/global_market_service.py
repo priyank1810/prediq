@@ -36,19 +36,31 @@ GLOBAL_NEWS_FEEDS = [
     "https://news.google.com/rss/search?q=global+markets+today&hl=en-IN&gl=IN&ceid=IN:en",
     "https://news.google.com/rss/search?q=US+Fed+interest+rate+economy&hl=en-IN&gl=IN&ceid=IN:en",
     "https://news.google.com/rss/search?q=crude+oil+price+gold+commodity&hl=en-IN&gl=IN&ceid=IN:en",
+    "https://news.google.com/rss/search?q=war+geopolitical+sanctions+conflict+market+impact&hl=en-IN&gl=IN&ceid=IN:en",
+    "https://news.google.com/rss/search?q=India+Pakistan+China+geopolitics+defence&hl=en-IN&gl=IN&ceid=IN:en",
     "https://www.moneycontrol.com/rss/internationalmarkets.xml",
     "https://www.moneycontrol.com/rss/commodities.xml",
+    "https://www.moneycontrol.com/rss/latestnews.xml",
 ]
 
 # Keywords that signal high-impact global events (war, rate hike, recession, etc.)
 BIG_EVENT_KEYWORDS = [
-    "war", "invasion", "sanctions", "tariff", "trade war",
-    "rate hike", "rate cut", "fed", "federal reserve", "interest rate",
-    "recession", "inflation", "cpi", "gdp",
+    # War / geopolitical
+    "war", "invasion", "airstrike", "missile", "military", "attack",
+    "conflict", "escalation", "ceasefire", "nuclear", "defence",
+    "sanctions", "embargo", "geopolitical", "tensions",
+    "india pakistan", "india china", "israel", "iran", "russia ukraine",
+    "nato", "border", "terrorism",
+    # Trade / policy
+    "tariff", "trade war", "rate hike", "rate cut", "fed",
+    "federal reserve", "interest rate", "rbi", "monetary policy",
+    # Economy
+    "recession", "inflation", "cpi", "gdp", "stagflation",
     "crash", "crisis", "collapse", "default", "debt ceiling",
+    # Commodities
     "oil shock", "opec", "crude surge", "crude crash",
-    "pandemic", "lockdown", "geopolitical",
-    "black swan", "circuit breaker", "capitulation",
+    # Black swan
+    "pandemic", "lockdown", "black swan", "circuit breaker", "capitulation",
 ]
 
 
