@@ -75,6 +75,10 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Shared signal cache: high_confidence_scanner populates, signal_broadcaster reuses
+# Format: {symbol: {"data": signal_dict, "ts": time.time()}}
+_recent_signal_cache: dict[str, dict] = {}
+
 
 @router.websocket("/ws/prices")
 async def websocket_endpoint(websocket: WebSocket):
@@ -94,8 +98,8 @@ async def price_streamer():
     Uses Angel One for real-time data when available, falls back to yfinance.
     Feeds ticks into LiveCandleBuilder for real-time candle construction."""
     from app.services.data_fetcher import ANGEL_AVAILABLE
-    # Poll faster when we have real-time source (Angel One: 2s, yfinance: 5s)
-    interval = 2 if ANGEL_AVAILABLE else PRICE_STREAM_INTERVAL
+    # Angel One: 5s interval (was 2s — reduced to save API quota)
+    interval = PRICE_STREAM_INTERVAL  # 5s for both Angel One and yfinance
 
     # Import candle builder for live tick accumulation
     candle_builder = None
@@ -139,7 +143,7 @@ async def alert_checker():
             if is_market_open():
                 db = SessionLocal()
                 try:
-                    triggered = alert_service.check_alerts(db)
+                    triggered = alert_service.check_alerts_batched(db)
                     for alert_data in triggered:
                         await manager.broadcast_alert(alert_data)
                 finally:
@@ -156,13 +160,21 @@ async def signal_broadcaster():
         try:
             if is_market_open() and manager.active_connections:
                 symbols = manager.get_all_subscribed_symbols()
+                import time as _time
                 for symbol in symbols:
-                    try:
-                        signal = signal_service.get_signal(symbol)
-                        if signal:
-                            await manager.broadcast_signal(symbol, signal)
-                    except Exception:
-                        pass
+                    # Reuse signal if high_confidence_scanner fetched it recently
+                    cached_sig = _recent_signal_cache.get(symbol)
+                    if cached_sig and (_time.time() - cached_sig["ts"]) < SIGNAL_REFRESH_INTERVAL:
+                        signal = cached_sig["data"]
+                    else:
+                        try:
+                            signal = signal_service.get_signal(symbol)
+                        except Exception:
+                            signal = None
+                    if signal:
+                        await manager.broadcast_signal(symbol, signal)
+                    # Stagger API calls: 2s between symbols to avoid burst
+                    await asyncio.sleep(2)
         except Exception:
             pass
         await asyncio.sleep(SIGNAL_REFRESH_INTERVAL)
@@ -195,13 +207,19 @@ async def signal_accuracy_validator():
                     .all()
                 )
 
-                for log in pending_logs:
-                    try:
-                        quote = data_fetcher.get_live_quote(log.symbol)
-                        if quote and quote.get("ltp"):
-                            current_price = float(quote["ltp"])
-                            log.price_after_15min = current_price
+                if pending_logs:
+                    # Batch-fetch all symbols in one API call instead of N individual calls
+                    symbols = list({log.symbol for log in pending_logs})
+                    quotes = data_fetcher.get_bulk_quotes(symbols)
+                    price_map = {}
+                    for q in quotes:
+                        if q.get("ltp"):
+                            price_map[q["symbol"]] = float(q["ltp"])
 
+                    for log in pending_logs:
+                        current_price = price_map.get(log.symbol)
+                        if current_price:
+                            log.price_after_15min = current_price
                             if log.direction == "BULLISH":
                                 log.was_correct = current_price > log.price_at_signal
                             elif log.direction == "BEARISH":
@@ -209,18 +227,14 @@ async def signal_accuracy_validator():
                             else:
                                 pct_move = abs(current_price - log.price_at_signal) / log.price_at_signal
                                 log.was_correct = pct_move < 0.005
-                    except Exception:
-                        pass
 
-                    await asyncio.sleep(0.5)
-
-                db.commit()
+                    db.commit()
             finally:
                 db.close()
         except Exception:
             pass
 
-        await asyncio.sleep(120)
+        await asyncio.sleep(180)  # 3 min instead of 2 min
 
 
 async def high_confidence_scanner():
@@ -234,6 +248,10 @@ async def high_confidence_scanner():
 
     while True:
         try:
+            if not is_market_open():
+                await asyncio.sleep(HIGH_CONFIDENCE_SCAN_INTERVAL)
+                continue
+
             all_symbols = list(POPULAR_STOCKS) + list(INDICES.keys())
             db = SessionLocal()
             try:
@@ -242,6 +260,14 @@ async def high_confidence_scanner():
                         signal = signal_service.get_signal(symbol)
                         if not signal:
                             continue
+
+                        # Cache signal so signal_broadcaster can reuse it
+                        import time as _time
+                        _recent_signal_cache[symbol] = {
+                            "data": signal,
+                            "age": 0,
+                            "ts": _time.time(),
+                        }
 
                         # Get price from intraday candles
                         price = None
@@ -277,8 +303,8 @@ async def high_confidence_scanner():
                     except Exception:
                         pass
 
-                    # Delay between symbols to avoid hammering Angel One API
-                    await asyncio.sleep(3)
+                    # 5s between symbols to stay well under rate limit
+                    await asyncio.sleep(5)
 
                 db.commit()
             finally:

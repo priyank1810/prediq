@@ -66,6 +66,45 @@ class AlertService:
 
         return triggered
 
+    def check_alerts_batched(self, db: Session) -> list[dict]:
+        """Check all active alerts using a single batch quote fetch."""
+        active_alerts = db.query(PriceAlert).filter(PriceAlert.is_triggered == False).all()
+        if not active_alerts:
+            return []
+
+        # Batch-fetch all unique symbols in one API call
+        symbols = list({alert.symbol for alert in active_alerts})
+        quotes = data_fetcher.get_bulk_quotes(symbols)
+        price_map = {}
+        for q in quotes:
+            if q.get("ltp"):
+                price_map[q["symbol"]] = float(q["ltp"])
+
+        triggered = []
+        for alert in active_alerts:
+            current_price = price_map.get(alert.symbol)
+            if current_price is None:
+                continue
+
+            should_trigger = False
+            if alert.condition == "above" and current_price >= alert.target_price:
+                should_trigger = True
+            elif alert.condition == "below" and current_price <= alert.target_price:
+                should_trigger = True
+
+            if should_trigger:
+                alert.is_triggered = True
+                alert.triggered_at = datetime.utcnow()
+                db.commit()
+                triggered.append({
+                    "symbol": alert.symbol,
+                    "condition": alert.condition,
+                    "target_price": alert.target_price,
+                    "current_price": current_price,
+                })
+
+        return triggered
+
     # --- Smart Alerts ---
 
     def get_smart_alerts(self, db: Session, user_id: int = None) -> list[SmartAlert]:
