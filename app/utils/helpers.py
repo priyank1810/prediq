@@ -34,12 +34,22 @@ def is_index(symbol: str) -> bool:
     return symbol.upper() in INDICES or symbol.startswith("^")
 
 
+
+# Symbols that Yahoo Finance has renamed or broken — map to working ticker
+_YF_SYMBOL_ALIASES = {
+    "TATAMOTORS": "TATAMOTORS.NS",  # may be intermittently broken on Yahoo
+}
+
+
 def yfinance_symbol(symbol: str, exchange: str = "NSE") -> str:
     from app.config import INDICES
     upper = symbol.upper()
     # Check if it's an index — return the yfinance ticker directly
     if upper in INDICES:
         return INDICES[upper]
+    # Check alias map for broken/renamed tickers
+    if upper in _YF_SYMBOL_ALIASES:
+        return _YF_SYMBOL_ALIASES[upper]
     # Already a yfinance symbol (^NSEI, etc.)
     if symbol.startswith("^") or symbol.endswith(".NS") or symbol.endswith(".BO"):
         return symbol

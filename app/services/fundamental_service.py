@@ -27,15 +27,19 @@ class FundamentalService:
     def _fetch(self, symbol: str) -> dict:
         try:
             import yfinance as yf
+            from app.utils.helpers import is_index, yfinance_symbol
 
-            # Try NSE ticker first
-            ticker_symbol = f"{symbol}.NS"
+            # Indices don't have fundamental data (P/E, P/B, etc.)
+            if is_index(symbol):
+                return self._empty_result()
+
+            ticker_symbol = yfinance_symbol(symbol)
             ticker = yf.Ticker(ticker_symbol)
             info = ticker.info
 
             if not info or info.get("regularMarketPrice") is None:
                 # Fallback to BSE
-                ticker_symbol = f"{symbol}.BO"
+                ticker_symbol = yfinance_symbol(symbol, exchange="BSE")
                 ticker = yf.Ticker(ticker_symbol)
                 info = ticker.info
 
