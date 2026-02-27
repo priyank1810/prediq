@@ -382,12 +382,14 @@ class AngelOneProvider:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
 
+        # Use current time if before market close, otherwise 15:30
+        to_time = min(to_date, to_date.replace(hour=15, minute=30, second=0, microsecond=0))
         params = {
             "exchange": token_info["exchange"],
             "symboltoken": token_info["token"],
             "interval": "ONE_DAY",
             "fromdate": from_date.strftime("%Y-%m-%d 09:15"),
-            "todate": to_date.strftime("%Y-%m-%d 15:30"),
+            "todate": to_time.strftime("%Y-%m-%d %H:%M"),
         }
 
         for attempt in range(self._MAX_RETRIES + 1):
@@ -445,12 +447,14 @@ class AngelOneProvider:
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days)
 
+        # Use current time if before market close, otherwise 15:30
+        to_time = min(to_date, to_date.replace(hour=15, minute=30, second=0, microsecond=0))
         params = {
             "exchange": token_info["exchange"],
             "symboltoken": token_info["token"],
             "interval": angel_interval,
             "fromdate": from_date.strftime("%Y-%m-%d 09:15"),
-            "todate": to_date.strftime("%Y-%m-%d 15:30"),
+            "todate": to_time.strftime("%Y-%m-%d %H:%M"),
         }
 
         for attempt in range(self._MAX_RETRIES + 1):

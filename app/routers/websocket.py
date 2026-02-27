@@ -68,6 +68,10 @@ class ConnectionManager:
             except Exception:
                 pass
 
+    async def broadcast_mood(self, data: dict):
+        """Broadcast Market Mood Score to all connected clients."""
+        await self.broadcast_to_all("market_mood_update", data)
+
 
 manager = ConnectionManager()
 

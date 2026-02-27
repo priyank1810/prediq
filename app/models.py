@@ -63,6 +63,8 @@ class PredictionLog(Base):
     actual_price = Column(Float, nullable=True)
     confidence_lower = Column(Float, nullable=True)
     confidence_upper = Column(Float, nullable=True)
+    sector = Column(String, nullable=True)
+    regime = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -80,7 +82,23 @@ class SignalLog(Base):
     price_at_signal = Column(Float, nullable=True)
     price_after_15min = Column(Float, nullable=True)
     was_correct = Column(Boolean, nullable=True)
+    sector = Column(String, nullable=True)
+    regime = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SmartAlert(Base):
+    __tablename__ = "smart_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, nullable=True)  # nullable for market-wide alerts
+    alert_type = Column(String, nullable=False)  # prediction_change, sentiment_spike, mood_extreme, confidence_change
+    threshold = Column(Float, nullable=True)
+    is_triggered = Column(Boolean, default=False)
+    triggered_at = Column(DateTime, nullable=True)
+    trigger_data = Column(String, nullable=True)  # JSON string with details
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
 class WatchlistItem(Base):

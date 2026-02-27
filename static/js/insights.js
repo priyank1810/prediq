@@ -6,6 +6,11 @@ const Insights = {
             this.loadHighConfidence(),
             this.loadAccuracy(),
             this.loadRecentFeed(),
+            this.loadAccuracyBySector(),
+            this.loadAccuracyByHorizon(),
+            this.loadAccuracyByRegime(),
+            this.loadBacktestPnL(),
+            this.loadSmartAlerts(),
         ]);
     },
 
@@ -99,6 +104,152 @@ const Insights = {
             }).join('');
         } catch (e) {
             console.error('Failed to load recent feed:', e);
+        }
+    },
+
+    _renderStatRows(containerId, data, keyField, labelField) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div class="text-center py-2 text-gray-500 text-xs">No data yet</div>';
+            return;
+        }
+        container.innerHTML = data.map(row => {
+            const acc = row.accuracy || 0;
+            const accColor = acc >= 60 ? 'text-green-400' : (acc >= 40 ? 'text-yellow-400' : 'text-red-400');
+            return `
+                <div class="flex items-center justify-between py-1">
+                    <span class="text-xs text-gray-300">${row[labelField] || row[keyField] || '-'}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-gray-500">${row.total || 0} signals</span>
+                        <span class="text-xs font-bold ${accColor}">${acc.toFixed(1)}%</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    async loadAccuracyBySector() {
+        try {
+            const data = await API.getStatsBySector();
+            this._renderStatRows('accuracyBySector', data, 'sector', 'sector');
+        } catch (e) {
+            console.error('Failed to load accuracy by sector:', e);
+        }
+    },
+
+    async loadAccuracyByHorizon() {
+        try {
+            const data = await API.getStatsByHorizon();
+            this._renderStatRows('accuracyByHorizon', data, 'horizon', 'horizon');
+        } catch (e) {
+            console.error('Failed to load accuracy by horizon:', e);
+        }
+    },
+
+    async loadAccuracyByRegime() {
+        try {
+            const data = await API.getStatsByRegime();
+            this._renderStatRows('accuracyByRegime', data, 'regime', 'regime');
+        } catch (e) {
+            console.error('Failed to load accuracy by regime:', e);
+        }
+    },
+
+    async loadBacktestPnL() {
+        try {
+            const data = await API.getBacktestPnL();
+            if (!data) return;
+
+            const tradesEl = document.getElementById('pnlTrades');
+            const winEl = document.getElementById('pnlWinRate');
+            const totalEl = document.getElementById('pnlTotal');
+            const ddEl = document.getElementById('pnlDrawdown');
+
+            if (tradesEl) tradesEl.textContent = data.total_trades ?? '-';
+            if (winEl) {
+                const wr = data.win_rate;
+                winEl.textContent = wr != null ? wr.toFixed(1) + '%' : '-';
+                winEl.className = `text-white font-bold ${wr >= 50 ? 'text-green-400' : 'text-red-400'}`;
+            }
+            if (totalEl) {
+                const pnl = data.total_pnl;
+                totalEl.textContent = pnl != null ? (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + '%' : '-';
+                totalEl.className = `text-white font-bold ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            }
+            if (ddEl) {
+                const dd = data.max_drawdown;
+                ddEl.textContent = dd != null ? dd.toFixed(2) + '%' : '-';
+                ddEl.className = 'text-red-400 font-bold';
+            }
+        } catch (e) {
+            console.error('Failed to load backtest P&L:', e);
+        }
+    },
+
+    async loadSmartAlerts() {
+        try {
+            const alerts = await API.getSmartAlerts();
+            const container = document.getElementById('smartAlertsList2');
+            if (!container) return;
+
+            if (!alerts || alerts.length === 0) {
+                container.innerHTML = '<div class="text-center py-2 text-gray-500 text-xs">No smart alerts configured</div>';
+                return;
+            }
+            container.innerHTML = alerts.map(a => {
+                const triggered = a.is_triggered;
+                const statusColor = triggered ? 'text-green-400' : 'text-yellow-400';
+                const statusBg = triggered ? 'bg-green-900/30' : 'bg-yellow-900/30';
+                const created = a.created_at ? new Date(a.created_at).toLocaleDateString('en-IN') : '-';
+                return `
+                    <div class="flex items-center justify-between py-1.5 px-2 ${statusBg} rounded">
+                        <div class="flex items-center gap-2">
+                            <span class="${statusColor} text-[10px] font-bold">${triggered ? 'FIRED' : 'ACTIVE'}</span>
+                            <span class="text-xs text-white">${a.alert_type}</span>
+                            ${a.symbol ? `<span class="text-xs text-accent-blue">${a.symbol}</span>` : ''}
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-gray-500">${created}</span>
+                            <button onclick="Insights.deleteSmartAlert(${a.id})" class="text-red-400 hover:text-red-300 text-[10px]">x</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Failed to load smart alerts:', e);
+        }
+    },
+
+    async createSmartAlert() {
+        const typeEl = document.getElementById('smartAlertType');
+        const symbolEl = document.getElementById('smartAlertSymbol');
+        const thresholdEl = document.getElementById('smartAlertThreshold');
+
+        const data = {
+            alert_type: typeEl.value,
+            symbol: symbolEl.value.toUpperCase() || null,
+            threshold: thresholdEl.value ? parseFloat(thresholdEl.value) : null,
+        };
+
+        try {
+            await API.createSmartAlert(data);
+            App.showToast('Smart alert created', 'success');
+            symbolEl.value = '';
+            thresholdEl.value = '';
+            this.loadSmartAlerts();
+        } catch (e) {
+            App.showToast('Failed to create smart alert: ' + e.message, 'error');
+        }
+    },
+
+    async deleteSmartAlert(id) {
+        try {
+            await API.deleteSmartAlert(id);
+            App.showToast('Smart alert removed', 'success');
+            this.loadSmartAlerts();
+        } catch (e) {
+            App.showToast('Failed to delete: ' + e.message, 'error');
         }
     }
 };

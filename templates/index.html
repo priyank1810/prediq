@@ -137,6 +137,47 @@
 
             <!-- Market Overview (shown when no stock is selected) -->
             <div id="marketOverview">
+                <!-- Market Mood Score + FII/DII Panel -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                    <!-- Market Mood Score -->
+                    <div id="moodPanel" class="bg-dark-800 rounded-lg p-4 text-center">
+                        <h3 class="text-xs text-gray-400 font-medium mb-2">Market Mood</h3>
+                        <div id="moodScore" class="text-4xl font-bold text-yellow-400">--</div>
+                        <div id="moodLabel" class="text-sm text-gray-400 mt-1">Loading...</div>
+                        <div class="mt-2 h-2 bg-dark-600 rounded-full overflow-hidden">
+                            <div id="moodBar" class="h-full rounded-full transition-all duration-500" style="width:50%;background:linear-gradient(to right,#ff1744,#ffd600,#00c853)"></div>
+                        </div>
+                        <div class="flex justify-between text-[9px] text-gray-600 mt-1">
+                            <span>Fear</span><span>Neutral</span><span>Greed</span>
+                        </div>
+                    </div>
+                    <!-- FII/DII Panel -->
+                    <div id="fiiDiiPanel" class="bg-dark-800 rounded-lg p-4">
+                        <h3 class="text-xs text-gray-400 font-medium mb-2">FII/DII Activity</h3>
+                        <div id="fiiDiiData" class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-400">FII Net</span>
+                                <span id="fiiNet" class="text-sm font-bold text-gray-300">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-gray-400">DII Net</span>
+                                <span id="diiNet" class="text-sm font-bold text-gray-300">--</span>
+                            </div>
+                            <div class="flex justify-between items-center border-t border-gray-700 pt-1">
+                                <span class="text-xs text-gray-400">Total Net</span>
+                                <span id="totalNet" class="text-sm font-bold text-gray-300">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Sector Heat Map -->
+                    <div id="sectorPanel" class="bg-dark-800 rounded-lg p-4">
+                        <h3 class="text-xs text-gray-400 font-medium mb-2">Sector Heat Map</h3>
+                        <div id="sectorHeatmap" class="grid grid-cols-3 gap-1">
+                            <div class="col-span-3 text-center py-4 text-gray-600 text-[10px]">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Indices Ticker Bar -->
                 <div class="mb-4">
                     <div class="flex items-center justify-between mb-2">
@@ -227,7 +268,10 @@
                     <button class="horizon-btn" data-horizon="15m">15 Min</button>
                     <button class="horizon-btn" data-horizon="1h">1 Hour</button>
                     <button class="horizon-btn active" data-horizon="1d">1 Day</button>
+                    <button class="horizon-btn" data-horizon="1w">1 Week</button>
                     <button class="horizon-btn" data-horizon="1mo">1 Month</button>
+                    <button class="horizon-btn" data-horizon="3mo">3 Months</button>
+                    <button class="horizon-btn" data-horizon="6mo">6 Months</button>
                     <button class="horizon-btn" data-horizon="1y">1 Year</button>
                 </div>
                 <div id="predictionLoading" class="hidden text-center py-8">
@@ -275,6 +319,44 @@
                         <div id="explDrivers" class="space-y-2 mb-3"></div>
                         <div id="explRisks" class="mt-3"></div>
                         <div id="explSupportResistance" class="mt-3 text-xs text-gray-500"></div>
+                    </div>
+                    <!-- SHAP Drivers (Step 4) -->
+                    <div id="shapDriversPanel" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
+                        <h4 class="text-white font-semibold mb-3 text-sm">Top Prediction Drivers (SHAP)</h4>
+                        <div id="shapDriversList" class="space-y-2"></div>
+                    </div>
+                    <!-- Contribution Breakdown (Step 15) -->
+                    <div id="contributionPanel" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
+                        <h4 class="text-white font-semibold mb-3 text-sm">Prediction Breakdown</h4>
+                        <div class="grid grid-cols-4 gap-2 text-center">
+                            <div>
+                                <div class="text-xs text-gray-400">Technical</div>
+                                <div id="contribTechnical" class="text-lg font-bold text-blue-400">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-400">Seasonal</div>
+                                <div id="contribSeasonal" class="text-lg font-bold text-green-400">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-400">Fundamental</div>
+                                <div id="contribFundamental" class="text-lg font-bold text-yellow-400">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-400">Sentiment</div>
+                                <div id="contribSentiment" class="text-lg font-bold text-purple-400">-</div>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-3 bg-dark-600 rounded-full overflow-hidden flex">
+                            <div id="contribBarTech" class="h-full bg-blue-500 transition-all"></div>
+                            <div id="contribBarSeasonal" class="h-full bg-green-500 transition-all"></div>
+                            <div id="contribBarFund" class="h-full bg-yellow-500 transition-all"></div>
+                            <div id="contribBarSent" class="h-full bg-purple-500 transition-all"></div>
+                        </div>
+                    </div>
+                    <!-- Regime Badge -->
+                    <div id="regimePanel" class="hidden mt-3">
+                        <span class="text-xs text-gray-500">Market Regime: </span>
+                        <span id="regimeBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium">-</span>
                     </div>
                     <div id="predictionTable" class="hidden mt-4 overflow-x-auto">
                         <table class="w-full text-sm">
@@ -443,6 +525,60 @@
                 </div>
             </div>
 
+            <!-- Accuracy by Sector/Horizon/Regime -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-white mb-2">By Sector</h3>
+                    <div id="accuracyBySector" class="space-y-1 max-h-48 overflow-y-auto">
+                        <div class="text-center py-2 text-gray-500 text-xs">Loading...</div>
+                    </div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-white mb-2">By Horizon</h3>
+                    <div id="accuracyByHorizon" class="space-y-1 max-h-48 overflow-y-auto">
+                        <div class="text-center py-2 text-gray-500 text-xs">Loading...</div>
+                    </div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-white mb-2">By Regime</h3>
+                    <div id="accuracyByRegime" class="space-y-1 max-h-48 overflow-y-auto">
+                        <div class="text-center py-2 text-gray-500 text-xs">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backtest P&L -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-2">Backtest P&L Simulation</h3>
+                <div id="backtestPnL" class="grid grid-cols-4 gap-3 text-center">
+                    <div><div class="text-[10px] text-gray-500">Trades</div><div id="pnlTrades" class="text-white font-bold">-</div></div>
+                    <div><div class="text-[10px] text-gray-500">Win Rate</div><div id="pnlWinRate" class="text-white font-bold">-</div></div>
+                    <div><div class="text-[10px] text-gray-500">Total P&L</div><div id="pnlTotal" class="text-white font-bold">-</div></div>
+                    <div><div class="text-[10px] text-gray-500">Max DD</div><div id="pnlDrawdown" class="text-white font-bold">-</div></div>
+                </div>
+            </div>
+
+            <!-- Smart Alerts Management -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold text-white">Smart Alerts</h3>
+                </div>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <select id="smartAlertType" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
+                        <option value="mood_extreme">Mood Extreme</option>
+                        <option value="sentiment_spike">Sentiment Spike</option>
+                        <option value="prediction_change">Prediction Change</option>
+                        <option value="confidence_change">Confidence Change</option>
+                    </select>
+                    <input type="text" id="smartAlertSymbol" placeholder="Symbol (optional)" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-28 placeholder-gray-500">
+                    <input type="number" id="smartAlertThreshold" placeholder="Threshold" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24 placeholder-gray-500">
+                    <button onclick="Insights.createSmartAlert()" class="px-3 py-1 bg-accent-blue text-white text-xs rounded hover:bg-blue-600 transition">Create</button>
+                </div>
+                <div id="smartAlertsList2" class="space-y-1 max-h-48 overflow-y-auto">
+                    <div class="text-center py-2 text-gray-500 text-xs">No smart alerts</div>
+                </div>
+            </div>
+
             <!-- Recent Signal Feed -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
                 <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Recent Signal Activity</h3>
@@ -488,15 +624,15 @@
     <!-- Toast Container -->
     <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 space-y-2"></div>
 
-    <script src="/static/js/api.js?v=6"></script>
-    <script src="/static/js/chart.js?v=6"></script>
-    <script src="/static/js/search.js?v=6"></script>
-    <script src="/static/js/predictions.js?v=6"></script>
-    <script src="/static/js/watchlist.js?v=6"></script>
-    <script src="/static/js/insights.js?v=6"></script>
-    <script src="/static/js/signals.js?v=6"></script>
-    <script src="/static/js/notifications.js?v=6"></script>
-    <script src="/static/js/options.js?v=6"></script>
-    <script src="/static/js/app.js?v=6"></script>
+    <script src="/static/js/api.js?v=7"></script>
+    <script src="/static/js/chart.js?v=7"></script>
+    <script src="/static/js/search.js?v=7"></script>
+    <script src="/static/js/predictions.js?v=7"></script>
+    <script src="/static/js/watchlist.js?v=7"></script>
+    <script src="/static/js/insights.js?v=7"></script>
+    <script src="/static/js/signals.js?v=7"></script>
+    <script src="/static/js/notifications.js?v=7"></script>
+    <script src="/static/js/options.js?v=7"></script>
+    <script src="/static/js/app.js?v=7"></script>
 </body>
 </html>

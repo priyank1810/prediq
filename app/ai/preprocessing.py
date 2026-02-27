@@ -251,6 +251,34 @@ class StockDataPreprocessor:
         feat_df["ret_5"] = close.pct_change(5)
         feat_df["ret_20"] = close.pct_change(20)
 
+        # --- New indicators (Step 1) ---
+
+        # Williams %R (14)
+        feat_df["williams_r"] = ta.momentum.WilliamsRIndicator(high, low, close, lbp=14).williams_r()
+
+        # CCI (20)
+        feat_df["cci"] = ta.trend.CCIIndicator(high, low, close, window=20).cci()
+
+        # Ichimoku Cloud
+        ichimoku = ta.trend.IchimokuIndicator(high, low, window1=9, window2=26, window3=52)
+        feat_df["ichimoku_base"] = ichimoku.ichimoku_base_line()
+        feat_df["ichimoku_a"] = ichimoku.ichimoku_a()
+        feat_df["ichimoku_b"] = ichimoku.ichimoku_b()
+
+        # MA crossover signals (binary)
+        sma5 = ta.trend.SMAIndicator(close, window=5).sma_indicator()
+        sma200 = ta.trend.SMAIndicator(close, window=200).sma_indicator()
+        feat_df["cross_5_20"] = (sma5 > sma20).astype(float)
+        feat_df["cross_20_50"] = (sma20 > sma50).astype(float)
+        feat_df["cross_50_200"] = (sma50 > sma200).astype(float)
+
+        # SMA(200) ratio
+        feat_df["sma200_ratio"] = close / sma200.replace(0, np.nan)
+
+        # Gap analysis (overnight gap %)
+        prev_close = close.shift(1)
+        feat_df["overnight_gap"] = ((feat_df["open"] / prev_close) - 1).fillna(0)
+
         # Multi-timescale rolling features
         rolling_cols = self._add_rolling_features(feat_df, close, volume, windows=(5, 20))
 
@@ -260,6 +288,9 @@ class StockDataPreprocessor:
             "sma20_ratio", "sma50_ratio", "ema20_ratio", "atr_norm",
             "adx", "stoch_k", "stoch_d", "obv_ratio", "mfi", "vwap_dev",
             "vol_regime", "price_position", "ret_5", "ret_20",
+            "williams_r", "cci", "ichimoku_base", "ichimoku_a", "ichimoku_b",
+            "cross_5_20", "cross_20_50", "cross_50_200",
+            "sma200_ratio", "overnight_gap",
         ] + rolling_cols + [
             "gap_flag",
             "sentiment_score", "vix_level", "sp500_change", "usdinr_change",

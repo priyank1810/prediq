@@ -86,8 +86,14 @@ class PriceAlertResponse(BaseModel):
 # --- Prediction Schemas ---
 
 class PredictionRequest(BaseModel):
-    horizon: str = "1d"  # "15m", "1h", "1d", "1mo", "1y"
+    horizon: str = "1d"  # "15m", "1h", "1d", "1w", "1mo", "3mo", "6mo", "1y"
     models: list[str] = ["lstm", "prophet", "xgboost"]
+
+
+class SHAPDriver(BaseModel):
+    feature: str
+    impact_value: float
+    direction: str  # "positive" or "negative"
 
 
 class ModelPrediction(BaseModel):
@@ -99,6 +105,13 @@ class ModelPrediction(BaseModel):
     mape: Optional[float] = None
 
 
+class ContributionBreakdown(BaseModel):
+    technical: float = 0.0
+    seasonal: float = 0.0
+    fundamental: float = 0.0
+    sentiment: float = 0.0
+
+
 class PredictionResponse(BaseModel):
     symbol: str
     horizon: str
@@ -106,6 +119,8 @@ class PredictionResponse(BaseModel):
     prophet: Optional[ModelPrediction] = None
     xgboost: Optional[ModelPrediction] = None
     ensemble: Optional[ModelPrediction] = None
+    shap_drivers: Optional[list[SHAPDriver]] = None
+    contribution_breakdown: Optional[ContributionBreakdown] = None
 
 
 # --- Indicator Schemas ---
@@ -195,3 +210,35 @@ class PasswordChange(BaseModel):
 class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     role: Optional[str] = None
+
+
+# --- Smart Alert Schemas ---
+
+class SmartAlertCreate(BaseModel):
+    symbol: Optional[str] = None  # nullable for market-wide alerts
+    alert_type: str  # prediction_change, sentiment_spike, mood_extreme, confidence_change
+    threshold: Optional[float] = None
+
+
+class SmartAlertResponse(BaseModel):
+    id: int
+    symbol: Optional[str]
+    alert_type: str
+    threshold: Optional[float]
+    is_triggered: bool
+    triggered_at: Optional[datetime]
+    trigger_data: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Chart Pattern Schemas ---
+
+class ChartPattern(BaseModel):
+    type: str
+    start_date: str
+    end_date: str
+    confidence: float
+    description: str

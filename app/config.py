@@ -140,6 +140,31 @@ PREDICTION_HORIZONS = {
     "15m": {"label": "15 Min", "intraday": True, "bars": 1, "interval": "15m"},
     "1h": {"label": "1 Hour", "intraday": True, "bars": 4, "interval": "15m"},
     "1d": {"label": "1 Day", "intraday": False, "days": 1},
+    "1w": {"label": "1 Week", "intraday": False, "days": 5},
     "1mo": {"label": "1 Month", "intraday": False, "days": 22},
+    "3mo": {"label": "3 Months", "intraday": False, "days": 66},
+    "6mo": {"label": "6 Months", "intraday": False, "days": 126},
     "1y": {"label": "1 Year", "intraday": False, "days": 252},
+}
+
+# --- FinBERT Config ---
+FINBERT_ENABLED = True  # Set to False to fall back to keyword matching
+
+# --- Finnhub Config ---
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+
+# --- Market Mood Config ---
+MARKET_MOOD_REFRESH_INTERVAL = 300  # seconds (5 min)
+
+# --- Sector Map ---
+SECTOR_MAP = {
+    "IT": ["TCS", "INFY", "HCLTECH", "WIPRO", "TECHM"],
+    "Banking": ["HDFCBANK", "ICICIBANK", "SBIN", "KOTAKBANK", "AXISBANK", "INDUSINDBK"],
+    "Pharma": ["SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "APOLLOHOSP"],
+    "Auto": ["MARUTI", "TATAMOTORS", "M&M", "EICHERMOT", "HEROMOTOCO"],
+    "FMCG": ["HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA", "TATACONSUM"],
+    "Metal": ["TATASTEEL", "JSWSTEEL", "HINDALCO", "COALINDIA"],
+    "Energy": ["RELIANCE", "ONGC", "BPCL", "IOC", "NTPC", "POWERGRID"],
+    "Realty": ["ADANIENT", "ADANIPORTS", "GRASIM", "ULTRACEMCO"],
+    "Finance": ["BAJFINANCE", "BAJAJFINSV", "HDFCLIFE", "SBILIFE", "SHRIRAMFIN"],
 }

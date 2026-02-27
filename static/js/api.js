@@ -72,9 +72,37 @@ const API = {
         return this.request(`/api/options/${encodeURIComponent(symbol)}/chain${q}`);
     },
 
+    // FII/DII
+    getFIIDIIDaily() { return this.request('/api/fii-dii/daily'); },
+    getFIIDIIHistory(days = 30) { return this.request(`/api/fii-dii/history?days=${days}`); },
+
+    // Market Mood
+    getMarketMood() { return this.request('/api/signals/market-mood'); },
+
+    // Sectors
+    getSectorHeatmap() { return this.request('/api/sectors/heatmap'); },
+
+    // Chart Patterns
+    getPatterns(symbol) { return this.request(`/api/indicators/${encodeURIComponent(symbol)}/patterns`); },
+
+    // Smart Alerts
+    getSmartAlerts() { return this.request('/api/alerts/smart'); },
+    createSmartAlert(data) { return this.request('/api/alerts/smart', { method: 'POST', body: JSON.stringify(data) }); },
+    deleteSmartAlert(id) { return this.request(`/api/alerts/smart/${id}`, { method: 'DELETE' }); },
+
+    // Accuracy Stats
+    getStatsBySector() { return this.request('/api/signals/stats/by-sector'); },
+    getStatsByHorizon() { return this.request('/api/signals/stats/by-horizon'); },
+    getStatsByRegime() { return this.request('/api/signals/stats/by-regime'); },
+    getBacktestPnL() { return this.request('/api/signals/stats/backtest-pnl'); },
+
     // High-confidence alert handler
     onHighConfidenceAlert: null,
     setHighConfidenceHandler(handler) { this.onHighConfidenceAlert = handler; },
+
+    // Market mood handler
+    onMarketMoodUpdate: null,
+    setMarketMoodHandler(handler) { this.onMarketMoodUpdate = handler; },
 
     // WebSocket
     connectWebSocket(symbols, onPriceUpdate, onAlert) {
@@ -91,6 +119,8 @@ const API = {
             if (msg.type === 'alert_triggered' && onAlert) onAlert(msg.data);
             if (msg.type === 'signal_update' && this.onSignalUpdate) this.onSignalUpdate(msg.data);
             if (msg.type === 'high_confidence_alert' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
+            if (msg.type === 'market_mood_update' && this.onMarketMoodUpdate) this.onMarketMoodUpdate(msg.data);
+            if (msg.type === 'smart_alert_triggered' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
         };
         this.ws.onclose = () => {
             setTimeout(() => this.connectWebSocket(symbols, onPriceUpdate, onAlert), 5000);

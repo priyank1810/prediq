@@ -41,6 +41,9 @@ const App = {
             API.setHighConfidenceHandler((data) => {
                 Notifications.addNotification(data);
             });
+            API.setMarketMoodHandler((data) => {
+                this.renderMoodData(data);
+            });
         } catch (e) { /* WS not available yet */ }
 
         // Auto-refresh market overview every 10 seconds
@@ -139,8 +142,11 @@ const App = {
                 API.getMultipleQuotes(this._overviewSymbols),
                 API.scanHighConfidence(60).catch(() => []),
             ]);
-            // Fire market movers load non-blocking
+            // Fire market movers and new panels non-blocking
             this.loadMarketMovers();
+            this.loadMarketMood();
+            this.loadFIIDII();
+            this.loadSectorHeatmap();
 
             // Store quotes for in-place updates
             quotes.forEach(q => { this._overviewQuotes[q.symbol] = q; });
@@ -645,6 +651,107 @@ const App = {
                 arrowEl.className = `text-xs ${up ? 'text-green-400' : 'text-red-400'}`;
             }
         });
+    },
+
+    // --- Market Mood ---
+    async loadMarketMood() {
+        try {
+            const data = await API.getMarketMood();
+            this.renderMoodData(data);
+        } catch (e) {
+            console.error('Market mood failed:', e);
+        }
+    },
+
+    renderMoodData(data) {
+        const scoreEl = document.getElementById('moodScore');
+        const labelEl = document.getElementById('moodLabel');
+        const barEl = document.getElementById('moodBar');
+        if (!scoreEl || !data) return;
+
+        const score = data.score != null ? data.score : data.mood_score;
+        if (score == null) return;
+
+        scoreEl.textContent = Math.round(score);
+        const label = data.label || data.mood_label || '';
+        labelEl.textContent = label;
+        barEl.style.width = score + '%';
+
+        const colorMap = {
+            'Extreme Fear': 'text-red-400',
+            'Fear': 'text-red-300',
+            'Neutral': 'text-yellow-400',
+            'Greed': 'text-green-300',
+            'Extreme Greed': 'text-green-400',
+        };
+        scoreEl.className = `text-4xl font-bold ${colorMap[label] || 'text-yellow-400'}`;
+    },
+
+    // --- FII/DII ---
+    async loadFIIDII() {
+        try {
+            const data = await API.getFIIDIIDaily();
+            const fiiEl = document.getElementById('fiiNet');
+            const diiEl = document.getElementById('diiNet');
+            const totalEl = document.getElementById('totalNet');
+            if (!data) return;
+
+            const fmt = (v) => {
+                if (v == null) return '--';
+                const abs = Math.abs(v);
+                const sign = v >= 0 ? '+' : '-';
+                if (abs >= 10000000) return sign + '₹' + (abs / 10000000).toFixed(1) + 'Cr';
+                if (abs >= 100000) return sign + '₹' + (abs / 100000).toFixed(1) + 'L';
+                return sign + '₹' + abs.toLocaleString('en-IN');
+            };
+            const color = (v) => v >= 0 ? 'text-green-400' : 'text-red-400';
+
+            const fiiNet = data.fii_net ?? data.fii_buy - data.fii_sell;
+            const diiNet = data.dii_net ?? data.dii_buy - data.dii_sell;
+            const total = fiiNet + diiNet;
+
+            fiiEl.textContent = fmt(fiiNet);
+            fiiEl.className = `text-sm font-bold ${color(fiiNet)}`;
+            diiEl.textContent = fmt(diiNet);
+            diiEl.className = `text-sm font-bold ${color(diiNet)}`;
+            totalEl.textContent = fmt(total);
+            totalEl.className = `text-sm font-bold ${color(total)}`;
+        } catch (e) {
+            console.error('FII/DII failed:', e);
+        }
+    },
+
+    // --- Sector Heatmap ---
+    async loadSectorHeatmap() {
+        try {
+            const data = await API.getSectorHeatmap();
+            const container = document.getElementById('sectorHeatmap');
+            if (!container || !data || !data.sectors) return;
+
+            container.innerHTML = data.sectors.map(s => {
+                const pct = s.avg_change || 0;
+                const intensity = Math.min(1, Math.abs(pct) / 3);
+                let bg, text;
+                if (pct >= 0) {
+                    bg = `rgba(0, 200, 83, ${0.15 + intensity * 0.6})`;
+                    text = 'text-green-300';
+                } else {
+                    bg = `rgba(255, 23, 68, ${0.15 + intensity * 0.6})`;
+                    text = 'text-red-300';
+                }
+                const sign = pct >= 0 ? '+' : '';
+                return `
+                    <div class="rounded p-1.5 text-center cursor-default" style="background:${bg}">
+                        <div class="text-[10px] text-white font-medium truncate">${s.sector}</div>
+                        <div class="text-[10px] ${text} font-bold">${sign}${pct.toFixed(2)}%</div>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Sector heatmap failed:', e);
+            const c = document.getElementById('sectorHeatmap');
+            if (c) c.innerHTML = '<div class="col-span-3 text-center py-2 text-gray-600 text-[10px]">Unavailable</div>';
+        }
     },
 
     showToast(message, type = 'success') {

@@ -28,6 +28,50 @@ class XGBoostPredictor:
             return cfg.get("bars", 1)
         return cfg.get("days", 1)
 
+    def _walk_forward_validate(self, feat_df: pd.DataFrame, feature_cols: list, n_splits: int = 5) -> float:
+        """Anchored walk-forward validation: train on [0:t], predict [t:t+fold], slide forward.
+        Returns average MAPE across all folds."""
+        from xgboost import XGBRegressor
+
+        X = feat_df[feature_cols].values
+        y = feat_df["target"].values
+        close_prices = feat_df["close"].values
+        n = len(X)
+        fold_size = n // (n_splits + 1)
+        if fold_size < 20:
+            return 5.0
+
+        mapes = []
+        for i in range(n_splits):
+            train_end = fold_size * (i + 1)
+            test_end = min(train_end + fold_size, n)
+            if test_end <= train_end:
+                break
+
+            X_train, y_train = X[:train_end], y[:train_end]
+            X_test, y_test = X[train_end:test_end], y[train_end:test_end]
+            test_close = close_prices[train_end:test_end]
+
+            model = XGBRegressor(
+                n_estimators=150, max_depth=6, learning_rate=0.05,
+                subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1, reg_lambda=1.0,
+                random_state=42, verbosity=0,
+            )
+            model.fit(X_train, y_train, verbose=False)
+
+            pred_returns = model.predict(X_test)
+            pred_prices = test_close * (1 + pred_returns)
+            actual_prices = test_close * (1 + y_test)
+
+            nonzero = actual_prices != 0
+            if nonzero.any():
+                fold_mape = float(np.mean(np.abs(
+                    (actual_prices[nonzero] - pred_prices[nonzero]) / actual_prices[nonzero]
+                )) * 100)
+                mapes.append(fold_mape)
+
+        return float(np.mean(mapes)) if mapes else 5.0
+
     def _build_tabular_features(self, df: pd.DataFrame, symbol: str = "") -> pd.DataFrame:
         """Build tabular feature matrix from OHLCV data (no sequences needed)."""
         from app.ai.preprocessing import StockDataPreprocessor
@@ -85,6 +129,32 @@ class XGBoostPredictor:
         feat_df["obv_ratio"] = obv / obv_sma
 
         feat_df["mfi"] = ta.volume.MFIIndicator(high, low, close, volume, window=14).money_flow_index()
+
+        # Williams %R (14)
+        feat_df["williams_r"] = ta.momentum.WilliamsRIndicator(high, low, close, lbp=14).williams_r()
+
+        # CCI (20)
+        feat_df["cci"] = ta.trend.CCIIndicator(high, low, close, window=20).cci()
+
+        # Ichimoku Cloud
+        ichimoku = ta.trend.IchimokuIndicator(high, low, window1=9, window2=26, window3=52)
+        feat_df["ichimoku_base"] = ichimoku.ichimoku_base_line()
+        feat_df["ichimoku_a"] = ichimoku.ichimoku_a()
+        feat_df["ichimoku_b"] = ichimoku.ichimoku_b()
+
+        # MA crossover signals (binary)
+        sma5 = ta.trend.SMAIndicator(close, window=5).sma_indicator()
+        sma200 = ta.trend.SMAIndicator(close, window=200).sma_indicator()
+        feat_df["cross_5_20"] = (sma5 > sma20).astype(float)
+        feat_df["cross_20_50"] = (sma20 > sma50).astype(float)
+        feat_df["cross_50_200"] = (sma50 > sma200).astype(float)
+
+        # SMA(200) ratio
+        feat_df["sma200_ratio"] = close / sma200.replace(0, np.nan)
+
+        # Gap analysis (overnight gap %)
+        prev_close = close.shift(1)
+        feat_df["overnight_gap"] = ((feat_df["open"] / prev_close) - 1).fillna(0)
 
         # Returns at various horizons (lagged features)
         for w in [1, 2, 3, 5, 10, 20]:
@@ -210,22 +280,10 @@ class XGBoostPredictor:
 
             joblib.dump({"model": model, "feature_cols": feature_cols}, model_path)
 
-        # MAPE on test set (in terms of price prediction accuracy)
-        if len(X_test) > 0:
-            test_pred_returns = model.predict(X_test)
-            # Convert returns to prices for MAPE
-            test_actual_prices = feat_df["close"].iloc[split:split + len(y_test)].values
-            test_pred_prices = test_actual_prices * (1 + test_pred_returns)
-            test_actual_next = test_actual_prices * (1 + y_test)
-
-            nonzero = test_actual_next != 0
-            if nonzero.any():
-                mape = float(np.mean(np.abs(
-                    (test_actual_next[nonzero] - test_pred_prices[nonzero]) / test_actual_next[nonzero]
-                )) * 100)
-            else:
-                mape = 5.0
-        else:
+        # Walk-forward MAPE (anchored, 5-fold)
+        try:
+            mape = self._walk_forward_validate(feat_df, feature_cols, n_splits=5)
+        except Exception:
             mape = 5.0
 
         confidence = max(0, min(100, 100 - mape))
