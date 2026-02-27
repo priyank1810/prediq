@@ -105,8 +105,9 @@ class AngelOneProvider:
     """Real-time data provider using Angel One SmartAPI."""
 
     # Minimum seconds between API calls to avoid TooManyRequests (AB1004)
-    _RATE_LIMIT_INTERVAL = 0.5  # ~2 calls/sec to stay well under Angel One limits
-    _RATE_LIMIT_RETRY_WAIT = 3.0  # wait before retry on 429
+    # Angel One free tier allows ~1 req/sec across all endpoints
+    _RATE_LIMIT_INTERVAL = 1.0  # 1 call/sec — shared across all API methods
+    _RATE_LIMIT_RETRY_WAIT = 5.0  # wait before retry on 429
     _MAX_RETRIES = 3
 
     def __init__(self):
@@ -189,17 +190,18 @@ class AngelOneProvider:
         if upper in KNOWN_TOKENS:
             return KNOWN_TOKENS[upper]
 
-        # Check cache
+        # Check cache (includes negative cache for unknown symbols)
         with _token_cache_lock:
             cached = _token_cache.get(upper)
             if cached and cached["expires"] > time.time():
-                return cached
+                return cached if cached.get("token") else None
 
-        # Search via API
+        # Search via API (throttled to avoid rate limiting)
         if not self._ensure_session():
             return None
 
         try:
+            self._throttle()
             result = self._client.searchScrip(exchange=EXCHANGE_NSE, searchscrip=symbol)
             if result and result.get("data"):
                 items = result["data"]
@@ -225,6 +227,9 @@ class AngelOneProvider:
         except Exception as e:
             logger.warning(f"Token lookup failed for {symbol}: {e}")
 
+        # Cache the miss to avoid repeated lookups for unknown symbols
+        with _token_cache_lock:
+            _token_cache[upper] = {"token": None, "exchange": None, "expires": time.time() + 3600}
         return None
 
     def get_live_quote(self, symbol: str) -> dict | None:

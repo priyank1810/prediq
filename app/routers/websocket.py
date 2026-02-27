@@ -277,8 +277,8 @@ async def high_confidence_scanner():
                     except Exception:
                         pass
 
-                    # Small delay between symbols to avoid hammering APIs
-                    await asyncio.sleep(1)
+                    # Delay between symbols to avoid hammering Angel One API
+                    await asyncio.sleep(3)
 
                 db.commit()
             finally:
