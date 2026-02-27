@@ -105,10 +105,10 @@ class AngelOneProvider:
     """Real-time data provider using Angel One SmartAPI."""
 
     # Minimum seconds between API calls to avoid TooManyRequests (AB1004)
-    # Angel One free tier allows ~1 req/sec across all endpoints
-    _RATE_LIMIT_INTERVAL = 1.0  # 1 call/sec — shared across all API methods
+    _RATE_LIMIT_INTERVAL = 1.0  # 1 call/sec baseline
     _RATE_LIMIT_RETRY_WAIT = 5.0  # wait before retry on 429
-    _MAX_RETRIES = 3
+    _MAX_RETRIES = 2
+    _BACKOFF_DURATION = 15.0  # global cooldown (seconds) after a 429
 
     def __init__(self):
         self._client = None
@@ -118,6 +118,7 @@ class AngelOneProvider:
         self._available = False
         self._last_api_call = 0.0
         self._rate_lock = Lock()
+        self._backoff_until = 0.0  # global backoff timestamp
 
         # Read credentials from env
         self.api_key = os.getenv("ANGEL_API_KEY", "").strip()
@@ -131,9 +132,23 @@ class AngelOneProvider:
         else:
             logger.info("Angel One credentials not configured — using yfinance fallback")
 
+    def _trigger_backoff(self):
+        """Set a global cooldown after hitting a rate limit."""
+        self._backoff_until = time.time() + self._BACKOFF_DURATION
+        logger.warning(f"Angel One rate limited — backing off for {self._BACKOFF_DURATION}s")
+
+    def _is_backing_off(self) -> bool:
+        """Check if we're in a global backoff period."""
+        return time.time() < self._backoff_until
+
     def _throttle(self):
-        """Enforce minimum interval between API calls."""
+        """Enforce minimum interval between API calls + respect global backoff."""
         with self._rate_lock:
+            # Wait out any active backoff first
+            remaining = self._backoff_until - time.time()
+            if remaining > 0:
+                time.sleep(remaining)
+
             now = time.time()
             elapsed = now - self._last_api_call
             if elapsed < self._RATE_LIMIT_INTERVAL:
@@ -238,7 +253,7 @@ class AngelOneProvider:
         Returns standardized quote dict compatible with data_fetcher format,
         or None if unavailable.
         """
-        if not self._ensure_session():
+        if self._is_backing_off() or not self._ensure_session():
             return None
 
         token_info = self._lookup_token(symbol)
@@ -302,7 +317,7 @@ class AngelOneProvider:
         """Fetch quotes for multiple symbols. Returns {symbol: quote_dict}."""
         results = {}
 
-        if not self._ensure_session():
+        if self._is_backing_off() or not self._ensure_session():
             return results
 
         # Group by exchange
@@ -397,17 +412,16 @@ class AngelOneProvider:
             "todate": to_time.strftime("%Y-%m-%d %H:%M"),
         }
 
+        if self._is_backing_off():
+            return None
+
         for attempt in range(self._MAX_RETRIES + 1):
             try:
                 self._throttle()
                 response = self._client.getCandleData(params)
 
                 if response and response.get("errorcode") == "AB1004":
-                    if attempt < self._MAX_RETRIES:
-                        logger.debug(f"Rate limited on {symbol} historical, retry {attempt + 1}")
-                        time.sleep(self._RATE_LIMIT_RETRY_WAIT * (attempt + 1))
-                        continue
-                    logger.warning(f"Angel One historical rate limited for {symbol} after retries")
+                    self._trigger_backoff()
                     return None
 
                 if not response or response.get("status") is False or not response.get("data"):
@@ -462,17 +476,16 @@ class AngelOneProvider:
             "todate": to_time.strftime("%Y-%m-%d %H:%M"),
         }
 
+        if self._is_backing_off():
+            return None
+
         for attempt in range(self._MAX_RETRIES + 1):
             try:
                 self._throttle()
                 response = self._client.getCandleData(params)
 
                 if response and response.get("errorcode") == "AB1004":
-                    if attempt < self._MAX_RETRIES:
-                        logger.debug(f"Rate limited on {symbol} intraday, retry {attempt + 1}")
-                        time.sleep(self._RATE_LIMIT_RETRY_WAIT * (attempt + 1))
-                        continue
-                    logger.warning(f"Angel One intraday rate limited for {symbol} after retries")
+                    self._trigger_backoff()
                     return None
 
                 if not response or response.get("status") is False or not response.get("data"):
