@@ -80,30 +80,40 @@ class SentimentService:
                 logger.warning(f"RSS fetch failed for {symbol}: {e}")
                 continue
 
-        # MoneyControl RSS
-        try:
-            mc_url = f"https://www.moneycontrol.com/rss/{quote(symbol)}.xml"
-            feed = feedparser.parse(mc_url)
-            for entry in feed.entries[:10]:
-                title = entry.get("title", "").strip()
-                if not title or title in seen_titles:
-                    continue
-                seen_titles.add(title)
-                pub_time = None
-                if entry.get("published_parsed"):
-                    try:
-                        pub_time = datetime(*entry.published_parsed[:6])
-                    except Exception:
-                        pass
-                all_headlines.append({
-                    "title": title,
-                    "published": entry.get("published", ""),
-                    "link": entry.get("link", ""),
-                    "pub_time": pub_time,
-                    "source": "moneycontrol",
-                })
-        except Exception:
-            pass
+        # MoneyControl RSS — use their actual topic feeds and filter by symbol
+        mc_feeds = [
+            "https://www.moneycontrol.com/rss/latestnews.xml",
+            "https://www.moneycontrol.com/rss/buzzingstocks.xml",
+            "https://www.moneycontrol.com/rss/marketreports.xml",
+        ]
+        for mc_url in mc_feeds:
+            try:
+                feed = feedparser.parse(mc_url)
+                for entry in feed.entries[:20]:
+                    title = entry.get("title", "").strip()
+                    if not title or title in seen_titles:
+                        continue
+                    # Only include headlines that mention this symbol
+                    if symbol.lower() not in title.lower():
+                        continue
+                    seen_titles.add(title)
+                    pub_time = None
+                    if entry.get("published_parsed"):
+                        try:
+                            pub_time = datetime(*entry.published_parsed[:6])
+                            if datetime.now() - pub_time > timedelta(days=7):
+                                continue
+                        except Exception:
+                            pass
+                    all_headlines.append({
+                        "title": title,
+                        "published": entry.get("published", ""),
+                        "link": entry.get("link", ""),
+                        "pub_time": pub_time,
+                        "source": "moneycontrol",
+                    })
+            except Exception:
+                pass
 
         # Economic Times RSS
         try:
