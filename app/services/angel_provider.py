@@ -105,9 +105,9 @@ class AngelOneProvider:
     """Real-time data provider using Angel One SmartAPI."""
 
     # Minimum seconds between API calls to avoid TooManyRequests (AB1004)
-    _RATE_LIMIT_INTERVAL = 0.35  # ~3 calls/sec to stay under Angel One limits
-    _RATE_LIMIT_RETRY_WAIT = 1.5  # wait before retry on 429
-    _MAX_RETRIES = 2
+    _RATE_LIMIT_INTERVAL = 0.5  # ~2 calls/sec to stay well under Angel One limits
+    _RATE_LIMIT_RETRY_WAIT = 3.0  # wait before retry on 429
+    _MAX_RETRIES = 3
 
     def __init__(self):
         self._client = None
