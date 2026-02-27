@@ -43,14 +43,31 @@ class SignalService:
             global_score = global_result["score"]
         except Exception as e:
             logger.warning(f"Global market failed: {e}")
-            global_result = {"score": 0, "markets": []}
+            global_result = {"score": 0, "markets": [], "news_magnitude": 0}
             global_score = 0
 
-        # 5. Weighted composite
+        # 5. Dynamic weights — boost global when big news is detected
+        w_tech = SIGNAL_WEIGHT_TECHNICAL
+        w_sent = SIGNAL_WEIGHT_SENTIMENT
+        w_glob = SIGNAL_WEIGHT_GLOBAL
+
+        news_magnitude = global_result.get("news_magnitude", 0)
+        if news_magnitude >= 60:
+            # Big global event: shift weight from technical to global
+            # magnitude 60 → global gets +0.15, magnitude 100 → global gets +0.25
+            boost = min(0.25, (news_magnitude - 60) / 40 * 0.25 + 0.15)
+            w_glob = SIGNAL_WEIGHT_GLOBAL + boost
+            w_tech = SIGNAL_WEIGHT_TECHNICAL - boost  # take from technical
+        elif news_magnitude >= 30:
+            # Moderate global news: small boost
+            boost = (news_magnitude - 30) / 30 * 0.10
+            w_glob = SIGNAL_WEIGHT_GLOBAL + boost
+            w_tech = SIGNAL_WEIGHT_TECHNICAL - boost
+
         composite = (
-            SIGNAL_WEIGHT_TECHNICAL * technical_score +
-            SIGNAL_WEIGHT_SENTIMENT * sentiment_score +
-            SIGNAL_WEIGHT_GLOBAL * global_score
+            w_tech * technical_score +
+            w_sent * sentiment_score +
+            w_glob * global_score
         )
         composite = max(-100, min(100, round(composite, 2)))
 
@@ -85,12 +102,12 @@ class SignalService:
             "market_open": is_market_open(),
             "technical": {
                 "score": technical_score,
-                "weight": SIGNAL_WEIGHT_TECHNICAL,
+                "weight": round(w_tech, 2),
                 "details": tech_details,
             },
             "sentiment": {
                 "score": sentiment_score,
-                "weight": SIGNAL_WEIGHT_SENTIMENT,
+                "weight": round(w_sent, 2),
                 "headline_count": sent_result.get("headline_count", 0),
                 "positive_count": sent_result.get("positive_count", 0),
                 "negative_count": sent_result.get("negative_count", 0),
@@ -99,8 +116,10 @@ class SignalService:
             },
             "global_market": {
                 "score": global_score,
-                "weight": SIGNAL_WEIGHT_GLOBAL,
+                "weight": round(w_glob, 2),
+                "news_magnitude": news_magnitude,
                 "markets": global_result.get("markets", []),
+                "headlines": global_result.get("headlines", []),
             },
             "intraday_candles": candles,
         }

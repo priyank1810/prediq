@@ -70,10 +70,22 @@ const Signals = {
         }
         confEl.textContent = `${data.confidence}% confidence`;
 
-        // Score bars
+        // Score bars (weights are now dynamic)
         this.renderScoreBar('technicalBar', 'technicalScore', data.technical.score, data.technical.weight);
         this.renderScoreBar('sentimentBar', 'sentimentScore', data.sentiment.score, data.sentiment.weight);
         this.renderScoreBar('globalBar', 'globalScore', data.global_market.score, data.global_market.weight);
+
+        // Update global weight label if it changed
+        const gwLabel = document.getElementById('globalWeightLabel');
+        if (gwLabel) {
+            const pct = (data.global_market.weight * 100).toFixed(0);
+            gwLabel.textContent = `Global (${pct}%)`;
+            if (data.global_market.weight > 0.15) {
+                gwLabel.className = 'text-xs text-yellow-400 font-medium';
+            } else {
+                gwLabel.className = 'text-xs text-gray-400';
+            }
+        }
 
         // Technical details
         const techDet = document.getElementById('technicalDetails');
@@ -97,8 +109,9 @@ const Signals = {
         // News
         this.displayHeadlines(data.sentiment.headlines || []);
 
-        // Global markets
+        // Global markets + global news
         this.displayGlobalMarkets(data.global_market.markets || []);
+        this.displayGlobalNews(data.global_market.headlines || [], data.global_market.news_magnitude || 0);
 
         // Intraday chart
         if (data.intraday_candles && data.intraday_candles.length > 0) {
@@ -159,6 +172,34 @@ const Signals = {
                     <span class="text-xs px-1.5 py-0.5 rounded ${c} whitespace-nowrap">${h.sentiment}</span>
                     <a href="${h.link}" target="_blank" rel="noopener"
                        class="text-xs text-gray-300 hover:text-white line-clamp-2">${h.title}</a>
+                </div>
+            `;
+        }).join('');
+    },
+
+    displayGlobalNews(headlines, magnitude) {
+        const el = document.getElementById('globalNewsHeadlines');
+        if (!el) return;
+        if (!headlines || headlines.length === 0) {
+            el.innerHTML = '<div class="text-gray-500 text-sm py-2">No global news</div>';
+            return;
+        }
+        // Show magnitude badge if significant
+        const magBadge = magnitude >= 60
+            ? `<span class="text-xs px-2 py-0.5 rounded-full bg-red-900 text-red-400 mb-2 inline-block">High Impact (${magnitude})</span>`
+            : magnitude >= 30
+            ? `<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-400 mb-2 inline-block">Moderate Impact (${magnitude})</span>`
+            : '';
+
+        el.innerHTML = magBadge + headlines.slice(0, 6).map(h => {
+            const c = h.sentiment === 'positive' ? 'text-green-400 bg-green-900' :
+                      (h.sentiment === 'negative' ? 'text-red-400 bg-red-900' : 'text-gray-400 bg-gray-800');
+            const bigTag = h.big_event ? '<span class="text-xs text-yellow-400 ml-1">!</span>' : '';
+            return `
+                <div class="flex items-start gap-2 py-1.5 border-b border-gray-800 last:border-0">
+                    <span class="text-xs px-1.5 py-0.5 rounded ${c} whitespace-nowrap">${h.sentiment}</span>
+                    <a href="${h.link}" target="_blank" rel="noopener"
+                       class="text-xs text-gray-300 hover:text-white line-clamp-2">${h.title}${bigTag}</a>
                 </div>
             `;
         }).join('');
