@@ -55,10 +55,37 @@ async def market_mood_broadcaster():
         await asyncio.sleep(MARKET_MOOD_REFRESH_INTERVAL)
 
 
+def _migrate_db():
+    """Add missing columns to existing tables (SQLite doesn't support IF NOT EXISTS for columns)."""
+    import sqlite3
+    from app.config import DATABASE_URL
+
+    db_path = DATABASE_URL.replace("sqlite:///", "")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    migrations = [
+        ("prediction_logs", "sector", "TEXT"),
+        ("prediction_logs", "regime", "TEXT"),
+        ("signal_logs", "sector", "TEXT"),
+        ("signal_logs", "regime", "TEXT"),
+    ]
+
+    for table, column, col_type in migrations:
+        try:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+    conn.commit()
+    conn.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     Base.metadata.create_all(bind=engine)
+    _migrate_db()
     streamer_task = asyncio.create_task(price_streamer())
     alert_task = asyncio.create_task(alert_checker())
     signal_task = asyncio.create_task(signal_broadcaster())
