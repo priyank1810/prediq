@@ -14,27 +14,31 @@ from app.routers.websocket import router as ws_router, price_streamer, alert_che
 
 
 async def smart_alert_checker():
-    """Background task to check smart alerts every 60 seconds."""
+    """Background task to check smart alerts. Only runs when active alerts exist."""
     from app.services.alert_service import alert_service
     from app.database import SessionLocal
+    from app.models import SmartAlert
 
     await asyncio.sleep(30)
     while True:
         try:
             from app.utils.helpers import is_market_open
-            if is_market_open():
+            from app.routers.websocket import manager
+            if is_market_open() and manager.active_connections:
                 db = SessionLocal()
                 try:
-                    triggered = alert_service.check_smart_alerts(db)
-                    if triggered:
-                        from app.routers.websocket import manager
-                        for alert_data in triggered:
-                            await manager.broadcast_to_all("smart_alert_triggered", alert_data)
+                    # Skip entirely if no active smart alerts exist
+                    count = db.query(SmartAlert).filter(SmartAlert.is_triggered == False).count()
+                    if count > 0:
+                        triggered = alert_service.check_smart_alerts(db)
+                        if triggered:
+                            for alert_data in triggered:
+                                await manager.broadcast_to_all("smart_alert_triggered", alert_data)
                 finally:
                     db.close()
         except Exception:
             pass
-        await asyncio.sleep(60)
+        await asyncio.sleep(300)  # 5 min (was 60s) — smart alerts don't need second-level checks
 
 
 async def market_mood_broadcaster():

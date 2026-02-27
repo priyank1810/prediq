@@ -7,7 +7,7 @@ from app.database import SessionLocal
 from app.utils.helpers import is_market_open
 from app.config import (
     PRICE_STREAM_INTERVAL, ALERT_CHECK_INTERVAL, SIGNAL_REFRESH_INTERVAL,
-    POPULAR_STOCKS, INDICES, HIGH_CONFIDENCE_THRESHOLD, HIGH_CONFIDENCE_SCAN_INTERVAL,
+    HIGH_CONFIDENCE_THRESHOLD, HIGH_CONFIDENCE_SCAN_INTERVAL,
 )
 
 router = APIRouter()
@@ -140,7 +140,7 @@ async def price_streamer():
 async def alert_checker():
     while True:
         try:
-            if is_market_open():
+            if is_market_open() and manager.active_connections:
                 db = SessionLocal()
                 try:
                     triggered = alert_service.check_alerts_batched(db)
@@ -190,6 +190,10 @@ async def signal_accuracy_validator():
 
     while True:
         try:
+            if not is_market_open():
+                await asyncio.sleep(180)
+                continue
+
             db = SessionLocal()
             try:
                 cutoff_start = datetime.utcnow() - timedelta(minutes=25)
@@ -238,8 +242,9 @@ async def signal_accuracy_validator():
 
 
 async def high_confidence_scanner():
-    """Background task that scans all popular stocks + indices for high-confidence signals.
-    Logs every signal to SignalLog and broadcasts high-confidence alerts via WebSocket."""
+    """Background task that scans ONLY user-subscribed symbols for high-confidence signals.
+    Logs signals to SignalLog and broadcasts high-confidence alerts via WebSocket.
+    Does nothing when no users are connected — no point scanning if nobody sees the results."""
     from app.services.signal_service import signal_service
     from app.models import SignalLog
 
@@ -248,14 +253,20 @@ async def high_confidence_scanner():
 
     while True:
         try:
-            if not is_market_open():
+            # Skip entirely if market closed or no users connected
+            if not is_market_open() or not manager.active_connections:
                 await asyncio.sleep(HIGH_CONFIDENCE_SCAN_INTERVAL)
                 continue
 
-            all_symbols = list(POPULAR_STOCKS) + list(INDICES.keys())
+            # Only scan symbols users are actually looking at — not all 34
+            subscribed = manager.get_all_subscribed_symbols()
+            if not subscribed:
+                await asyncio.sleep(HIGH_CONFIDENCE_SCAN_INTERVAL)
+                continue
+
             db = SessionLocal()
             try:
-                for symbol in all_symbols:
+                for symbol in subscribed:
                     try:
                         signal = signal_service.get_signal(symbol)
                         if not signal:
@@ -265,7 +276,6 @@ async def high_confidence_scanner():
                         import time as _time
                         _recent_signal_cache[symbol] = {
                             "data": signal,
-                            "age": 0,
                             "ts": _time.time(),
                         }
 
@@ -290,8 +300,7 @@ async def high_confidence_scanner():
 
                         # Broadcast if high confidence
                         if (signal["confidence"] >= HIGH_CONFIDENCE_THRESHOLD
-                                and signal["direction"] != "NEUTRAL"
-                                and manager.active_connections):
+                                and signal["direction"] != "NEUTRAL"):
                             await manager.broadcast_to_all("high_confidence_alert", {
                                 "symbol": symbol,
                                 "direction": signal["direction"],

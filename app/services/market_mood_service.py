@@ -78,13 +78,13 @@ class MarketMoodService:
         }
 
     def _get_sentiment_component(self) -> float:
-        """Aggregate FinBERT/keyword sentiment across top 20 stocks -> 0-100 scale."""
+        """Aggregate FinBERT/keyword sentiment across top stocks -> 0-100 scale."""
         try:
             from app.services.sentiment_service import sentiment_service
             from app.config import POPULAR_STOCKS
 
             scores = []
-            for symbol in POPULAR_STOCKS[:10]:  # Sample 10 stocks for speed
+            for symbol in POPULAR_STOCKS[:5]:  # Sample 5 stocks (was 10)
                 try:
                     sent = sentiment_service.get_sentiment(symbol)
                     scores.append(sent.get("score", 0))
@@ -109,7 +109,7 @@ class MarketMoodService:
             above_sma = 0
             total = 0
 
-            for symbol in NIFTY_50_SYMBOLS[:20]:  # Sample 20 for speed
+            for symbol in NIFTY_50_SYMBOLS[:5]:  # Sample 5 stocks (was 20)
                 try:
                     df = data_fetcher.get_historical_data(symbol, period="3mo")
                     if df is not None and len(df) >= 25:
