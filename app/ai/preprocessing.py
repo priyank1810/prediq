@@ -57,10 +57,10 @@ class StockDataPreprocessor:
 
     @staticmethod
     def _add_context_features(df: pd.DataFrame, symbol: str = "") -> pd.DataFrame:
-        """Fetch and merge external context: sentiment, VIX, S&P 500, USD/INR."""
+        """Fetch and merge external context: sentiment, global news, VIX, S&P 500, USD/INR."""
         df = df.copy()
 
-        # 1. Sentiment score
+        # 1. Sentiment score (stock-specific)
         sentiment_val = 0.0
         try:
             from app.services.sentiment_service import sentiment_service
@@ -70,7 +70,20 @@ class StockDataPreprocessor:
             pass
         df["sentiment_score"] = sentiment_val
 
-        # 2. India VIX level (normalized by rolling mean)
+        # 2. Global news score + magnitude (war, crisis, geopolitics)
+        global_news_score = 0.0
+        news_magnitude = 0.0
+        try:
+            from app.services.global_market_service import global_market_service
+            global_data = global_market_service.get_global_signal()
+            global_news_score = float(global_data.get("news_score", global_data.get("score", 0.0)))
+            news_magnitude = float(global_data.get("news_magnitude", 0.0))
+        except Exception:
+            pass
+        df["global_news_score"] = global_news_score / 100.0  # Normalize to -1..+1
+        df["news_magnitude"] = news_magnitude / 100.0  # Normalize to 0..1
+
+        # 3. India VIX level (normalized by rolling mean)
         vix_val = 0.0
         try:
             import yfinance as yf
@@ -84,7 +97,7 @@ class StockDataPreprocessor:
             pass
         df["vix_level"] = vix_val
 
-        # 3. S&P 500 change
+        # 4. S&P 500 change
         sp500_val = 0.0
         try:
             import yfinance as yf
@@ -99,7 +112,7 @@ class StockDataPreprocessor:
             pass
         df["sp500_change"] = sp500_val
 
-        # 4. USD/INR change
+        # 5. USD/INR change
         usdinr_val = 0.0
         try:
             import yfinance as yf
@@ -115,7 +128,8 @@ class StockDataPreprocessor:
         df["usdinr_change"] = usdinr_val
 
         logger.info(
-            f"Added 4 context features (sentiment={sentiment_val:.1f}, "
+            f"Added 6 context features (sentiment={sentiment_val:.1f}, "
+            f"global_news={global_news_score:.1f}, magnitude={news_magnitude:.0f}, "
             f"vix={vix_val:.3f}, sp500={sp500_val:.4f}, usdinr={usdinr_val:.4f})"
         )
         return df
@@ -293,9 +307,12 @@ class StockDataPreprocessor:
             "sma200_ratio", "overnight_gap",
         ] + rolling_cols + [
             "gap_flag",
-            "sentiment_score", "vix_level", "sp500_change", "usdinr_change",
+            "sentiment_score", "global_news_score", "news_magnitude",
+            "vix_level", "sp500_change", "usdinr_change",
         ]
 
+        # Drop features that don't exist (backward compat with older data)
+        feature_cols = [c for c in feature_cols if c in feat_df.columns]
         feat_df = feat_df.dropna(subset=feature_cols).reset_index(drop=True)
 
         if len(feat_df) < self.sequence_length + 20:
@@ -407,9 +424,12 @@ class StockDataPreprocessor:
             "stoch_k", "vwap_dev", "vol_accel", "atr_norm",
             "ret_5", "ret_10", "spread",
         ] + rolling_cols + [
-            "sentiment_score", "vix_level", "sp500_change", "usdinr_change",
+            "sentiment_score", "global_news_score", "news_magnitude",
+            "vix_level", "sp500_change", "usdinr_change",
         ]
 
+        # Drop features that don't exist (backward compat)
+        feature_cols = [c for c in feature_cols if c in feat_df.columns]
         feat_df = feat_df.dropna(subset=feature_cols).reset_index(drop=True)
 
         if len(feat_df) < seq_len + 10:
