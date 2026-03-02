@@ -41,7 +41,7 @@ class LSTMPredictor:
                 Dense(25),
                 Dense(1),
             ])
-            model.compile(optimizer=Adam(learning_rate=LSTM_LEARNING_RATE), loss="mean_squared_error")
+            model.compile(optimizer=Adam(learning_rate=LSTM_LEARNING_RATE, clipnorm=1.0), loss="huber")
             return model
 
     def _build_attention_model(self, num_features: int, seq_len: int):
@@ -56,11 +56,11 @@ class LSTMPredictor:
 
         # First LSTM block
         x = LSTM(64, return_sequences=True)(inputs)
-        x = Dropout(0.2)(x)
+        x = Dropout(0.25)(x)
 
         # Second LSTM block
         x = LSTM(64, return_sequences=True)(x)
-        x = Dropout(0.2)(x)
+        x = Dropout(0.25)(x)
 
         # Multi-Head Attention with residual connection
         attn_output = MultiHeadAttention(
@@ -71,14 +71,14 @@ class LSTMPredictor:
 
         # Third LSTM block (reduces to single vector)
         x = LSTM(32, return_sequences=False)(x)
-        x = Dropout(0.2)(x)
+        x = Dropout(0.25)(x)
 
         # Dense output
         x = Dense(32, activation="relu")(x)
         outputs = Dense(1)(x)
 
         model = Model(inputs=inputs, outputs=outputs)
-        model.compile(optimizer=Adam(learning_rate=LSTM_LEARNING_RATE), loss="mean_squared_error")
+        model.compile(optimizer=Adam(learning_rate=LSTM_LEARNING_RATE, clipnorm=1.0), loss="huber")
         return model
 
     def _model_path(self, symbol: str, suffix: str = "") -> str:
@@ -155,7 +155,7 @@ class LSTMPredictor:
 
         for i in range(n_splits):
             train_end = fold_size * (i + 2)
-            test_start = train_end
+            test_start = train_end + seq_len  # purge gap to avoid temporal leakage
             test_end = min(test_start + fold_size, total_len)
 
             if test_end <= test_start:
@@ -288,7 +288,7 @@ class LSTMPredictor:
                 X_train, y_train,
                 epochs=self.epochs,
                 batch_size=self.batch_size,
-                validation_split=0.1,
+                validation_split=0.15,
                 callbacks=self._get_callbacks(),
                 verbose=0,
             )
@@ -407,7 +407,7 @@ class LSTMPredictor:
                 X_train, y_train,
                 epochs=50,
                 batch_size=16,
-                validation_split=0.1,
+                validation_split=0.15,
                 callbacks=self._get_callbacks(patience_early=5, patience_lr=3),
                 verbose=0,
             )

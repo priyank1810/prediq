@@ -44,20 +44,25 @@ class XGBoostPredictor:
         mapes = []
         for i in range(n_splits):
             train_end = fold_size * (i + 1)
-            test_end = min(train_end + fold_size, n)
-            if test_end <= train_end:
+            test_start = train_end + 5  # purge gap to avoid temporal leakage
+            test_end = min(test_start + fold_size, n)
+            if test_end <= test_start:
                 break
 
             X_train, y_train = X[:train_end], y[:train_end]
-            X_test, y_test = X[train_end:test_end], y[train_end:test_end]
-            test_close = close_prices[train_end:test_end]
+            X_test, y_test = X[test_start:test_end], y[test_start:test_end]
+            test_close = close_prices[test_start:test_end]
 
             model = XGBRegressor(
-                n_estimators=150, max_depth=6, learning_rate=0.05,
+                n_estimators=300, max_depth=5, learning_rate=0.05,
                 subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1, reg_lambda=1.0,
-                random_state=42, verbosity=0,
+                min_child_weight=3, gamma=0.1, objective="reg:pseudohubererror",
+                random_state=42, verbosity=0, early_stopping_rounds=25,
             )
-            model.fit(X_train, y_train, verbose=False)
+            wf_val_split = int(len(X_train) * 0.85)
+            X_wf_tr, X_wf_val = X_train[:wf_val_split], X_train[wf_val_split:]
+            y_wf_tr, y_wf_val = y_train[:wf_val_split], y_train[wf_val_split:]
+            model.fit(X_wf_tr, y_wf_tr, eval_set=[(X_wf_val, y_wf_val)], verbose=False)
 
             pred_returns = model.predict(X_test)
             pred_prices = test_close * (1 + pred_returns)
@@ -187,7 +192,7 @@ class XGBoostPredictor:
         feat_df = feat_df.dropna().reset_index(drop=True)
 
         # Target: next-day return
-        feat_df["target"] = close.pct_change().shift(-1)
+        feat_df["target"] = feat_df["close"].pct_change().shift(-1)
         feat_df = feat_df.dropna(subset=["target"]).reset_index(drop=True)
 
         return feat_df
@@ -225,20 +230,26 @@ class XGBoostPredictor:
             X_test = X[split:]
         else:
             model = XGBRegressor(
-                n_estimators=200,
-                max_depth=6,
+                n_estimators=300,
+                max_depth=5,
                 learning_rate=0.05,
                 subsample=0.8,
                 colsample_bytree=0.8,
                 reg_alpha=0.1,
                 reg_lambda=1.0,
+                min_child_weight=3,
+                gamma=0.1,
+                objective="reg:pseudohubererror",
                 random_state=42,
                 verbosity=0,
-                early_stopping_rounds=20,
+                early_stopping_rounds=25,
             )
+            val_split = int(len(X_train) * 0.85)
+            X_tr, X_val = X_train[:val_split], X_train[val_split:]
+            y_tr, y_val = y_train[:val_split], y_train[val_split:]
             model.fit(
-                X_train, y_train,
-                eval_set=[(X_test, y_test)],
+                X_tr, y_tr,
+                eval_set=[(X_val, y_val)],
                 verbose=False,
             )
 
@@ -256,20 +267,25 @@ class XGBoostPredictor:
                     X_train_pruned = X_train[:, keep_mask]
                     X_test_pruned = X_test[:, keep_mask]
                     model_pruned = XGBRegressor(
-                        n_estimators=200,
-                        max_depth=6,
+                        n_estimators=300,
+                        max_depth=5,
                         learning_rate=0.05,
                         subsample=0.8,
                         colsample_bytree=0.8,
                         reg_alpha=0.1,
                         reg_lambda=1.0,
+                        min_child_weight=3,
+                        gamma=0.1,
+                        objective="reg:pseudohubererror",
                         random_state=42,
                         verbosity=0,
-                        early_stopping_rounds=20,
+                        early_stopping_rounds=25,
                     )
+                    X_tr_pruned, X_val_pruned = X_train_pruned[:val_split], X_train_pruned[val_split:]
+                    y_tr_p, y_val_p = y_train[:val_split], y_train[val_split:]
                     model_pruned.fit(
-                        X_train_pruned, y_train,
-                        eval_set=[(X_test_pruned, y_test)],
+                        X_tr_pruned, y_tr_p,
+                        eval_set=[(X_val_pruned, y_val_p)],
                         verbose=False,
                     )
                     model = model_pruned
@@ -403,7 +419,7 @@ class XGBoostPredictor:
             feat_df[f"ret_mean_{w}"] = returns.rolling(w).mean()
             feat_df[f"ret_std_{w}"] = returns.rolling(w).std()
 
-        feat_df["target"] = close.pct_change().shift(-1)
+        feat_df["target"] = feat_df["close"].pct_change().shift(-1)
         feat_df = feat_df.dropna().reset_index(drop=True)
 
         feature_cols = [c for c in feat_df.columns
@@ -431,19 +447,25 @@ class XGBoostPredictor:
             X_test = X[split:]
         else:
             model = XGBRegressor(
-                n_estimators=150,
+                n_estimators=300,
                 max_depth=5,
                 learning_rate=0.05,
                 subsample=0.8,
                 colsample_bytree=0.8,
                 reg_alpha=0.15,
                 reg_lambda=1.5,
+                min_child_weight=3,
+                gamma=0.1,
+                objective="reg:pseudohubererror",
                 verbosity=0,
-                early_stopping_rounds=15,
+                early_stopping_rounds=25,
             )
+            val_split_i = int(len(X_train) * 0.85)
+            X_tr_i, X_val_i = X_train[:val_split_i], X_train[val_split_i:]
+            y_tr_i, y_val_i = y_train[:val_split_i], y_train[val_split_i:]
             model.fit(
-                X_train, y_train,
-                eval_set=[(X_test, y_test)],
+                X_tr_i, y_tr_i,
+                eval_set=[(X_val_i, y_val_i)],
                 verbose=False,
             )
             joblib.dump({"model": model, "feature_cols": feature_cols}, model_path)

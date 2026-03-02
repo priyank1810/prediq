@@ -307,8 +307,6 @@ class StockDataPreprocessor:
             "sma200_ratio", "overnight_gap",
         ] + rolling_cols + [
             "gap_flag",
-            "sentiment_score", "global_news_score", "news_magnitude",
-            "vix_level", "sp500_change", "usdinr_change",
         ]
 
         # Drop features that don't exist (backward compat with older data)
@@ -423,10 +421,7 @@ class StockDataPreprocessor:
             "rsi", "macd", "ema_ratio", "momentum",
             "stoch_k", "vwap_dev", "vol_accel", "atr_norm",
             "ret_5", "ret_10", "spread",
-        ] + rolling_cols + [
-            "sentiment_score", "global_news_score", "news_magnitude",
-            "vix_level", "sp500_change", "usdinr_change",
-        ]
+        ] + rolling_cols
 
         # Drop features that don't exist (backward compat)
         feature_cols = [c for c in feature_cols if c in feat_df.columns]
