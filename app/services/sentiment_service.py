@@ -169,7 +169,7 @@ class SentimentService:
             "https://www.moneycontrol.com/rss/marketreports.xml",
         ]
 
-        with ThreadPoolExecutor(max_workers=7) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
             for url_template in NEWS_RSS_SOURCES:
                 futures.append(executor.submit(_fetch_google_news, url_template))

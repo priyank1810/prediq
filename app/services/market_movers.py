@@ -111,10 +111,11 @@ class MarketMoversService:
     # ------------------------------------------------------------------
 
     def _fetch_yfinance_fallback(self) -> list[dict]:
-        """Use yfinance via existing data_fetcher for NIFTY 50 symbols."""
+        """Use yfinance via existing data_fetcher for NIFTY 50 symbols.
+        Fetches only top 20 symbols to reduce latency on constrained hosts."""
         try:
             from app.services.data_fetcher import data_fetcher
-            quotes = data_fetcher.get_bulk_quotes(list(NIFTY_50_SYMBOLS))
+            quotes = data_fetcher.get_bulk_quotes(list(NIFTY_50_SYMBOLS[:20]))
             # Filter out empty/zero quotes
             return [q for q in quotes if q.get("ltp") and q["ltp"] > 0 and q.get("pct_change") is not None]
         except Exception as e:

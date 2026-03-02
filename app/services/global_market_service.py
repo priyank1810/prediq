@@ -97,7 +97,7 @@ class GlobalMarketService:
             prev_close = info.previous_close
             return name, symbol, current_price, prev_close
 
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {
                 executor.submit(_fetch_one, name, sym): name
                 for name, sym in GLOBAL_MARKET_SYMBOLS.items()
@@ -202,7 +202,7 @@ class GlobalMarketService:
                 pass
             return entries
 
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             feed_futures = [executor.submit(_fetch_feed, url) for url in GLOBAL_NEWS_FEEDS]
             for future in feed_futures:
                 try:

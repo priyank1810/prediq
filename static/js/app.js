@@ -126,15 +126,12 @@ const App = {
     // --- Market Overview ---
 
     _allIndices: [
-        "NIFTY 50", "NIFTY BANK", "SENSEX", "NIFTY IT", "NIFTY NEXT 50",
-        "NIFTY MIDCAP 100", "NIFTY FINANCIAL", "NIFTY AUTO", "NIFTY PHARMA",
-        "NIFTY METAL", "NIFTY ENERGY", "NIFTY FMCG", "NIFTY REALTY", "INDIA VIX"
+        "NIFTY 50", "NIFTY BANK", "SENSEX", "NIFTY IT",
+        "NIFTY FINANCIAL", "INDIA VIX"
     ],
     _popularStocks: [
         "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
-        "HINDUNILVR", "SBIN", "BHARTIARTL", "KOTAKBANK", "ITC",
-        "LT", "AXISBANK", "BAJFINANCE", "MARUTI", "TITAN",
-        "ASIANPAINT", "SUNPHARMA", "HCLTECH", "WIPRO", "ULTRACEMCO"
+        "HINDUNILVR", "SBIN", "BHARTIARTL", "KOTAKBANK", "ITC"
     ],
 
     async loadMarketOverview() {

@@ -85,7 +85,7 @@ class MarketMoodService:
             from app.config import POPULAR_STOCKS
 
             scores = []
-            for symbol in POPULAR_STOCKS[:5]:  # Sample 5 stocks (was 10)
+            for symbol in POPULAR_STOCKS[:3]:  # Sample 3 stocks for speed
                 try:
                     sent = sentiment_service.get_sentiment(symbol)
                     scores.append(sent.get("score", 0))
@@ -123,9 +123,9 @@ class MarketMoodService:
             above_sma = 0
             total = 0
 
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            with ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {executor.submit(_check_above_sma, sym): sym
-                           for sym in NIFTY_50_SYMBOLS[:5]}
+                           for sym in NIFTY_50_SYMBOLS[:3]}
                 for future in futures:
                     try:
                         result = future.result(timeout=10)
