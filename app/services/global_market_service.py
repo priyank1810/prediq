@@ -43,25 +43,38 @@ GLOBAL_NEWS_FEEDS = [
     "https://www.moneycontrol.com/rss/latestnews.xml",
 ]
 
-# Keywords that signal high-impact global events (war, rate hike, recession, etc.)
-BIG_EVENT_KEYWORDS = [
-    # War / geopolitical
-    "war", "invasion", "airstrike", "missile", "military", "attack",
-    "conflict", "escalation", "ceasefire", "nuclear", "defence",
-    "sanctions", "embargo", "geopolitical", "tensions",
-    "india pakistan", "india china", "israel", "iran", "russia ukraine",
-    "nato", "border", "terrorism",
-    # Trade / policy
-    "tariff", "trade war", "rate hike", "rate cut", "fed",
-    "federal reserve", "interest rate", "rbi", "monetary policy",
-    # Economy
-    "recession", "inflation", "cpi", "gdp", "stagflation",
-    "crash", "crisis", "collapse", "default", "debt ceiling",
-    # Commodities
-    "oil shock", "opec", "crude surge", "crude crash",
+# Big event keywords with inherent sentiment direction.
+# Positive value = bullish for markets, negative = bearish.
+# War/conflict/crisis = bearish, rate cut/easing = bullish.
+BIG_EVENT_SCORE = {
+    # War / geopolitical (strongly bearish)
+    "war": -80, "invasion": -80, "airstrike": -90, "missile": -85,
+    "military": -60, "attack": -75, "conflict": -70, "escalation": -70,
+    "nuclear": -95, "terrorism": -80, "tensions": -50,
+    "sanctions": -60, "embargo": -60,
+    "india pakistan": -85, "india china": -70, "israel": -50,
+    "iran": -50, "russia ukraine": -60, "nato": -40, "border": -40,
+    # Bearish policy
+    "tariff": -50, "trade war": -65, "rate hike": -55,
+    "debt ceiling": -60,
+    # Economy bearish
+    "recession": -80, "inflation": -45, "stagflation": -75,
+    "crash": -90, "crisis": -85, "collapse": -90, "default": -80,
+    # Commodities shock (bearish for India — oil importer)
+    "oil shock": -70, "crude surge": -55, "crude crash": -40,
     # Black swan
-    "pandemic", "lockdown", "black swan", "circuit breaker", "capitulation",
-]
+    "pandemic": -90, "lockdown": -70, "black swan": -90,
+    "circuit breaker": -80, "capitulation": -75,
+    # Bullish events
+    "ceasefire": 60, "rate cut": 55, "easing": 50,
+    "peace": 60, "deal": 30, "recovery": 40, "stimulus": 50,
+    "fed": -30, "federal reserve": -30, "rbi": -20,
+    "monetary policy": -20, "opec": -30,
+    "geopolitical": -40, "defence": -30, "cpi": -25, "gdp": -15,
+}
+
+# Flat list for quick "is this a big event?" check
+BIG_EVENT_KEYWORDS = list(BIG_EVENT_SCORE.keys())
 
 
 class GlobalMarketService:
@@ -118,8 +131,16 @@ class GlobalMarketService:
         news_magnitude = news_result["magnitude"]
         headlines = news_result["headlines"]
 
-        # Blend: price data (70%) + news sentiment (30%)
-        composite = price_score * 0.7 + news_score * 0.3
+        # Blend: normally price-led, but news dominates on big events
+        if news_magnitude >= 60:
+            # Big event — news leads (60% news, 40% price)
+            composite = price_score * 0.4 + news_score * 0.6
+        elif news_magnitude >= 30:
+            # Moderate event — balanced
+            composite = price_score * 0.5 + news_score * 0.5
+        else:
+            # Quiet — price leads (70% price, 30% news)
+            composite = price_score * 0.7 + news_score * 0.3
         composite = max(-100, min(100, round(composite, 2)))
 
         result = {
@@ -184,19 +205,33 @@ class GlobalMarketService:
             title_lower = h["title"].lower()
             words = re.findall(r'\b[a-z]+\b', title_lower)
 
+            # 1. Stock-market keyword score
             pos = sum(1 for w in words if w in POSITIVE_KEYWORDS)
             neg = sum(1 for w in words if w in NEGATIVE_KEYWORDS)
-
             if pos + neg == 0:
-                headline_score = 0
+                keyword_score = 0
             else:
-                headline_score = (pos - neg) / (pos + neg) * 100
+                keyword_score = (pos - neg) / (pos + neg) * 100
 
-            # Check if this is a big event
-            is_big = any(kw in title_lower for kw in BIG_EVENT_KEYWORDS)
+            # 2. Big event score — war/crisis/rate hike carry their OWN sentiment
+            is_big = False
+            event_score = 0
+            for kw, score in BIG_EVENT_SCORE.items():
+                if kw in title_lower:
+                    is_big = True
+                    # Take the strongest event match
+                    if abs(score) > abs(event_score):
+                        event_score = score
+
             if is_big:
                 big_event_count += 1
-                headline_score *= 1.5  # amplify big event sentiment
+                # Big events dominate: use event score, but blend if keywords also present
+                if keyword_score != 0:
+                    headline_score = event_score * 0.7 + keyword_score * 0.3
+                else:
+                    headline_score = event_score
+            else:
+                headline_score = keyword_score
 
             headline_score = max(-100, min(100, headline_score))
             total_score += headline_score

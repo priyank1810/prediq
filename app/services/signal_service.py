@@ -52,15 +52,21 @@ class SignalService:
         w_glob = SIGNAL_WEIGHT_GLOBAL
 
         news_magnitude = global_result.get("news_magnitude", 0)
-        if news_magnitude >= 60:
-            # Big global event: shift weight from technical to global
-            # magnitude 60 → global gets +0.15, magnitude 100 → global gets +0.25
-            boost = min(0.25, (news_magnitude - 60) / 40 * 0.25 + 0.15)
-            w_glob = SIGNAL_WEIGHT_GLOBAL + boost
-            w_tech = SIGNAL_WEIGHT_TECHNICAL - boost  # take from technical
+        if news_magnitude >= 80:
+            # War/crisis level: global dominates the signal
+            # Tech 25%, Sent 25%, Global 50%
+            w_tech = 0.25
+            w_sent = 0.25
+            w_glob = 0.50
+        elif news_magnitude >= 60:
+            # Big global event: heavy shift to global
+            # Tech 35%, Sent 25%, Global 40%
+            w_tech = 0.35
+            w_sent = 0.25
+            w_glob = 0.40
         elif news_magnitude >= 30:
-            # Moderate global news: small boost
-            boost = (news_magnitude - 30) / 30 * 0.10
+            # Moderate global news: noticeable shift
+            boost = (news_magnitude - 30) / 30 * 0.15
             w_glob = SIGNAL_WEIGHT_GLOBAL + boost
             w_tech = SIGNAL_WEIGHT_TECHNICAL - boost
 
