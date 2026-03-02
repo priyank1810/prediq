@@ -1,4 +1,12 @@
 import os
+
+# Configure TensorFlow before any TF import
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # Suppress TF info/warning logs
+if os.getenv("RENDER", "").lower() in ("true", "1"):
+    os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
+    os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request

@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 import numpy as np
 import pandas as pd
 import joblib
@@ -10,13 +11,29 @@ from app.config import (
     LSTM_EARLY_STOP_PATIENCE, LSTM_LR_REDUCE_PATIENCE,
     LSTM_LR_REDUCE_FACTOR, LSTM_MIN_LR, LSTM_WALKFORWARD_SPLITS,
     FINE_TUNE_EPOCHS, FINE_TUNE_FRESHNESS_HOURS, LSTM_LEARNING_RATE,
+    LOW_RESOURCE_MODE,
 )
+
+logger = logging.getLogger(__name__)
+
+# Configure TF memory growth on first import
+if LOW_RESOURCE_MODE:
+    try:
+        import tensorflow as tf
+        tf.config.threading.set_intra_op_parallelism_threads(1)
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+        gpus = tf.config.list_physical_devices('GPU')
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logger.info("TensorFlow configured for low-resource mode")
+    except Exception:
+        pass
 
 
 class LSTMPredictor:
     def __init__(self):
         self.sequence_length = LSTM_SEQUENCE_LENGTH
-        self.epochs = LSTM_EPOCHS
+        self.epochs = 30 if LOW_RESOURCE_MODE else LSTM_EPOCHS
         self.batch_size = LSTM_BATCH_SIZE
 
     def _build_model(self, num_features: int = 1, seq_len: int = None):
@@ -24,6 +41,8 @@ class LSTMPredictor:
             seq_len = self.sequence_length
 
         if num_features > 1:
+            if LOW_RESOURCE_MODE:
+                return self._build_light_model(num_features, seq_len)
             return self._build_attention_model(num_features, seq_len)
         else:
             # Legacy single-feature
@@ -31,18 +50,34 @@ class LSTMPredictor:
             from tensorflow.keras.layers import LSTM, Dense, Dropout
             from tensorflow.keras.optimizers import Adam
 
+            units = 24 if LOW_RESOURCE_MODE else 50
             model = Sequential([
-                LSTM(50, return_sequences=True, input_shape=(seq_len, 1)),
+                LSTM(units, return_sequences=True, input_shape=(seq_len, 1)),
                 Dropout(0.2),
-                LSTM(50, return_sequences=True),
+                LSTM(units, return_sequences=False),
                 Dropout(0.2),
-                LSTM(50, return_sequences=False),
-                Dropout(0.2),
-                Dense(25),
+                Dense(16),
                 Dense(1),
             ])
             model.compile(optimizer=Adam(learning_rate=LSTM_LEARNING_RATE, clipnorm=1.0), loss="huber")
             return model
+
+    def _build_light_model(self, num_features: int, seq_len: int):
+        """Lightweight LSTM for Render/low-resource environments. No attention layer."""
+        from tensorflow.keras.models import Sequential
+        from tensorflow.keras.layers import LSTM, Dense, Dropout
+        from tensorflow.keras.optimizers import Adam
+
+        model = Sequential([
+            LSTM(32, return_sequences=True, input_shape=(seq_len, num_features)),
+            Dropout(0.2),
+            LSTM(16, return_sequences=False),
+            Dropout(0.2),
+            Dense(16, activation="relu"),
+            Dense(1),
+        ])
+        model.compile(optimizer=Adam(learning_rate=LSTM_LEARNING_RATE, clipnorm=1.0), loss="huber")
+        return model
 
     def _build_attention_model(self, num_features: int, seq_len: int):
         """Attention-LSTM: Functional API with MultiHeadAttention + residual + LayerNorm."""
@@ -328,12 +363,8 @@ class LSTMPredictor:
             np.array(predictions).reshape(-1, 1)
         ).flatten()
 
-        # Walk-forward confidence
-        all_X = np.concatenate([X_train, X_test]) if len(X_test) > 0 else X_train
-        all_y = np.concatenate([y_train, y_test]) if len(y_test) > 0 else y_train
-        confidence = self._walk_forward_confidence(all_X, all_y, num_features, close_scaler)
-
         # Compute MAPE on test set
+        mape = 0
         if len(X_test) > 0:
             test_pred = model.predict(X_test, verbose=0)
             test_pred_inv = close_scaler.inverse_transform(test_pred)
@@ -343,10 +374,14 @@ class LSTMPredictor:
                 mape = float(np.mean(np.abs(
                     (y_test_inv[nonzero] - test_pred_inv[nonzero]) / y_test_inv[nonzero]
                 )) * 100)
-            else:
-                mape = 0
+
+        # Confidence: walk-forward CV (skipped on Render — too CPU-heavy)
+        if LOW_RESOURCE_MODE:
+            confidence = max(0, min(100, 100 - mape))
         else:
-            mape = 0
+            all_X = np.concatenate([X_train, X_test]) if len(X_test) > 0 else X_train
+            all_y = np.concatenate([y_train, y_test]) if len(y_test) > 0 else y_train
+            confidence = self._walk_forward_confidence(all_X, all_y, num_features, close_scaler)
 
         # Generate future dates
         cfg = PREDICTION_HORIZONS.get(horizon, {})

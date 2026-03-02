@@ -14,6 +14,7 @@ from app.ai.explainer import prediction_explainer
 from app.services.data_fetcher import data_fetcher
 from app.config import PREDICTION_HORIZONS, MODEL_DIR
 from app.utils.cache import cache
+from app.config import LOW_RESOURCE_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +89,27 @@ class PredictionService:
     def _estimate_prophet_mape(self, prophet_result: dict, df=None, symbol: str = "") -> float:
         """Compute Prophet MAPE via walk-forward validation (5-fold anchored).
         Falls back to CI-based estimate for small datasets.
-        Results are cached per symbol for 1 hour."""
+        Results are cached per symbol for 1 hour.
+        On Render/low-resource: skips CV entirely, uses CI-based estimate."""
         if symbol:
             cache_key = f"prophet_mape:{symbol}"
             cached = cache.get(cache_key)
             if cached is not None:
                 return cached
+
+        # Skip expensive CV on low-resource environments
+        if LOW_RESOURCE_MODE:
+            if prophet_result.get("confidence_upper") and prophet_result.get("confidence_lower"):
+                avg_range = sum(
+                    abs(u - l) for u, l in
+                    zip(prophet_result["confidence_upper"], prophet_result["confidence_lower"])
+                ) / max(len(prophet_result["confidence_upper"]), 1)
+                avg_pred = sum(abs(p) for p in prophet_result["predictions"]) / max(len(prophet_result["predictions"]), 1)
+                result = max((avg_range / (2 * avg_pred)) * 100 if avg_pred > 0 else 10.0, 0.01)
+                if symbol:
+                    cache.set(f"prophet_mape:{symbol}", result, 3600)
+                return result
+            return 10.0
 
         if df is not None and len(df) >= 200:
             try:
@@ -317,11 +333,12 @@ class PredictionService:
         # Fall back to inverse-MAPE
         result = self._inverse_mape_ensemble(model_results, daily_df=daily_df, regime=regime, symbol=symbol)
 
-        # Try to train and save meta-learner for future use
-        try:
-            self._train_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime)
-        except Exception:
-            pass
+        # Try to train and save meta-learner for future use (skip on Render — too heavy)
+        if not LOW_RESOURCE_MODE:
+            try:
+                self._train_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime)
+            except Exception:
+                pass
 
         return result
 
@@ -608,9 +625,60 @@ class PredictionService:
             "sentiment": round(sentiment_share, 1),
         }
 
+    def _run_models_sequential(self, models, symbol, horizon, is_intraday=False,
+                                  intraday_df=None, daily_df=None):
+        """Run models one at a time to stay within Render's 512MB memory limit.
+        Each model is loaded, run, then freed before the next one starts."""
+        import gc
+
+        model_results = {}
+
+        for name in models:
+            try:
+                if name == "lstm":
+                    if is_intraday and intraday_df is not None:
+                        model_results[name] = self.lstm.predict_intraday(intraday_df, symbol, horizon)
+                    elif daily_df is not None:
+                        model_results[name] = self.lstm.predict(daily_df, symbol, horizon)
+                elif name == "xgboost":
+                    if is_intraday and intraday_df is not None:
+                        model_results[name] = self.xgboost.predict_intraday(intraday_df, symbol, horizon)
+                    elif daily_df is not None:
+                        model_results[name] = self.xgboost.predict(daily_df, symbol, horizon)
+                elif name == "prophet":
+                    if daily_df is not None and not daily_df.empty:
+                        model_results[name] = self.prophet.predict(daily_df, horizon, symbol)
+            except Exception as e:
+                logger.warning(f"Model {name} failed on Render: {e}")
+            # Free memory between models
+            gc.collect()
+
+        # Fetch sentiment and global (lightweight, run sequentially too)
+        sentiment = None
+        global_data = None
+        try:
+            from app.services.sentiment_service import sentiment_service
+            sentiment = sentiment_service.get_sentiment(symbol)
+        except Exception:
+            pass
+        try:
+            from app.services.global_market_service import global_market_service
+            global_data = global_market_service.get_global_signal()
+        except Exception:
+            pass
+
+        return model_results, sentiment, global_data
+
     def predict(self, symbol: str, horizon: str = "1d", models: list = None) -> dict:
         if models is None:
             models = ["lstm", "prophet", "xgboost"]
+
+        # Cache full prediction results on Render (training is expensive)
+        if LOW_RESOURCE_MODE:
+            pred_cache_key = f"prediction:{symbol}:{horizon}"
+            cached_pred = cache.get(pred_cache_key)
+            if cached_pred is not None:
+                return cached_pred
 
         cfg = PREDICTION_HORIZONS.get(horizon, {})
         is_intraday = cfg.get("intraday", False)
@@ -623,81 +691,98 @@ class PredictionService:
             intraday_df = data_fetcher.get_intraday_data(symbol, period="5d", interval="15m")
             daily_df = data_fetcher.get_historical_data(symbol, period="2y")
 
-            # Run models + sentiment/global fetches in parallel
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = {}
-                if "lstm" in models:
-                    futures["lstm"] = executor.submit(self.lstm.predict_intraday, intraday_df, symbol, horizon)
-                if "prophet" in models and daily_df is not None and not daily_df.empty:
-                    futures["prophet"] = executor.submit(self.prophet.predict, daily_df, horizon, symbol)
-                if "xgboost" in models and intraday_df is not None and not intraday_df.empty:
-                    futures["xgboost"] = executor.submit(self.xgboost.predict_intraday, intraday_df, symbol, horizon)
+            if LOW_RESOURCE_MODE:
+                # Sequential execution to avoid OOM on Render (512MB)
+                model_results, sentiment, global_data = self._run_models_sequential(
+                    models, symbol, horizon, is_intraday=True,
+                    intraday_df=intraday_df, daily_df=daily_df
+                )
+                for name, mr in model_results.items():
+                    result[name] = mr
+            else:
+                # Run models + sentiment/global fetches in parallel
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    futures = {}
+                    if "lstm" in models:
+                        futures["lstm"] = executor.submit(self.lstm.predict_intraday, intraday_df, symbol, horizon)
+                    if "prophet" in models and daily_df is not None and not daily_df.empty:
+                        futures["prophet"] = executor.submit(self.prophet.predict, daily_df, horizon, symbol)
+                    if "xgboost" in models and intraday_df is not None and not intraday_df.empty:
+                        futures["xgboost"] = executor.submit(self.xgboost.predict_intraday, intraday_df, symbol, horizon)
 
-                from app.services.sentiment_service import sentiment_service
-                from app.services.global_market_service import global_market_service
-                futures["_sentiment"] = executor.submit(sentiment_service.get_sentiment, symbol)
-                futures["_global"] = executor.submit(global_market_service.get_global_signal)
+                    from app.services.sentiment_service import sentiment_service
+                    from app.services.global_market_service import global_market_service
+                    futures["_sentiment"] = executor.submit(sentiment_service.get_sentiment, symbol)
+                    futures["_global"] = executor.submit(global_market_service.get_global_signal)
 
-                for name, future in futures.items():
-                    if name.startswith("_"):
-                        continue
+                    for name, future in futures.items():
+                        if name.startswith("_"):
+                            continue
+                        try:
+                            model_result = future.result(timeout=60)
+                            result[name] = model_result
+                            model_results[name] = model_result
+                        except Exception as e:
+                            result[f"{name}_error"] = str(e)
+
+                    sentiment = None
+                    global_data = None
                     try:
-                        model_result = future.result(timeout=60)
-                        result[name] = model_result
-                        model_results[name] = model_result
-                    except Exception as e:
-                        result[f"{name}_error"] = str(e)
-
-                sentiment = None
-                global_data = None
-                try:
-                    sentiment = futures["_sentiment"].result(timeout=15)
-                except Exception:
-                    pass
-                try:
-                    global_data = futures["_global"].result(timeout=15)
-                except Exception:
-                    pass
+                        sentiment = futures["_sentiment"].result(timeout=15)
+                    except Exception:
+                        pass
+                    try:
+                        global_data = futures["_global"].result(timeout=15)
+                    except Exception:
+                        pass
         else:
             df = data_fetcher.get_historical_data(symbol, period="2y")
             if df is None or df.empty:
                 raise ValueError(f"No historical data available for {symbol}")
 
-            # Run models + sentiment/global fetches in parallel
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = {}
-                if "lstm" in models:
-                    futures["lstm"] = executor.submit(self.lstm.predict, df, symbol, horizon)
-                if "prophet" in models:
-                    futures["prophet"] = executor.submit(self.prophet.predict, df, horizon, symbol)
-                if "xgboost" in models:
-                    futures["xgboost"] = executor.submit(self.xgboost.predict, df, symbol, horizon)
+            if LOW_RESOURCE_MODE:
+                # Sequential execution to avoid OOM on Render (512MB)
+                model_results, sentiment, global_data = self._run_models_sequential(
+                    models, symbol, horizon, is_intraday=False, daily_df=df
+                )
+                for name, mr in model_results.items():
+                    result[name] = mr
+            else:
+                # Run models + sentiment/global fetches in parallel
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    futures = {}
+                    if "lstm" in models:
+                        futures["lstm"] = executor.submit(self.lstm.predict, df, symbol, horizon)
+                    if "prophet" in models:
+                        futures["prophet"] = executor.submit(self.prophet.predict, df, horizon, symbol)
+                    if "xgboost" in models:
+                        futures["xgboost"] = executor.submit(self.xgboost.predict, df, symbol, horizon)
 
-                from app.services.sentiment_service import sentiment_service
-                from app.services.global_market_service import global_market_service
-                futures["_sentiment"] = executor.submit(sentiment_service.get_sentiment, symbol)
-                futures["_global"] = executor.submit(global_market_service.get_global_signal)
+                    from app.services.sentiment_service import sentiment_service
+                    from app.services.global_market_service import global_market_service
+                    futures["_sentiment"] = executor.submit(sentiment_service.get_sentiment, symbol)
+                    futures["_global"] = executor.submit(global_market_service.get_global_signal)
 
-                for name, future in futures.items():
-                    if name.startswith("_"):
-                        continue
+                    for name, future in futures.items():
+                        if name.startswith("_"):
+                            continue
+                        try:
+                            model_result = future.result(timeout=60)
+                            result[name] = model_result
+                            model_results[name] = model_result
+                        except Exception as e:
+                            result[f"{name}_error"] = str(e)
+
+                    sentiment = None
+                    global_data = None
                     try:
-                        model_result = future.result(timeout=60)
-                        result[name] = model_result
-                        model_results[name] = model_result
-                    except Exception as e:
-                        result[f"{name}_error"] = str(e)
-
-                sentiment = None
-                global_data = None
-                try:
-                    sentiment = futures["_sentiment"].result(timeout=15)
-                except Exception:
-                    pass
-                try:
-                    global_data = futures["_global"].result(timeout=15)
-                except Exception:
-                    pass
+                        sentiment = futures["_sentiment"].result(timeout=15)
+                    except Exception:
+                        pass
+                    try:
+                        global_data = futures["_global"].result(timeout=15)
+                    except Exception:
+                        pass
 
         # Compute ensemble
         if not is_intraday:
@@ -849,6 +934,10 @@ class PredictionService:
             result["explanation"] = explanation
         except Exception as e:
             logger.warning(f"Failed to generate explanation: {e}")
+
+        # Cache prediction result on Render (15 min TTL — avoids re-training)
+        if LOW_RESOURCE_MODE:
+            cache.set(f"prediction:{symbol}:{horizon}", result, 900)
 
         return result
 
