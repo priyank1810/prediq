@@ -413,43 +413,43 @@ class PredictionService:
     def _apply_market_context_adjustment(self, ensemble_preds: list, current_price: float,
                                             sentiment: dict | None, global_data: dict | None) -> tuple[list, dict]:
         """Adjust ensemble predictions based on sentiment and global market context.
-        Returns (adjusted_predictions, adjustment_info)."""
+        Returns (adjusted_predictions, adjustment_info).
+
+        The adjustment scales with event magnitude:
+        - Normal times: up to ±2% adjustment
+        - Moderate events (mag 30-60): up to ±3%
+        - High-impact events (mag 60-80): up to ±5%
+        - Extreme events (mag 80+): up to ±7%
+        """
         if not ensemble_preds or current_price <= 0:
             return ensemble_preds, {}
 
-        # Compute adjustment factor from sentiment + global
-        sent_score = 0
-        global_score = 0
-        news_magnitude = 0
+        sent_score = sentiment.get("score", 0) if sentiment else 0      # -100 to +100
+        global_score = global_data.get("score", 0) if global_data else 0  # -100 to +100
+        news_magnitude = global_data.get("news_magnitude", 0) if global_data else 0
 
-        if sentiment:
-            sent_score = sentiment.get("score", 0)  # -100 to +100
-
-        if global_data:
-            global_score = global_data.get("score", 0)  # -100 to +100
-            news_magnitude = global_data.get("news_magnitude", 0)
-
-        # Dynamic weights similar to signal_service
-        w_sent = 0.15
-        w_glob = 0.10
-        if news_magnitude >= 80:
-            w_sent = 0.20
-            w_glob = 0.30
-        elif news_magnitude >= 60:
-            w_sent = 0.20
-            w_glob = 0.25
+        # Blend sentiment and global — global dominates during big events
+        if news_magnitude >= 60:
+            blended = sent_score * 0.4 + global_score * 0.6
         elif news_magnitude >= 30:
-            boost = (news_magnitude - 30) / 30 * 0.10
-            w_glob += boost
+            blended = sent_score * 0.5 + global_score * 0.5
+        else:
+            blended = sent_score * 0.7 + global_score * 0.3
 
-        # Combined context score: -100 to +100
-        context_score = w_sent * sent_score + w_glob * global_score
-        # Convert to a price adjustment percentage (-2% to +2% for extreme values)
-        max_adjustment_pct = 2.0
-        adjustment_pct = (context_score / 100.0) * max_adjustment_pct
+        # Max adjustment scales with event magnitude
+        if news_magnitude >= 80:
+            max_adj = 7.0
+        elif news_magnitude >= 60:
+            max_adj = 5.0
+        elif news_magnitude >= 30:
+            max_adj = 3.0
+        else:
+            max_adj = 2.0
+
+        adjustment_pct = (blended / 100.0) * max_adj
 
         if abs(adjustment_pct) < 0.05:
-            return ensemble_preds, {"adjustment_pct": 0, "context_score": round(context_score, 1),
+            return ensemble_preds, {"adjustment_pct": 0, "blended_score": round(blended, 1),
                                     "news_magnitude": news_magnitude}
 
         adjusted = []
@@ -459,10 +459,9 @@ class PredictionService:
 
         return adjusted, {
             "adjustment_pct": round(adjustment_pct, 3),
-            "context_score": round(context_score, 1),
-            "sentiment_weight": round(w_sent, 2),
-            "global_weight": round(w_glob, 2),
+            "blended_score": round(blended, 1),
             "news_magnitude": news_magnitude,
+            "max_adjustment": max_adj,
         }
 
     def _compute_contribution_breakdown(self, ensemble_result: dict, adj_info: dict = None) -> dict:

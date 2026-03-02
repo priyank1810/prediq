@@ -336,7 +336,7 @@ const Predictions = {
             adjEl.classList.remove('hidden');
             const sign = adj.adjustment_pct >= 0 ? '+' : '';
             const color = adj.adjustment_pct > 0 ? 'text-green-400' : (adj.adjustment_pct < 0 ? 'text-red-400' : 'text-gray-400');
-            adjEl.innerHTML = `Market context adjustment: <span class="${color} font-medium">${sign}${adj.adjustment_pct.toFixed(2)}%</span> (sentiment w: ${(adj.sentiment_weight * 100).toFixed(0)}%, global w: ${(adj.global_weight * 100).toFixed(0)}%, magnitude: ${adj.news_magnitude})`;
+            adjEl.innerHTML = `Market context adjustment: <span class="${color} font-medium">${sign}${adj.adjustment_pct.toFixed(2)}%</span> (context score: ${adj.blended_score || 0}, magnitude: ${adj.news_magnitude}, max: ±${adj.max_adjustment || 2}%)`;
         } else if (adjEl) {
             adjEl.classList.add('hidden');
         }

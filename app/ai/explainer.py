@@ -41,22 +41,24 @@ class PredictionExplainer:
         low = df["low"]
         current_price = float(close.iloc[-1])
 
-        # 1. Price direction from ensemble
+        # 1. Price direction from ensemble (reduced weight — lagging indicator)
         ensemble = prediction_result.get("ensemble", {})
         ensemble_preds = ensemble.get("predictions", [])
         if ensemble_preds:
             predicted_price = ensemble_preds[-1]
             price_change_pct = ((predicted_price - current_price) / current_price) * 100
 
+            # Proportional scoring: stronger signal = more points (cap at ±20)
+            price_points = max(-20, min(20, price_change_pct * 5))
             if price_change_pct > 0.3:
-                bullish_score += 25
                 impact = "positive"
             elif price_change_pct < -0.3:
-                bullish_score -= 25
                 impact = "negative"
             else:
                 impact = "neutral"
-            total_weight += 25
+                price_points = 0
+            bullish_score += price_points
+            total_weight += 20
 
             drivers.append({
                 "factor": "Price Forecast",
@@ -130,8 +132,8 @@ class PredictionExplainer:
             pass
 
         tech_impact = "positive" if tech_score > 0 else ("negative" if tech_score < 0 else "neutral")
-        bullish_score += tech_score * 5
-        total_weight += 30
+        bullish_score += tech_score * 4
+        total_weight += 25
 
         drivers.append({
             "factor": "Technical Momentum",
@@ -139,21 +141,30 @@ class PredictionExplainer:
             "detail": ", ".join(tech_detail_parts) if tech_detail_parts else "Mixed signals",
         })
 
-        # 3. Sentiment
+        # 3. Sentiment (increased weight — real-time signal)
         if sentiment:
             sent_score = sentiment.get("score", 0)
             pos_count = sentiment.get("positive_count", 0)
             neg_count = sentiment.get("negative_count", 0)
+            news_mag = sentiment.get("news_magnitude", 0)
 
-            if sent_score > 15:
+            # Proportional scoring: score maps -100..+100 → -25..+25
+            sent_points = max(-25, min(25, sent_score * 0.25))
+            if sent_score > 10:
                 sent_impact = "positive"
-                bullish_score += 15
-            elif sent_score < -15:
+            elif sent_score < -10:
                 sent_impact = "negative"
-                bullish_score -= 15
             else:
                 sent_impact = "neutral"
-            total_weight += 20
+                sent_points = 0
+
+            # High-magnitude events amplify sentiment influence
+            if news_mag >= 60:
+                sent_points *= 1.5
+                sent_points = max(-35, min(35, sent_points))
+
+            bullish_score += sent_points
+            total_weight += 25
 
             drivers.append({
                 "factor": "News Sentiment",
@@ -167,9 +178,10 @@ class PredictionExplainer:
                 "detail": "No sentiment data available",
             })
 
-        # 4. Global context
+        # 4. Global context (increased weight — real-time signal)
         if global_data and global_data.get("markets"):
             global_score = global_data.get("score", 0)
+            news_magnitude = global_data.get("news_magnitude", 0)
             markets = global_data["markets"]
 
             market_parts = []
@@ -178,15 +190,23 @@ class PredictionExplainer:
                     direction_str = f"{'+' if m['change_pct'] >= 0 else ''}{m['change_pct']:.1f}%"
                     market_parts.append(f"{m['name']} {direction_str}")
 
+            # Proportional scoring: -100..+100 → -20..+20
+            global_points = max(-20, min(20, global_score * 0.20))
             if global_score > 10:
                 global_impact = "positive"
-                bullish_score += 10
             elif global_score < -10:
                 global_impact = "negative"
-                bullish_score -= 10
             else:
                 global_impact = "neutral"
-            total_weight += 15
+                global_points = 0
+
+            # Amplify during high-magnitude events
+            if news_magnitude >= 60:
+                global_points *= 1.5
+                global_points = max(-30, min(30, global_points))
+
+            bullish_score += global_points
+            total_weight += 20
 
             # VIX-specific risk
             vix_market = next((m for m in markets if m["name"] == "India VIX"), None)
@@ -199,7 +219,7 @@ class PredictionExplainer:
                 "detail": ", ".join(market_parts) if market_parts else f"Global score: {global_score:.0f}",
             })
 
-        # 5. Model agreement
+        # 5. Model agreement (informational — lower weight to avoid double-counting with Price Forecast)
         model_directions = {}
         for model_name in ("lstm", "prophet", "xgboost"):
             model_data = prediction_result.get(model_name)
@@ -209,18 +229,18 @@ class PredictionExplainer:
                 model_directions[model_name.upper()] = change_pct
 
         if model_directions:
-            all_bullish = all(v > 0 for v in model_directions.values())
-            all_bearish = all(v < 0 for v in model_directions.values())
+            all_bullish = all(v > 0.3 for v in model_directions.values())
+            all_bearish = all(v < -0.3 for v in model_directions.values())
 
             parts = [f"{name} {'+' if pct >= 0 else ''}{pct:.1f}%" for name, pct in model_directions.items()]
 
             if all_bullish:
                 agreement_impact = "positive"
-                bullish_score += 10
+                bullish_score += 5
                 agreement_detail = f"All {len(model_directions)} models predict upside ({', '.join(parts)})"
             elif all_bearish:
                 agreement_impact = "negative"
-                bullish_score -= 10
+                bullish_score -= 5
                 agreement_detail = f"All {len(model_directions)} models predict downside ({', '.join(parts)})"
             else:
                 agreement_impact = "neutral"
