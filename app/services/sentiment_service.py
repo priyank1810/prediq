@@ -3,6 +3,7 @@ import math
 import logging
 from datetime import datetime, timedelta
 from urllib.parse import quote
+from concurrent.futures import ThreadPoolExecutor
 from app.utils.helpers import now_ist
 
 import feedparser
@@ -45,59 +46,42 @@ class SentimentService:
         all_headlines = []
         seen_titles = set()
 
-        # Original Google News RSS sources
-        for url_template in NEWS_RSS_SOURCES:
+        def _fetch_google_news(url_template):
+            entries = []
             try:
                 url = url_template.format(symbol=quote(symbol))
                 feed = feedparser.parse(url)
-
                 for entry in feed.entries[:15]:
                     title = entry.get("title", "").strip()
-                    if not title or title in seen_titles:
+                    if not title:
                         continue
-                    seen_titles.add(title)
-
-                    published = entry.get("published", "")
-                    link = entry.get("link", "")
                     pub_time = None
-
                     if entry.get("published_parsed"):
                         try:
                             pub_time = datetime(*entry.published_parsed[:6])
-                            # Extended to 7 days for time-decay weighting
                             if now_ist() - pub_time > timedelta(days=7):
                                 continue
                         except Exception:
                             pass
-
-                    all_headlines.append({
+                    entries.append({
                         "title": title,
-                        "published": published,
-                        "link": link,
+                        "published": entry.get("published", ""),
+                        "link": entry.get("link", ""),
                         "pub_time": pub_time,
                         "source": "google_news",
                     })
             except Exception as e:
                 logger.warning(f"RSS fetch failed for {symbol}: {e}")
-                continue
+            return entries
 
-        # MoneyControl RSS — use their actual topic feeds and filter by symbol
-        mc_feeds = [
-            "https://www.moneycontrol.com/rss/latestnews.xml",
-            "https://www.moneycontrol.com/rss/buzzingstocks.xml",
-            "https://www.moneycontrol.com/rss/marketreports.xml",
-        ]
-        for mc_url in mc_feeds:
+        def _fetch_mc_feed(mc_url):
+            entries = []
             try:
                 feed = feedparser.parse(mc_url)
                 for entry in feed.entries[:20]:
                     title = entry.get("title", "").strip()
-                    if not title or title in seen_titles:
+                    if not title or symbol.lower() not in title.lower():
                         continue
-                    # Only include headlines that mention this symbol
-                    if symbol.lower() not in title.lower():
-                        continue
-                    seen_titles.add(title)
                     pub_time = None
                     if entry.get("published_parsed"):
                         try:
@@ -106,7 +90,7 @@ class SentimentService:
                                 continue
                         except Exception:
                             pass
-                    all_headlines.append({
+                    entries.append({
                         "title": title,
                         "published": entry.get("published", ""),
                         "link": entry.get("link", ""),
@@ -115,70 +99,93 @@ class SentimentService:
                     })
             except Exception:
                 pass
+            return entries
 
-        # Economic Times RSS
-        try:
-            et_url = "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms"
-            feed = feedparser.parse(et_url)
-            for entry in feed.entries[:10]:
-                title = entry.get("title", "").strip()
-                if not title or title in seen_titles:
-                    continue
-                # Only include if symbol mentioned
-                if symbol.lower() not in title.lower():
-                    continue
-                seen_titles.add(title)
-                pub_time = None
-                if entry.get("published_parsed"):
+        def _fetch_et():
+            entries = []
+            try:
+                et_url = "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms"
+                feed = feedparser.parse(et_url)
+                for entry in feed.entries[:10]:
+                    title = entry.get("title", "").strip()
+                    if not title or symbol.lower() not in title.lower():
+                        continue
+                    pub_time = None
+                    if entry.get("published_parsed"):
+                        try:
+                            pub_time = datetime(*entry.published_parsed[:6])
+                        except Exception:
+                            pass
+                    entries.append({
+                        "title": title,
+                        "published": entry.get("published", ""),
+                        "link": entry.get("link", ""),
+                        "pub_time": pub_time,
+                        "source": "economic_times",
+                    })
+            except Exception:
+                pass
+            return entries
+
+        def _fetch_finnhub():
+            entries = []
+            try:
+                from app.config import FINNHUB_API_KEY
+                if FINNHUB_API_KEY:
+                    import json
+                    from urllib.request import urlopen
+                    today = now_ist().strftime("%Y-%m-%d")
+                    week_ago = (now_ist() - timedelta(days=7)).strftime("%Y-%m-%d")
+                    url = f"https://finnhub.io/api/v1/company-news?symbol={symbol}.NS&from={week_ago}&to={today}&token={FINNHUB_API_KEY}"
                     try:
-                        pub_time = datetime(*entry.published_parsed[:6])
+                        resp = urlopen(url, timeout=5)
+                        news = json.loads(resp.read())
+                        for item in news[:10]:
+                            title = item.get("headline", "").strip()
+                            if not title:
+                                continue
+                            pub_time = None
+                            if item.get("datetime"):
+                                try:
+                                    pub_time = datetime.fromtimestamp(item["datetime"])
+                                except Exception:
+                                    pass
+                            entries.append({
+                                "title": title,
+                                "published": str(pub_time) if pub_time else "",
+                                "link": item.get("url", ""),
+                                "pub_time": pub_time,
+                                "source": "finnhub",
+                            })
                     except Exception:
                         pass
-                all_headlines.append({
-                    "title": title,
-                    "published": entry.get("published", ""),
-                    "link": entry.get("link", ""),
-                    "pub_time": pub_time,
-                    "source": "economic_times",
-                })
-        except Exception:
-            pass
+            except Exception:
+                pass
+            return entries
 
-        # Finnhub API (if key configured)
-        try:
-            from app.config import FINNHUB_API_KEY
-            if FINNHUB_API_KEY:
-                import aiohttp
-                import json
-                from urllib.request import urlopen
-                today = now_ist().strftime("%Y-%m-%d")
-                week_ago = (now_ist() - timedelta(days=7)).strftime("%Y-%m-%d")
-                url = f"https://finnhub.io/api/v1/company-news?symbol={symbol}.NS&from={week_ago}&to={today}&token={FINNHUB_API_KEY}"
+        mc_feeds = [
+            "https://www.moneycontrol.com/rss/latestnews.xml",
+            "https://www.moneycontrol.com/rss/buzzingstocks.xml",
+            "https://www.moneycontrol.com/rss/marketreports.xml",
+        ]
+
+        with ThreadPoolExecutor(max_workers=7) as executor:
+            futures = []
+            for url_template in NEWS_RSS_SOURCES:
+                futures.append(executor.submit(_fetch_google_news, url_template))
+            for mc_url in mc_feeds:
+                futures.append(executor.submit(_fetch_mc_feed, mc_url))
+            futures.append(executor.submit(_fetch_et))
+            futures.append(executor.submit(_fetch_finnhub))
+
+            for future in futures:
                 try:
-                    resp = urlopen(url, timeout=5)
-                    news = json.loads(resp.read())
-                    for item in news[:10]:
-                        title = item.get("headline", "").strip()
-                        if not title or title in seen_titles:
-                            continue
-                        seen_titles.add(title)
-                        pub_time = None
-                        if item.get("datetime"):
-                            try:
-                                pub_time = datetime.fromtimestamp(item["datetime"])
-                            except Exception:
-                                pass
-                        all_headlines.append({
-                            "title": title,
-                            "published": str(pub_time) if pub_time else "",
-                            "link": item.get("url", ""),
-                            "pub_time": pub_time,
-                            "source": "finnhub",
-                        })
+                    for h in future.result(timeout=10):
+                        if h["title"] not in seen_titles:
+                            seen_titles.add(h["title"])
+                            all_headlines.append(h)
                 except Exception:
                     pass
-        except Exception:
-            pass
 
         return all_headlines[:30]
 

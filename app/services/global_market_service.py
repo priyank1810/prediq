@@ -1,6 +1,7 @@
 import re
 import logging
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 import feedparser
 import yfinance as yf
@@ -89,39 +90,49 @@ class GlobalMarketService:
         total_weighted_score = 0
         total_weight = 0
 
-        for name, symbol in GLOBAL_MARKET_SYMBOLS.items():
-            try:
-                ticker = yf.Ticker(symbol)
-                info = ticker.fast_info
-                current_price = info.last_price
-                prev_close = info.previous_close
+        def _fetch_one(name, symbol):
+            ticker = yf.Ticker(symbol)
+            info = ticker.fast_info
+            current_price = info.last_price
+            prev_close = info.previous_close
+            return name, symbol, current_price, prev_close
 
-                if current_price and prev_close and prev_close > 0:
-                    change_pct = ((current_price - prev_close) / prev_close) * 100
-                else:
-                    change_pct = 0
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {
+                executor.submit(_fetch_one, name, sym): name
+                for name, sym in GLOBAL_MARKET_SYMBOLS.items()
+            }
+            for future in futures:
+                name = futures[future]
+                try:
+                    name, symbol, current_price, prev_close = future.result(timeout=10)
 
-                direction = "up" if change_pct > 0 else ("down" if change_pct < 0 else "flat")
-                markets.append({
-                    "name": name, "symbol": symbol,
-                    "price": round(current_price, 2) if current_price else 0,
-                    "change_pct": round(change_pct, 2),
-                    "direction": direction,
-                })
+                    if current_price and prev_close and prev_close > 0:
+                        change_pct = ((current_price - prev_close) / prev_close) * 100
+                    else:
+                        change_pct = 0
 
-                weight = INFLUENCE_WEIGHTS.get(name, 1.0)
-                if name in INVERSE_INDICATORS:
-                    market_score = -change_pct * INVERSE_INDICATORS[name]
-                else:
-                    market_score = change_pct * 20
+                    direction = "up" if change_pct > 0 else ("down" if change_pct < 0 else "flat")
+                    markets.append({
+                        "name": name, "symbol": symbol,
+                        "price": round(current_price, 2) if current_price else 0,
+                        "change_pct": round(change_pct, 2),
+                        "direction": direction,
+                    })
 
-                market_score = max(-100, min(100, market_score))
-                total_weighted_score += market_score * weight
-                total_weight += weight
+                    weight = INFLUENCE_WEIGHTS.get(name, 1.0)
+                    if name in INVERSE_INDICATORS:
+                        market_score = -change_pct * INVERSE_INDICATORS[name]
+                    else:
+                        market_score = change_pct * 20
 
-            except Exception as e:
-                logger.warning(f"Failed to fetch {name} ({symbol}): {e}")
-                continue
+                    market_score = max(-100, min(100, market_score))
+                    total_weighted_score += market_score * weight
+                    total_weight += weight
+
+                except Exception as e:
+                    logger.warning(f"Failed to fetch {name}: {e}")
+                    continue
 
         price_score = (total_weighted_score / total_weight) if total_weight > 0 else 0
         price_score = max(-100, min(100, round(price_score, 2)))
@@ -166,15 +177,14 @@ class GlobalMarketService:
         all_headlines = []
         seen_titles = set()
 
-        for feed_url in GLOBAL_NEWS_FEEDS:
+        def _fetch_feed(feed_url):
+            entries = []
             try:
                 feed = feedparser.parse(feed_url)
                 for entry in feed.entries[:15]:
                     title = entry.get("title", "").strip()
-                    if not title or title in seen_titles:
+                    if not title:
                         continue
-                    seen_titles.add(title)
-
                     pub_time = None
                     if entry.get("published_parsed"):
                         try:
@@ -183,14 +193,25 @@ class GlobalMarketService:
                                 continue
                         except Exception:
                             pass
-
-                    all_headlines.append({
+                    entries.append({
                         "title": title,
                         "link": entry.get("link", ""),
                         "pub_time": pub_time,
                     })
             except Exception:
                 pass
+            return entries
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            feed_futures = [executor.submit(_fetch_feed, url) for url in GLOBAL_NEWS_FEEDS]
+            for future in feed_futures:
+                try:
+                    for h in future.result(timeout=10):
+                        if h["title"] not in seen_titles:
+                            seen_titles.add(h["title"])
+                            all_headlines.append(h)
+                except Exception:
+                    pass
 
         if not all_headlines:
             result = {"score": 0, "magnitude": 0, "headlines": []}

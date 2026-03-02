@@ -49,12 +49,13 @@ const App = {
             });
         } catch (e) { /* WS not available yet */ }
 
-        // Auto-refresh market overview every 10 seconds
+        // Auto-refresh market overview every 60s, only if WebSocket hasn't updated in 30s
         this._overviewTimer = setInterval(() => {
             if (!this.currentSymbol) {
-                this.refreshOverviewQuotes();
+                const stale = Date.now() - (this._lastOverviewUpdate || 0) > 30000;
+                if (stale) this.refreshOverviewQuotes();
             }
-        }, 10000);
+        }, 60000);
     },
 
     setupNavigation() {
@@ -375,14 +376,12 @@ const App = {
         document.getElementById('stockName').textContent = name;
 
         try {
-            const [quote, history, signal] = await Promise.all([
+            const [quote, history] = await Promise.all([
                 API.getQuote(symbol),
                 API.getHistory(symbol, this.currentPeriod),
-                API.getIntradaySignal(symbol).catch(() => null)
             ]);
 
             this.displayQuote(quote);
-            this.displaySignalBadge(signal);
             this.chart.init(this.currentPeriod === '1d' || this.currentPeriod === '5d');
             this.chart.setData(history);
 

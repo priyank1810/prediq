@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 from app.utils.cache import cache
 
 logger = logging.getLogger(__name__)
@@ -108,23 +109,32 @@ class MarketMoodService:
             import yfinance as yf
             import ta
 
+            def _check_above_sma(symbol):
+                yf_sym = yfinance_symbol(symbol)
+                df = yf.download(yf_sym, period="3mo", progress=False)
+                if df is not None and len(df) >= 25:
+                    if hasattr(df.columns, 'levels'):
+                        df.columns = df.columns.get_level_values(0)
+                    close = df["Close"]
+                    sma20 = ta.trend.SMAIndicator(close, window=20).sma_indicator()
+                    return float(close.iloc[-1]) > float(sma20.iloc[-1])
+                return None
+
             above_sma = 0
             total = 0
 
-            for symbol in NIFTY_50_SYMBOLS[:5]:  # Sample 5 stocks
-                try:
-                    yf_sym = yfinance_symbol(symbol)
-                    df = yf.download(yf_sym, period="3mo", progress=False)
-                    if df is not None and len(df) >= 25:
-                        if hasattr(df.columns, 'levels'):
-                            df.columns = df.columns.get_level_values(0)
-                        close = df["Close"]
-                        sma20 = ta.trend.SMAIndicator(close, window=20).sma_indicator()
-                        if float(close.iloc[-1]) > float(sma20.iloc[-1]):
-                            above_sma += 1
-                        total += 1
-                except Exception:
-                    pass
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {executor.submit(_check_above_sma, sym): sym
+                           for sym in NIFTY_50_SYMBOLS[:5]}
+                for future in futures:
+                    try:
+                        result = future.result(timeout=10)
+                        if result is not None:
+                            total += 1
+                            if result:
+                                above_sma += 1
+                    except Exception:
+                        pass
 
             if total > 0:
                 return float(above_sma / total * 100)

@@ -65,6 +65,17 @@ class DataFetcher:
         if quote is None:
             quote = self._fetch_from_yfinance(symbol)
 
+        # Enrich with avg_volume from cached historical data (avoids slow yf.Ticker.info call)
+        if quote and not quote.get("avg_volume"):
+            try:
+                hist_df = self.get_historical_data(symbol, period="1mo")
+                if hist_df is not None and not hist_df.empty and "volume" in hist_df.columns:
+                    avg_vol = float(hist_df["volume"].tail(10).mean())
+                    if avg_vol > 0:
+                        quote["avg_volume"] = int(avg_vol)
+            except Exception:
+                pass
+
         if quote:
             cache.set(cache_key, quote, CACHE_TTL_QUOTE)
         return quote

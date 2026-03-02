@@ -1,6 +1,7 @@
 const Signals = {
     intradayChart: null,
     isLoading: false,
+    _intradayResizeHandler: null,
 
     init() {
         const btn = document.getElementById('btnSignal');
@@ -34,6 +35,7 @@ const Signals = {
                 API.getSignalHistory(symbol, 10),
             ]);
             this.displaySignal(signal);
+            App.displaySignalBadge(signal);
             this.displaySignalHistory(history);
         } catch (e) {
             App.showToast('Failed to load signal: ' + e.message, 'error');
@@ -225,6 +227,13 @@ const Signals = {
     renderIntradayChart(candles) {
         const container = document.getElementById('intradayChart');
         if (!container) return;
+
+        // Remove previous resize listener to prevent leaks
+        if (this._intradayResizeHandler) {
+            window.removeEventListener('resize', this._intradayResizeHandler);
+            this._intradayResizeHandler = null;
+        }
+
         if (this.intradayChart) {
             this.intradayChart.remove();
             this.intradayChart = null;
@@ -254,11 +263,12 @@ const Signals = {
         series.setData(chartData);
         this.intradayChart.timeScale().fitContent();
 
-        window.addEventListener('resize', () => {
+        this._intradayResizeHandler = () => {
             if (this.intradayChart) {
                 this.intradayChart.applyOptions({ width: container.clientWidth });
             }
-        });
+        };
+        window.addEventListener('resize', this._intradayResizeHandler);
     },
 
     _parseIST(dateStr) {

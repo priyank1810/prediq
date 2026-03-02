@@ -2,6 +2,7 @@ const Search = {
     input: null,
     resultsDiv: null,
     debounceTimer: null,
+    _abortController: null,
 
     init() {
         this.input = document.getElementById('searchInput');
@@ -25,10 +26,18 @@ const Search = {
 
     async search() {
         const query = this.input.value.trim();
+
+        // Cancel any in-flight search request
+        if (this._abortController) {
+            this._abortController.abort();
+        }
+        this._abortController = new AbortController();
+
         try {
-            const results = await API.searchStocks(query);
+            const results = await API.searchStocks(query, this._abortController.signal);
             this.showResults(results);
         } catch (e) {
+            if (e.name === 'AbortError') return; // Superseded by newer search
             this.resultsDiv.classList.add('hidden');
         }
     },

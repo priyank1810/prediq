@@ -22,22 +22,22 @@ def stats_by_sector():
     """Get signal accuracy grouped by sector."""
     db = SessionLocal()
     try:
-        logs = (
-            db.query(SignalLog.sector, SignalLog.was_correct)
+        from sqlalchemy import case
+        rows = (
+            db.query(
+                SignalLog.sector,
+                func.count(SignalLog.id).label("total"),
+                func.sum(case((SignalLog.was_correct == True, 1), else_=0)).label("correct"),
+            )
             .filter(SignalLog.was_correct.isnot(None), SignalLog.sector.isnot(None))
+            .group_by(SignalLog.sector)
+            .order_by(func.count(SignalLog.id).desc())
             .all()
         )
-        stats = {}
-        for sector, was_correct in logs:
-            if sector not in stats:
-                stats[sector] = {"total": 0, "correct": 0}
-            stats[sector]["total"] += 1
-            if was_correct:
-                stats[sector]["correct"] += 1
         return [
-            {"sector": s, "total": d["total"], "correct": d["correct"],
-             "accuracy": round(d["correct"] / d["total"] * 100, 1) if d["total"] > 0 else 0}
-            for s, d in sorted(stats.items(), key=lambda x: x[1]["total"], reverse=True)
+            {"sector": row.sector, "total": row.total, "correct": int(row.correct),
+             "accuracy": round(int(row.correct) / row.total * 100, 1) if row.total > 0 else 0}
+            for row in rows
         ]
     finally:
         db.close()
@@ -86,22 +86,22 @@ def stats_by_regime():
     """Get signal accuracy grouped by market regime."""
     db = SessionLocal()
     try:
-        logs = (
-            db.query(SignalLog.regime, SignalLog.was_correct)
+        from sqlalchemy import case
+        rows = (
+            db.query(
+                SignalLog.regime,
+                func.count(SignalLog.id).label("total"),
+                func.sum(case((SignalLog.was_correct == True, 1), else_=0)).label("correct"),
+            )
             .filter(SignalLog.was_correct.isnot(None), SignalLog.regime.isnot(None))
+            .group_by(SignalLog.regime)
+            .order_by(func.count(SignalLog.id).desc())
             .all()
         )
-        stats = {}
-        for regime, was_correct in logs:
-            if regime not in stats:
-                stats[regime] = {"total": 0, "correct": 0}
-            stats[regime]["total"] += 1
-            if was_correct:
-                stats[regime]["correct"] += 1
         return [
-            {"regime": r, "total": d["total"], "correct": d["correct"],
-             "accuracy": round(d["correct"] / d["total"] * 100, 1) if d["total"] > 0 else 0}
-            for r, d in sorted(stats.items(), key=lambda x: x[1]["total"], reverse=True)
+            {"regime": row.regime, "total": row.total, "correct": int(row.correct),
+             "accuracy": round(int(row.correct) / row.total * 100, 1) if row.total > 0 else 0}
+            for row in rows
         ]
     finally:
         db.close()
@@ -211,33 +211,28 @@ def signal_accuracy_stats():
     """Get signal accuracy stats grouped by symbol."""
     db = SessionLocal()
     try:
-        all_logs = (
-            db.query(SignalLog.symbol, SignalLog.was_correct)
+        from sqlalchemy import case
+        rows = (
+            db.query(
+                SignalLog.symbol,
+                func.count(SignalLog.id).label("total"),
+                func.sum(case((SignalLog.was_correct == True, 1), else_=0)).label("correct"),
+            )
             .filter(SignalLog.was_correct.isnot(None))
+            .group_by(SignalLog.symbol)
+            .order_by(func.count(SignalLog.id).desc())
+            .limit(20)
             .all()
         )
-
-        stats = {}
-        for symbol, was_correct in all_logs:
-            if symbol not in stats:
-                stats[symbol] = {"total": 0, "correct": 0}
-            stats[symbol]["total"] += 1
-            if was_correct:
-                stats[symbol]["correct"] += 1
-
-        return sorted(
-            [
-                {
-                    "symbol": symbol,
-                    "total": s["total"],
-                    "correct": s["correct"],
-                    "accuracy": round(s["correct"] / s["total"] * 100, 1) if s["total"] > 0 else 0,
-                }
-                for symbol, s in stats.items()
-            ],
-            key=lambda x: x["total"],
-            reverse=True,
-        )[:20]
+        return [
+            {
+                "symbol": row.symbol,
+                "total": row.total,
+                "correct": int(row.correct),
+                "accuracy": round(int(row.correct) / row.total * 100, 1) if row.total > 0 else 0,
+            }
+            for row in rows
+        ]
     finally:
         db.close()
 

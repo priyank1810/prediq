@@ -6,12 +6,14 @@ import numpy as np
 import pandas as pd
 import joblib
 import ta
+from concurrent.futures import ThreadPoolExecutor
 from app.ai.lstm_model import LSTMPredictor
 from app.ai.prophet_model import ProphetPredictor
 from app.ai.xgboost_model import XGBoostPredictor
 from app.ai.explainer import prediction_explainer
 from app.services.data_fetcher import data_fetcher
 from app.config import PREDICTION_HORIZONS, MODEL_DIR
+from app.utils.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +85,16 @@ class PredictionService:
             },
         }
 
-    def _estimate_prophet_mape(self, prophet_result: dict, df=None) -> float:
+    def _estimate_prophet_mape(self, prophet_result: dict, df=None, symbol: str = "") -> float:
         """Compute Prophet MAPE via walk-forward validation (5-fold anchored).
-        Falls back to CI-based estimate for small datasets."""
+        Falls back to CI-based estimate for small datasets.
+        Results are cached per symbol for 1 hour."""
+        if symbol:
+            cache_key = f"prophet_mape:{symbol}"
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         if df is not None and len(df) >= 200:
             try:
                 from prophet import Prophet
@@ -141,7 +150,10 @@ class PredictionService:
                                 mapes.append(fold_mape)
 
                 if mapes:
-                    return max(float(np.mean(mapes)), 0.01)
+                    result = max(float(np.mean(mapes)), 0.01)
+                    if symbol:
+                        cache.set(f"prophet_mape:{symbol}", result, 3600)
+                    return result
             except Exception:
                 pass
 
@@ -185,8 +197,10 @@ class PredictionService:
                             p = predicted.loc[common].values
                             nonzero = a != 0
                             if nonzero.any():
-                                mape = float(np.mean(np.abs((a[nonzero] - p[nonzero]) / a[nonzero])) * 100)
-                                return max(mape, 0.01)
+                                result = max(float(np.mean(np.abs((a[nonzero] - p[nonzero]) / a[nonzero])) * 100), 0.01)
+                                if symbol:
+                                    cache.set(f"prophet_mape:{symbol}", result, 3600)
+                                return result
             except Exception:
                 pass
 
@@ -200,12 +214,12 @@ class PredictionService:
             return max((avg_range / (2 * avg_pred)) * 100 if avg_pred > 0 else 10.0, 0.01)
         return 10.0
 
-    def _inverse_mape_ensemble(self, model_results: dict, daily_df=None, regime: dict = None) -> dict:
+    def _inverse_mape_ensemble(self, model_results: dict, daily_df=None, regime: dict = None, symbol: str = "") -> dict:
         """Regime-aware inverse-MAPE weighting across all available models."""
         mapes = {}
         for name, result in model_results.items():
             if name == "prophet":
-                mapes[name] = self._estimate_prophet_mape(result, df=daily_df)
+                mapes[name] = self._estimate_prophet_mape(result, df=daily_df, symbol=symbol)
             else:
                 mapes[name] = max(result.get("mape", 5.0), 0.01)
 
@@ -301,7 +315,7 @@ class PredictionService:
                 logger.debug(f"Meta-learner load failed: {e}")
 
         # Fall back to inverse-MAPE
-        result = self._inverse_mape_ensemble(model_results, daily_df=daily_df, regime=regime)
+        result = self._inverse_mape_ensemble(model_results, daily_df=daily_df, regime=regime, symbol=symbol)
 
         # Try to train and save meta-learner for future use
         try:
@@ -329,7 +343,7 @@ class PredictionService:
         mapes = {}
         for name, result in model_results.items():
             if name == "prophet":
-                mapes[name] = self._estimate_prophet_mape(result, df=daily_df)
+                mapes[name] = self._estimate_prophet_mape(result, df=daily_df, symbol=symbol)
             else:
                 mapes[name] = max(result.get("mape", 5.0), 0.01)
 
@@ -376,6 +390,80 @@ class PredictionService:
         meta_path = self._meta_learner_path(symbol)
         joblib.dump({"model": meta_model, "model_order": model_order, "type": "ridge"}, meta_path)
 
+    def _compute_volume_analysis(self, df: pd.DataFrame, ensemble_result: dict | None = None) -> dict:
+        """Compute volume analysis: ratio, trend, conviction relative to prediction direction."""
+        result = {}
+        if df is None or df.empty or "volume" not in df.columns:
+            return result
+
+        vol = df["volume"].dropna()
+        if len(vol) < 5:
+            return result
+
+        current_volume = int(vol.iloc[-1])
+        avg_20 = float(vol.tail(20).mean()) if len(vol) >= 20 else float(vol.mean())
+        volume_ratio = round(current_volume / avg_20, 2) if avg_20 > 0 else 1.0
+
+        # Volume trend: 5-day SMA slope
+        sma5 = vol.rolling(5).mean()
+        sma5_now = float(sma5.iloc[-1]) if len(sma5) >= 5 and pd.notna(sma5.iloc[-1]) else avg_20
+        vol_trend_pct = round(((sma5_now - avg_20) / avg_20) * 100, 1) if avg_20 > 0 else 0.0
+
+        if vol_trend_pct > 5:
+            volume_trend = "increasing"
+        elif vol_trend_pct < -5:
+            volume_trend = "decreasing"
+        else:
+            volume_trend = "stable"
+
+        # Determine prediction direction from ensemble
+        direction = "neutral"
+        if ensemble_result and ensemble_result.get("predictions"):
+            preds = ensemble_result["predictions"]
+            last_close = float(df["close"].iloc[-1])
+            last_pred = preds[-1]
+            if last_pred > last_close * 1.001:
+                direction = "bullish"
+            elif last_pred < last_close * 0.999:
+                direction = "bearish"
+
+        # Conviction logic
+        if volume_ratio > 1.2:
+            if volume_trend == "increasing":
+                conviction = "high"
+                supports = True
+                detail = f"Above-average volume supports {direction} prediction"
+            elif volume_trend == "decreasing":
+                conviction = "moderate"
+                supports = direction == "neutral"
+                detail = "Volume above average but declining — watch for reversal"
+            else:
+                conviction = "high"
+                supports = True
+                detail = f"Strong volume confirms {direction} move"
+        elif volume_ratio < 0.8:
+            conviction = "low"
+            supports = False
+            if direction != "neutral":
+                detail = f"Low volume undermines {direction} prediction — move lacks participation"
+            else:
+                detail = "Below-average volume — low conviction environment"
+        else:
+            conviction = "moderate"
+            supports = True
+            detail = f"Average volume — moderate conviction for {direction} outlook"
+
+        return {
+            "current_volume": current_volume,
+            "avg_volume_20d": int(round(avg_20)),
+            "volume_ratio": volume_ratio,
+            "volume_trend": volume_trend,
+            "volume_trend_pct": vol_trend_pct,
+            "supports_prediction": supports,
+            "conviction": conviction,
+            "conviction_detail": detail,
+        }
+
     def _get_fundamental_bias(self, symbol: str) -> dict | None:
         """Get fundamental score to feed into meta-learner."""
         try:
@@ -415,11 +503,15 @@ class PredictionService:
         """Adjust ensemble predictions based on sentiment and global market context.
         Returns (adjusted_predictions, adjustment_info).
 
-        The adjustment scales with event magnitude:
-        - Normal times: up to ±2% adjustment
-        - Moderate events (mag 30-60): up to ±3%
-        - High-impact events (mag 60-80): up to ±5%
-        - Extreme events (mag 80+): up to ±7%
+        Uses a blending approach: computes a context-implied price target from
+        current price, then blends it with the model prediction. During extreme
+        events (war/crisis), context dominates; in normal times, models lead.
+
+        Blend ratios by magnitude:
+        - Normal (0-30): 90% model, 10% context
+        - Moderate (30-60): 70% model, 30% context
+        - High (60-80): 45% model, 55% context
+        - Extreme (80+): 25% model, 75% context
         """
         if not ensemble_preds or current_price <= 0:
             return ensemble_preds, {}
@@ -436,32 +528,44 @@ class PredictionService:
         else:
             blended = sent_score * 0.7 + global_score * 0.3
 
-        # Max adjustment scales with event magnitude
-        if news_magnitude >= 80:
-            max_adj = 7.0
-        elif news_magnitude >= 60:
-            max_adj = 5.0
-        elif news_magnitude >= 30:
-            max_adj = 3.0
-        else:
-            max_adj = 2.0
-
-        adjustment_pct = (blended / 100.0) * max_adj
-
-        if abs(adjustment_pct) < 0.05:
+        if abs(blended) < 3:
             return ensemble_preds, {"adjustment_pct": 0, "blended_score": round(blended, 1),
                                     "news_magnitude": news_magnitude}
 
+        # Context-implied price change from current price
+        # blended=-80 (war/crisis) → context says ~-6% from current price
+        # blended=+60 (ceasefire/rate cut) → context says ~+4.5%
+        max_context_move = 8.0  # max ±8% context-implied move
+        context_change_pct = (blended / 100.0) * max_context_move
+
+        # Determine how much context should override models
+        if news_magnitude >= 80:
+            model_w, context_w = 0.25, 0.75   # Extreme: context dominates
+        elif news_magnitude >= 60:
+            model_w, context_w = 0.45, 0.55   # High: context leads
+        elif news_magnitude >= 30:
+            model_w, context_w = 0.70, 0.30   # Moderate: model leads
+        else:
+            model_w, context_w = 0.90, 0.10   # Normal: slight nudge
+
+        # Compute context target for each prediction step
         adjusted = []
         for pred in ensemble_preds:
-            adj = pred * (1 + adjustment_pct / 100)
+            context_target = current_price * (1 + context_change_pct / 100)
+            adj = pred * model_w + context_target * context_w
             adjusted.append(round(adj, 2))
 
+        # Compute effective adjustment for reporting
+        last_orig = ensemble_preds[-1]
+        last_adj = adjusted[-1]
+        effective_adj_pct = ((last_adj - last_orig) / last_orig * 100) if last_orig else 0
+
         return adjusted, {
-            "adjustment_pct": round(adjustment_pct, 3),
+            "adjustment_pct": round(effective_adj_pct, 3),
             "blended_score": round(blended, 1),
             "news_magnitude": news_magnitude,
-            "max_adjustment": max_adj,
+            "context_weight": round(context_w, 2),
+            "model_weight": round(model_w, 2),
         }
 
     def _compute_contribution_breakdown(self, ensemble_result: dict, adj_info: dict = None) -> dict:
@@ -484,10 +588,10 @@ class PredictionService:
         xgb_w /= total_model_w
         prophet_w /= total_model_w
 
-        # If market context adjustment was applied, carve out sentiment portion
-        adj_pct = abs(adj_info.get("adjustment_pct", 0)) if adj_info else 0
-        # Sentiment contribution: scale from 0% (no adjustment) to ~15% (max 2% adjustment)
-        sentiment_share = min(15.0, adj_pct * 7.5)
+        # Sentiment contribution based on context weight (how much context influenced the prediction)
+        context_w = adj_info.get("context_weight", 0) if adj_info else 0
+        # context_weight 0.10 → ~5% sentiment share, 0.75 → ~40% sentiment share
+        sentiment_share = min(45.0, round(context_w * 55, 1))
         model_share = 100.0 - sentiment_share
 
         # Map models to categories:
@@ -519,57 +623,81 @@ class PredictionService:
             intraday_df = data_fetcher.get_intraday_data(symbol, period="5d", interval="15m")
             daily_df = data_fetcher.get_historical_data(symbol, period="2y")
 
-            if "lstm" in models:
-                try:
-                    lstm_result = self.lstm.predict_intraday(intraday_df, symbol, horizon)
-                    result["lstm"] = lstm_result
-                    model_results["lstm"] = lstm_result
-                except Exception as e:
-                    result["lstm_error"] = str(e)
+            # Run models + sentiment/global fetches in parallel
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {}
+                if "lstm" in models:
+                    futures["lstm"] = executor.submit(self.lstm.predict_intraday, intraday_df, symbol, horizon)
+                if "prophet" in models and daily_df is not None and not daily_df.empty:
+                    futures["prophet"] = executor.submit(self.prophet.predict, daily_df, horizon, symbol)
+                if "xgboost" in models and intraday_df is not None and not intraday_df.empty:
+                    futures["xgboost"] = executor.submit(self.xgboost.predict_intraday, intraday_df, symbol, horizon)
 
-            if "prophet" in models and daily_df is not None and not daily_df.empty:
-                try:
-                    prophet_result = self.prophet.predict(daily_df, horizon, symbol=symbol)
-                    result["prophet"] = prophet_result
-                    model_results["prophet"] = prophet_result
-                except Exception as e:
-                    result["prophet_error"] = str(e)
+                from app.services.sentiment_service import sentiment_service
+                from app.services.global_market_service import global_market_service
+                futures["_sentiment"] = executor.submit(sentiment_service.get_sentiment, symbol)
+                futures["_global"] = executor.submit(global_market_service.get_global_signal)
 
-            if "xgboost" in models and intraday_df is not None and not intraday_df.empty:
+                for name, future in futures.items():
+                    if name.startswith("_"):
+                        continue
+                    try:
+                        model_result = future.result(timeout=60)
+                        result[name] = model_result
+                        model_results[name] = model_result
+                    except Exception as e:
+                        result[f"{name}_error"] = str(e)
+
+                sentiment = None
+                global_data = None
                 try:
-                    xgb_result = self.xgboost.predict_intraday(intraday_df, symbol, horizon)
-                    result["xgboost"] = xgb_result
-                    model_results["xgboost"] = xgb_result
-                except Exception as e:
-                    result["xgboost_error"] = str(e)
+                    sentiment = futures["_sentiment"].result(timeout=15)
+                except Exception:
+                    pass
+                try:
+                    global_data = futures["_global"].result(timeout=15)
+                except Exception:
+                    pass
         else:
             df = data_fetcher.get_historical_data(symbol, period="2y")
             if df is None or df.empty:
                 raise ValueError(f"No historical data available for {symbol}")
 
-            if "lstm" in models:
-                try:
-                    lstm_result = self.lstm.predict(df, symbol, horizon)
-                    result["lstm"] = lstm_result
-                    model_results["lstm"] = lstm_result
-                except Exception as e:
-                    result["lstm_error"] = str(e)
+            # Run models + sentiment/global fetches in parallel
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {}
+                if "lstm" in models:
+                    futures["lstm"] = executor.submit(self.lstm.predict, df, symbol, horizon)
+                if "prophet" in models:
+                    futures["prophet"] = executor.submit(self.prophet.predict, df, horizon, symbol)
+                if "xgboost" in models:
+                    futures["xgboost"] = executor.submit(self.xgboost.predict, df, symbol, horizon)
 
-            if "prophet" in models:
-                try:
-                    prophet_result = self.prophet.predict(df, horizon, symbol=symbol)
-                    result["prophet"] = prophet_result
-                    model_results["prophet"] = prophet_result
-                except Exception as e:
-                    result["prophet_error"] = str(e)
+                from app.services.sentiment_service import sentiment_service
+                from app.services.global_market_service import global_market_service
+                futures["_sentiment"] = executor.submit(sentiment_service.get_sentiment, symbol)
+                futures["_global"] = executor.submit(global_market_service.get_global_signal)
 
-            if "xgboost" in models:
+                for name, future in futures.items():
+                    if name.startswith("_"):
+                        continue
+                    try:
+                        model_result = future.result(timeout=60)
+                        result[name] = model_result
+                        model_results[name] = model_result
+                    except Exception as e:
+                        result[f"{name}_error"] = str(e)
+
+                sentiment = None
+                global_data = None
                 try:
-                    xgb_result = self.xgboost.predict(df, symbol, horizon)
-                    result["xgboost"] = xgb_result
-                    model_results["xgboost"] = xgb_result
-                except Exception as e:
-                    result["xgboost_error"] = str(e)
+                    sentiment = futures["_sentiment"].result(timeout=15)
+                except Exception:
+                    pass
+                try:
+                    global_data = futures["_global"].result(timeout=15)
+                except Exception:
+                    pass
 
         # Compute ensemble
         if not is_intraday:
@@ -589,20 +717,6 @@ class PredictionService:
                 logger.info(f"Market regime for {symbol}: {regime.get('regime')}")
             except Exception:
                 pass
-
-        # Fetch sentiment + global data (used for adjustment AND explanation)
-        sentiment = None
-        global_data = None
-        try:
-            from app.services.sentiment_service import sentiment_service
-            sentiment = sentiment_service.get_sentiment(symbol)
-        except Exception:
-            pass
-        try:
-            from app.services.global_market_service import global_market_service
-            global_data = global_market_service.get_global_signal()
-        except Exception:
-            pass
 
         if len(model_results) >= 2:
             result["ensemble"] = self._neural_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime)
@@ -704,6 +818,15 @@ class PredictionService:
             result["contribution_breakdown"] = self._compute_contribution_breakdown(
                 result["ensemble"], adj_info
             )
+
+        # Volume analysis
+        try:
+            vol_df = intraday_df if is_intraday and intraday_df is not None and not intraday_df.empty else daily_df
+            vol_analysis = self._compute_volume_analysis(vol_df, result.get("ensemble"))
+            if vol_analysis:
+                result["volume_analysis"] = vol_analysis
+        except Exception as e:
+            logger.debug(f"Volume analysis failed: {e}")
 
         # Fundamental bias
         try:

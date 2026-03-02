@@ -9,11 +9,22 @@ class StockChart {
         this.chartType = 'candlestick';
         this.lastCandle = null;
         this.lastVolume = null;
+        this._resizeHandler = null;
+        // Throttle state for updateLastCandle
+        this._throttleTimer = null;
+        this._pendingPrice = null;
+        this._pendingVolume = null;
     }
 
     init(timeVisible = false) {
         const container = document.getElementById(this.containerId);
         if (this.chart) { this.chart.remove(); }
+
+        // Remove previous resize listener to prevent leaks
+        if (this._resizeHandler) {
+            window.removeEventListener('resize', this._resizeHandler);
+        }
+
         this.chart = LightweightCharts.createChart(container, {
             width: container.clientWidth,
             height: container.clientHeight,
@@ -45,11 +56,12 @@ class StockChart {
             scaleMargins: { top: 0.8, bottom: 0 },
         });
 
-        window.addEventListener('resize', () => {
+        this._resizeHandler = () => {
             if (this.chart) {
                 this.chart.applyOptions({ width: container.clientWidth });
             }
-        });
+        };
+        window.addEventListener('resize', this._resizeHandler);
     }
 
     setData(data) {
@@ -108,9 +120,34 @@ class StockChart {
 
     /**
      * Update the last candle in real-time with new price data.
-     * Called on every WebSocket price_update.
+     * Throttled to max 4 repaints/sec (250ms interval).
      */
     updateLastCandle(price, volume) {
+        if (!this.lastCandle || !price) return;
+
+        // Store latest values
+        this._pendingPrice = price;
+        this._pendingVolume = volume;
+
+        // If no timer running, apply immediately and start throttle window
+        if (!this._throttleTimer) {
+            this._applyPendingUpdate();
+            this._throttleTimer = setTimeout(() => {
+                this._throttleTimer = null;
+                // Apply any values that arrived during the throttle window
+                if (this._pendingPrice !== null) {
+                    this._applyPendingUpdate();
+                }
+            }, 250);
+        }
+    }
+
+    _applyPendingUpdate() {
+        const price = this._pendingPrice;
+        const volume = this._pendingVolume;
+        this._pendingPrice = null;
+        this._pendingVolume = null;
+
         if (!this.lastCandle || !price) return;
 
         const updated = { ...this.lastCandle };
@@ -174,11 +211,18 @@ class IndicatorChart {
         this.containerId = containerId;
         this.chart = null;
         this.options = options;
+        this._resizeHandler = null;
     }
 
     init() {
         const container = document.getElementById(this.containerId);
         if (this.chart) { this.chart.remove(); }
+
+        // Remove previous resize listener to prevent leaks
+        if (this._resizeHandler) {
+            window.removeEventListener('resize', this._resizeHandler);
+        }
+
         this.chart = LightweightCharts.createChart(container, {
             width: container.clientWidth,
             height: container.clientHeight,
@@ -188,11 +232,12 @@ class IndicatorChart {
             timeScale: { visible: false },
         });
 
-        window.addEventListener('resize', () => {
+        this._resizeHandler = () => {
             if (this.chart) {
                 this.chart.applyOptions({ width: container.clientWidth });
             }
-        });
+        };
+        window.addEventListener('resize', this._resizeHandler);
     }
 
     setRSIData(data) {

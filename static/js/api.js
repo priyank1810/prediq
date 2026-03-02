@@ -1,31 +1,94 @@
 const API = {
     baseUrl: '',
     ws: null,
+    _wsBackoff: 1000,
+    _wsMaxBackoff: 30000,
+
+    // --- Client-side GET request cache ---
+    _cache: new Map(),
+    _cacheTTLs: {
+        '/api/stocks/': 5000,           // quotes: 5s
+        '/api/stocks/market-': 10000,   // market status/movers: 10s
+        '/api/signals/': 30000,         // signals: 30s
+        '/api/indicators/': 60000,      // indicators: 60s
+        '/history': 60000,              // history: 60s
+        '/api/fii-dii/': 60000,         // FII/DII: 60s
+        '/api/sectors/': 60000,         // sectors: 60s
+    },
+    _cacheMaxEntries: 200,
+
+    _getCacheTTL(url) {
+        for (const [pattern, ttl] of Object.entries(this._cacheTTLs)) {
+            if (url.includes(pattern)) return ttl;
+        }
+        return 0; // Don't cache by default
+    },
+
+    _cacheGet(url) {
+        const entry = this._cache.get(url);
+        if (!entry) return null;
+        if (Date.now() > entry.expires) {
+            this._cache.delete(url);
+            return null;
+        }
+        return entry.data;
+    },
+
+    _cacheSet(url, data, ttl) {
+        if (this._cache.size >= this._cacheMaxEntries) {
+            // Evict oldest entries
+            const keys = [...this._cache.keys()];
+            for (let i = 0; i < 50 && i < keys.length; i++) {
+                this._cache.delete(keys[i]);
+            }
+        }
+        this._cache.set(url, { data, expires: Date.now() + ttl });
+    },
 
     async request(url, options = {}) {
+        const method = (options.method || 'GET').toUpperCase();
+
+        // Check client-side cache for GET requests
+        if (method === 'GET') {
+            const cached = this._cacheGet(url);
+            if (cached !== null) return cached;
+        }
+
         try {
             const headers = {
                 'Content-Type': 'application/json',
             };
 
-            const res = await fetch(this.baseUrl + url, {
-                headers,
-                ...options
-            });
+            const fetchOptions = { headers, ...options };
+            // Forward AbortController signal
+            if (options.signal) {
+                fetchOptions.signal = options.signal;
+            }
+
+            const res = await fetch(this.baseUrl + url, fetchOptions);
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ detail: res.statusText }));
                 throw new Error(err.detail || 'Request failed');
             }
-            return await res.json();
+            const data = await res.json();
+
+            // Cache GET responses
+            if (method === 'GET') {
+                const ttl = this._getCacheTTL(url);
+                if (ttl > 0) this._cacheSet(url, data, ttl);
+            }
+
+            return data;
         } catch (e) {
+            if (e.name === 'AbortError') throw e;
             console.error(`API error [${url}]:`, e);
             throw e;
         }
     },
 
     // Stocks (public)
-    searchStocks(query) { return this.request(`/api/stocks/search?q=${encodeURIComponent(query)}`); },
+    searchStocks(query, signal) { return this.request(`/api/stocks/search?q=${encodeURIComponent(query)}`, signal ? { signal } : {}); },
     getQuote(symbol) { return this.request(`/api/stocks/${encodeURIComponent(symbol)}/quote`); },
     getHistory(symbol, period = '1y') { return this.request(`/api/stocks/${encodeURIComponent(symbol)}/history?period=${period}`); },
     getMarketStatus() { return this.request('/api/stocks/market-status'); },
@@ -97,30 +160,44 @@ const API = {
     onMarketMoodUpdate: null,
     setMarketMoodHandler(handler) { this.onMarketMoodUpdate = handler; },
 
-    // WebSocket
+    // WebSocket with exponential backoff
     connectWebSocket(symbols, onPriceUpdate, onAlert) {
+        this._wsBackoff = 1000; // Reset on fresh connect
+        this._wsSymbols = symbols;
+        this._wsOnPrice = onPriceUpdate;
+        this._wsOnAlert = onAlert;
+        this._connectWS();
+    },
+
+    _connectWS() {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
         this.ws = new WebSocket(`${protocol}//${location.host}/ws/prices`);
         this.ws.onopen = () => {
-            if (symbols.length > 0) {
-                this.ws.send(JSON.stringify({ subscribe: symbols }));
+            this._wsBackoff = 1000; // Reset backoff on successful connection
+            if (this._wsSymbols && this._wsSymbols.length > 0) {
+                this.ws.send(JSON.stringify({ subscribe: this._wsSymbols }));
             }
         };
         this.ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'price_update' && onPriceUpdate) onPriceUpdate(msg.data);
-            if (msg.type === 'alert_triggered' && onAlert) onAlert(msg.data);
+            if (msg.type === 'price_update' && this._wsOnPrice) this._wsOnPrice(msg.data);
+            if (msg.type === 'alert_triggered' && this._wsOnAlert) this._wsOnAlert(msg.data);
             if (msg.type === 'signal_update' && this.onSignalUpdate) this.onSignalUpdate(msg.data);
             if (msg.type === 'high_confidence_alert' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
             if (msg.type === 'market_mood_update' && this.onMarketMoodUpdate) this.onMarketMoodUpdate(msg.data);
             if (msg.type === 'smart_alert_triggered' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
         };
         this.ws.onclose = () => {
-            setTimeout(() => this.connectWebSocket(symbols, onPriceUpdate, onAlert), 5000);
+            setTimeout(() => this._connectWS(), this._wsBackoff);
+            this._wsBackoff = Math.min(this._wsBackoff * 2, this._wsMaxBackoff);
         };
     },
 
     subscribeTo(symbols) {
+        // Track symbols for reconnection
+        if (symbols && symbols.length > 0) {
+            this._wsSymbols = [...new Set([...(this._wsSymbols || []), ...symbols])];
+        }
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ subscribe: symbols }));
         }

@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.services.data_fetcher import data_fetcher
 from app.services.indicator_service import indicator_service
 from app.services.sentiment_service import sentiment_service
@@ -11,14 +12,39 @@ logger = logging.getLogger(__name__)
 
 class SignalService:
     def get_signal(self, symbol: str) -> dict:
-        # 1. Intraday data
-        try:
-            intraday_df = data_fetcher.get_intraday_data(symbol, period="5d", interval="15m")
-        except Exception as e:
-            logger.error(f"Intraday data failed for {symbol}: {e}")
-            intraday_df = None
+        # Fetch intraday data, sentiment, and global market in parallel
+        intraday_df = None
+        sent_result = {"score": 0, "headline_count": 0, "positive_count": 0,
+                       "negative_count": 0, "neutral_count": 0, "headlines": []}
+        global_result = {"score": 0, "markets": [], "news_magnitude": 0}
 
-        # 2. Technical score
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_intraday = executor.submit(
+                data_fetcher.get_intraday_data, symbol, "5d", "15m"
+            )
+            future_sentiment = executor.submit(
+                sentiment_service.get_sentiment, symbol
+            )
+            future_global = executor.submit(
+                global_market_service.get_global_signal
+            )
+
+            try:
+                intraday_df = future_intraday.result(timeout=15)
+            except Exception as e:
+                logger.error(f"Intraday data failed for {symbol}: {e}")
+
+            try:
+                sent_result = future_sentiment.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"Sentiment failed for {symbol}: {e}")
+
+            try:
+                global_result = future_global.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"Global market failed: {e}")
+
+        # Technical score (depends on intraday data)
         if intraday_df is not None and not intraday_df.empty:
             tech_result = indicator_service.compute_intraday_indicators(intraday_df)
             technical_score = tech_result["score"]
@@ -27,24 +53,8 @@ class SignalService:
             technical_score = 0
             tech_details = {}
 
-        # 3. Sentiment score
-        try:
-            sent_result = sentiment_service.get_sentiment(symbol)
-            sentiment_score = sent_result["score"]
-        except Exception as e:
-            logger.warning(f"Sentiment failed for {symbol}: {e}")
-            sent_result = {"score": 0, "headline_count": 0, "positive_count": 0,
-                           "negative_count": 0, "neutral_count": 0, "headlines": []}
-            sentiment_score = 0
-
-        # 4. Global market score
-        try:
-            global_result = global_market_service.get_global_signal()
-            global_score = global_result["score"]
-        except Exception as e:
-            logger.warning(f"Global market failed: {e}")
-            global_result = {"score": 0, "markets": [], "news_magnitude": 0}
-            global_score = 0
+        sentiment_score = sent_result["score"]
+        global_score = global_result["score"]
 
         # 5. Dynamic weights — boost global when big news is detected
         w_tech = SIGNAL_WEIGHT_TECHNICAL
