@@ -88,6 +88,11 @@ const Predictions = {
                 const sign = change >= 0 ? '+' : '';
                 changeEl.textContent = `${sign}${change.toFixed(2)} (${changePct.toFixed(2)}%) in ${horizonLabel}`;
                 changeEl.className = `text-xs mt-1 ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+
+                // Update signal badge with AI prediction data
+                const aiDir = changePct > 0.1 ? 'BULLISH' : (changePct < -0.1 ? 'BEARISH' : 'NEUTRAL');
+                const aiConf = Math.min(99, Math.abs(changePct) * 10);
+                App.displaySignalBadge({ direction: aiDir, confidence: aiConf, source: 'ai' });
             }
         }
 
@@ -102,6 +107,9 @@ const Predictions = {
 
         // Regime badge
         this.renderRegime(data.regime);
+
+        // Volume analysis
+        this.renderVolumeAnalysis(data.volume_analysis);
 
         // Market context: sentiment + global data
         this.renderMarketContext(data);
@@ -336,10 +344,62 @@ const Predictions = {
             adjEl.classList.remove('hidden');
             const sign = adj.adjustment_pct >= 0 ? '+' : '';
             const color = adj.adjustment_pct > 0 ? 'text-green-400' : (adj.adjustment_pct < 0 ? 'text-red-400' : 'text-gray-400');
-            adjEl.innerHTML = `Market context adjustment: <span class="${color} font-medium">${sign}${adj.adjustment_pct.toFixed(2)}%</span> (context score: ${adj.blended_score || 0}, magnitude: ${adj.news_magnitude}, max: ±${adj.max_adjustment || 2}%)`;
+            const ctxW = adj.context_weight ? (adj.context_weight * 100).toFixed(0) : '10';
+            adjEl.innerHTML = `Market context adjustment: <span class="${color} font-medium">${sign}${adj.adjustment_pct.toFixed(2)}%</span> (context: ${ctxW}% weight, score: ${adj.blended_score || 0}, magnitude: ${adj.news_magnitude})`;
         } else if (adjEl) {
             adjEl.classList.add('hidden');
         }
+    },
+
+    renderVolumeAnalysis(vol) {
+        const panel = document.getElementById('volumeAnalysisPanel');
+        if (!panel) return;
+
+        if (!vol || !vol.current_volume) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        // Format volume in Indian notation (Cr / L)
+        const fmtVol = (v) => {
+            if (v >= 10000000) return (v / 10000000).toFixed(1) + 'Cr';
+            if (v >= 100000) return (v / 100000).toFixed(1) + 'L';
+            if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
+            return v.toLocaleString('en-IN');
+        };
+
+        document.getElementById('volCurrent').textContent = fmtVol(vol.current_volume);
+
+        // Volume ratio with color
+        const ratioEl = document.getElementById('volRatio');
+        const ratio = vol.volume_ratio || 1;
+        const ratioColor = ratio >= 1.2 ? 'text-green-400' : (ratio <= 0.8 ? 'text-red-400' : 'text-gray-400');
+        ratioEl.textContent = ratio.toFixed(1) + 'x';
+        ratioEl.className = `text-sm font-bold ${ratioColor}`;
+
+        // Trend with arrow
+        const trendEl = document.getElementById('volTrend');
+        const trendMap = {
+            'increasing': { arrow: '\u25B2', color: 'text-green-400' },
+            'decreasing': { arrow: '\u25BC', color: 'text-red-400' },
+            'stable': { arrow: '\u25B6', color: 'text-gray-400' },
+        };
+        const t = trendMap[vol.volume_trend] || trendMap['stable'];
+        const pct = vol.volume_trend_pct != null ? ` ${vol.volume_trend_pct > 0 ? '+' : ''}${vol.volume_trend_pct}%` : '';
+        trendEl.innerHTML = `<span class="${t.color}">${t.arrow} ${vol.volume_trend}${pct}</span>`;
+
+        // Conviction badge
+        const convEl = document.getElementById('volConviction');
+        const convColors = {
+            'high': 'bg-green-900 text-green-400 border-green-800',
+            'moderate': 'bg-yellow-900 text-yellow-400 border-yellow-800',
+            'low': 'bg-red-900 text-red-400 border-red-800',
+        };
+        const cc = convColors[vol.conviction] || convColors['moderate'];
+        const supIcon = vol.supports_prediction ? '\u2713' : '\u26A0';
+        convEl.innerHTML = `<span class="inline-block px-2 py-0.5 rounded-full border text-[10px] font-medium ${cc}">${supIcon} ${vol.conviction.toUpperCase()} conviction</span>` +
+            (vol.conviction_detail ? `<div class="text-gray-500 mt-1">${vol.conviction_detail}</div>` : '');
     },
 
     renderRegime(regime) {

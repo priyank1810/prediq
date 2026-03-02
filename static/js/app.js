@@ -42,6 +42,11 @@ const App = {
             API.setMarketMoodHandler((data) => {
                 this.renderMoodData(data);
             });
+            API.setSignalUpdateHandler((data) => {
+                if (data.symbol === this.currentSymbol) {
+                    this.displaySignalBadge(data);
+                }
+            });
         } catch (e) { /* WS not available yet */ }
 
         // Auto-refresh market overview every 10 seconds
@@ -340,6 +345,7 @@ const App = {
         document.getElementById('marketOverview').classList.remove('hidden');
         const liveBadge = document.getElementById('liveBadge');
         if (liveBadge) liveBadge.classList.add('hidden');
+        document.getElementById('stockSignalBadge')?.classList.add('hidden');
         this.loadMarketOverview();
     },
 
@@ -369,12 +375,14 @@ const App = {
         document.getElementById('stockName').textContent = name;
 
         try {
-            const [quote, history] = await Promise.all([
+            const [quote, history, signal] = await Promise.all([
                 API.getQuote(symbol),
-                API.getHistory(symbol, this.currentPeriod)
+                API.getHistory(symbol, this.currentPeriod),
+                API.getIntradaySignal(symbol).catch(() => null)
             ]);
 
             this.displayQuote(quote);
+            this.displaySignalBadge(signal);
             this.chart.init(this.currentPeriod === '1d' || this.currentPeriod === '5d');
             this.chart.setData(history);
 
@@ -412,6 +420,15 @@ const App = {
         document.getElementById('stockHigh').textContent = `₹${quote.high.toFixed(2)}`;
         document.getElementById('stockLow').textContent = `₹${quote.low.toFixed(2)}`;
         document.getElementById('stockVolume').textContent = quote.volume.toLocaleString('en-IN');
+
+        const volAvgEl = document.getElementById('stockVolAvg');
+        if (volAvgEl && quote.avg_volume && quote.avg_volume > 0) {
+            const ratio = (quote.volume / quote.avg_volume).toFixed(1);
+            const color = ratio >= 1.2 ? 'text-green-400' : (ratio <= 0.8 ? 'text-red-400' : 'text-gray-500');
+            volAvgEl.innerHTML = `<span class="${color} font-medium">${ratio}x avg</span>`;
+        } else if (volAvgEl) {
+            volAvgEl.innerHTML = '';
+        }
     },
 
     async loadHistory(symbol, period) {
@@ -659,6 +676,40 @@ const App = {
             const c = document.getElementById('sectorHeatmap');
             if (c) c.innerHTML = '<div class="col-span-3 text-center py-2 text-gray-600 text-[10px]">Unavailable</div>';
         }
+    },
+
+    displaySignalBadge(signal) {
+        const badge = document.getElementById('stockSignalBadge');
+        if (!badge || !signal) { badge?.classList.add('hidden'); return; }
+        badge.classList.remove('hidden');
+
+        const dir = signal.direction; // "BULLISH" | "BEARISH" | "NEUTRAL"
+        const conf = signal.confidence; // 0-100
+
+        const arrowEl = document.getElementById('signalArrowBadge');
+        const dirEl = document.getElementById('signalDirBadge');
+        const confEl = document.getElementById('signalConfBadge');
+
+        if (dir === 'BULLISH') {
+            arrowEl.innerHTML = '&#9650;'; arrowEl.className = 'text-lg text-green-400';
+            dirEl.textContent = 'BULLISH'; dirEl.className = 'text-xs font-bold text-green-400';
+        } else if (dir === 'BEARISH') {
+            arrowEl.innerHTML = '&#9660;'; arrowEl.className = 'text-lg text-red-400';
+            dirEl.textContent = 'BEARISH'; dirEl.className = 'text-xs font-bold text-red-400';
+        } else {
+            arrowEl.innerHTML = '&#9654;'; arrowEl.className = 'text-lg text-gray-400';
+            dirEl.textContent = 'NEUTRAL'; dirEl.className = 'text-xs font-bold text-gray-400';
+        }
+
+        if (signal.source === 'ai') {
+            dirEl.textContent = dir + ' ';
+            const aiTag = document.createElement('span');
+            aiTag.className = 'text-[9px] px-1 py-0.5 rounded bg-purple-900 text-purple-300 ml-1 font-medium';
+            aiTag.textContent = 'AI';
+            dirEl.appendChild(aiTag);
+        }
+
+        confEl.textContent = conf != null ? conf.toFixed(0) + '% conf' : '';
     },
 
     showToast(message, type = 'success') {

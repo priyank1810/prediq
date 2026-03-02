@@ -91,6 +91,13 @@
                             </button>
                         </div>
                         <span id="stockName" class="text-sm text-gray-400"></span>
+                        <div id="stockSignalBadge" class="hidden flex items-center gap-1.5 mt-1">
+                            <span id="signalArrowBadge" class="text-lg">&#9654;</span>
+                            <div>
+                                <div id="signalDirBadge" class="text-xs font-bold">-</div>
+                                <div id="signalConfBadge" class="text-[10px] text-gray-500">-</div>
+                            </div>
+                        </div>
                     </div>
                     <div class="sm:text-right">
                         <div id="stockPrice" class="text-2xl sm:text-3xl font-bold text-white"></div>
@@ -100,7 +107,7 @@
                         <div><span class="text-gray-500 text-xs sm:text-sm">Open</span><div id="stockOpen" class="text-white text-xs sm:text-sm"></div></div>
                         <div><span class="text-gray-500 text-xs sm:text-sm">High</span><div id="stockHigh" class="text-white text-xs sm:text-sm"></div></div>
                         <div><span class="text-gray-500 text-xs sm:text-sm">Low</span><div id="stockLow" class="text-white text-xs sm:text-sm"></div></div>
-                        <div><span class="text-gray-500 text-xs sm:text-sm">Volume</span><div id="stockVolume" class="text-white text-xs sm:text-sm"></div></div>
+                        <div><span class="text-gray-500 text-xs sm:text-sm">Volume</span><div id="stockVolume" class="text-white text-xs sm:text-sm"></div><div id="stockVolAvg" class="text-[10px] mt-0.5"></div></div>
                     </div>
                 </div>
             </div>
@@ -353,6 +360,25 @@
                     <div id="regimePanel" class="hidden mt-3">
                         <span class="text-xs text-gray-500">Market Regime: </span>
                         <span id="regimeBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium">-</span>
+                    </div>
+                    <!-- Volume Analysis Panel -->
+                    <div id="volumeAnalysisPanel" class="hidden mt-3 bg-dark-700 rounded-lg p-3">
+                        <h4 class="text-white text-sm font-semibold mb-2">Volume Analysis</h4>
+                        <div class="grid grid-cols-3 gap-3 text-center">
+                            <div>
+                                <div class="text-xs text-gray-400">Volume</div>
+                                <div id="volCurrent" class="text-sm font-bold text-white">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-400">vs 20d Avg</div>
+                                <div id="volRatio" class="text-sm font-bold">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-400">Trend</div>
+                                <div id="volTrend" class="text-sm font-bold">-</div>
+                            </div>
+                        </div>
+                        <div id="volConviction" class="mt-2 text-xs text-center"></div>
                     </div>
                     <!-- Market Context: Sentiment + Global (same data as signal panel) -->
                     <div id="predMarketContext" class="hidden mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
