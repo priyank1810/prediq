@@ -65,13 +65,6 @@ const API = {
     onSignalUpdate: null,
     setSignalUpdateHandler(handler) { this.onSignalUpdate = handler; },
 
-    // Option Chain (public)
-    getOptionExpiries(symbol) { return this.request(`/api/options/${encodeURIComponent(symbol)}/expiries`); },
-    getOptionChain(symbol, expiry = '') {
-        const q = expiry ? `?expiry=${encodeURIComponent(expiry)}` : '';
-        return this.request(`/api/options/${encodeURIComponent(symbol)}/chain${q}`);
-    },
-
     // FII/DII
     getFIIDIIDaily() { return this.request('/api/fii-dii/daily'); },
     getFIIDIIHistory(days = 30) { return this.request(`/api/fii-dii/history?days=${days}`); },

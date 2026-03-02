@@ -410,6 +410,61 @@ class PredictionService:
             logger.debug(f"SHAP explanation failed: {e}")
         return None
 
+    def _apply_market_context_adjustment(self, ensemble_preds: list, current_price: float,
+                                            sentiment: dict | None, global_data: dict | None) -> tuple[list, dict]:
+        """Adjust ensemble predictions based on sentiment and global market context.
+        Returns (adjusted_predictions, adjustment_info)."""
+        if not ensemble_preds or current_price <= 0:
+            return ensemble_preds, {}
+
+        # Compute adjustment factor from sentiment + global
+        sent_score = 0
+        global_score = 0
+        news_magnitude = 0
+
+        if sentiment:
+            sent_score = sentiment.get("score", 0)  # -100 to +100
+
+        if global_data:
+            global_score = global_data.get("score", 0)  # -100 to +100
+            news_magnitude = global_data.get("news_magnitude", 0)
+
+        # Dynamic weights similar to signal_service
+        w_sent = 0.15
+        w_glob = 0.10
+        if news_magnitude >= 80:
+            w_sent = 0.20
+            w_glob = 0.30
+        elif news_magnitude >= 60:
+            w_sent = 0.20
+            w_glob = 0.25
+        elif news_magnitude >= 30:
+            boost = (news_magnitude - 30) / 30 * 0.10
+            w_glob += boost
+
+        # Combined context score: -100 to +100
+        context_score = w_sent * sent_score + w_glob * global_score
+        # Convert to a price adjustment percentage (-2% to +2% for extreme values)
+        max_adjustment_pct = 2.0
+        adjustment_pct = (context_score / 100.0) * max_adjustment_pct
+
+        if abs(adjustment_pct) < 0.05:
+            return ensemble_preds, {"adjustment_pct": 0, "context_score": round(context_score, 1),
+                                    "news_magnitude": news_magnitude}
+
+        adjusted = []
+        for pred in ensemble_preds:
+            adj = pred * (1 + adjustment_pct / 100)
+            adjusted.append(round(adj, 2))
+
+        return adjusted, {
+            "adjustment_pct": round(adjustment_pct, 3),
+            "context_score": round(context_score, 1),
+            "sentiment_weight": round(w_sent, 2),
+            "global_weight": round(w_glob, 2),
+            "news_magnitude": news_magnitude,
+        }
+
     def _compute_contribution_breakdown(self, model_results: dict, regime: dict = None) -> dict:
         """Compute contribution breakdown: technical, seasonal, fundamental, sentiment."""
         weights = {}
@@ -532,6 +587,20 @@ class PredictionService:
             except Exception:
                 pass
 
+        # Fetch sentiment + global data (used for adjustment AND explanation)
+        sentiment = None
+        global_data = None
+        try:
+            from app.services.sentiment_service import sentiment_service
+            sentiment = sentiment_service.get_sentiment(symbol)
+        except Exception:
+            pass
+        try:
+            from app.services.global_market_service import global_market_service
+            global_data = global_market_service.get_global_signal()
+        except Exception:
+            pass
+
         if len(model_results) >= 2:
             result["ensemble"] = self._neural_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime)
         elif len(model_results) == 1:
@@ -539,6 +608,81 @@ class PredictionService:
             result["ensemble"] = {
                 "predictions": single["predictions"],
                 "dates": single["dates"],
+            }
+
+        # Apply market context adjustment to ensemble predictions
+        if result.get("ensemble") and result["ensemble"].get("predictions"):
+            current_price = 0
+            if daily_df is not None and not daily_df.empty:
+                current_price = float(daily_df["close"].iloc[-1])
+            elif is_intraday and intraday_df is not None and not intraday_df.empty:
+                current_price = float(intraday_df["close"].iloc[-1])
+
+            adjusted_preds, adj_info = self._apply_market_context_adjustment(
+                result["ensemble"]["predictions"], current_price, sentiment, global_data
+            )
+            if adj_info.get("adjustment_pct", 0) != 0:
+                result["ensemble"]["predictions_raw"] = result["ensemble"]["predictions"]
+                result["ensemble"]["predictions"] = adjusted_preds
+                result["ensemble"]["market_adjustment"] = adj_info
+
+        # Build combined sentiment: stock-specific + global headlines merged
+        stock_headlines = sentiment.get("headlines", []) if sentiment else []
+        global_headlines = global_data.get("headlines", []) if global_data else []
+
+        # Merge: stock-specific headlines first, then global headlines
+        combined_headlines = list(stock_headlines)
+        seen_titles = {h.get("title", "").lower() for h in combined_headlines}
+        for gh in global_headlines:
+            title = gh.get("title", "")
+            if title.lower() not in seen_titles:
+                combined_headlines.append({
+                    "title": title,
+                    "sentiment": gh.get("sentiment", "neutral"),
+                    "score": gh.get("score", 0),
+                    "link": gh.get("link", ""),
+                    "source": "global",
+                    "big_event": gh.get("big_event", False),
+                })
+                seen_titles.add(title.lower())
+
+        # Recount from merged headlines
+        pos_count = sum(1 for h in combined_headlines if h.get("sentiment") == "positive")
+        neg_count = sum(1 for h in combined_headlines if h.get("sentiment") == "negative")
+        neu_count = sum(1 for h in combined_headlines if h.get("sentiment") == "neutral")
+
+        # Blended sentiment score: stock-specific + global
+        stock_score = sentiment.get("score", 0) if sentiment else 0
+        global_score_val = global_data.get("news_score", global_data.get("score", 0)) if global_data else 0
+        news_mag = global_data.get("news_magnitude", 0) if global_data else 0
+
+        # Weight: normally stock-specific leads, but global dominates during big events
+        if news_mag >= 60:
+            blended_score = stock_score * 0.3 + global_score_val * 0.7
+        elif news_mag >= 30:
+            blended_score = stock_score * 0.5 + global_score_val * 0.5
+        else:
+            blended_score = stock_score * 0.7 + global_score_val * 0.3
+        blended_score = max(-100, min(100, round(blended_score, 2)))
+
+        result["sentiment"] = {
+            "score": blended_score,
+            "stock_score": stock_score,
+            "global_score": round(global_score_val, 2),
+            "headline_count": len(combined_headlines),
+            "positive_count": pos_count,
+            "negative_count": neg_count,
+            "neutral_count": neu_count,
+            "headlines": combined_headlines[:15],
+            "news_magnitude": news_mag,
+        }
+
+        if global_data:
+            result["global_market"] = {
+                "score": global_data.get("score", 0),
+                "news_magnitude": news_mag,
+                "markets": global_data.get("markets", []),
+                "headlines": global_data.get("headlines", []),
             }
 
         # SHAP drivers (Step 4)
@@ -564,19 +708,6 @@ class PredictionService:
 
         # Generate explanation
         try:
-            sentiment = None
-            global_data = None
-            try:
-                from app.services.sentiment_service import sentiment_service
-                sentiment = sentiment_service.get_sentiment(symbol)
-            except Exception:
-                pass
-            try:
-                from app.services.global_market_service import global_market_service
-                global_data = global_market_service.get_global_signal()
-            except Exception:
-                pass
-
             explanation = prediction_explainer.explain(
                 symbol=symbol,
                 prediction_result=result,

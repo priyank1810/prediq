@@ -246,7 +246,8 @@ const Signals = {
         });
 
         const chartData = candles.map(c => ({
-            time: Math.floor(new Date(c.time).getTime() / 1000),
+            // Parse IST datetime string as UTC so LightweightCharts axis shows IST
+            time: this._parseIST(c.time),
             open: c.open, high: c.high, low: c.low, close: c.close,
         }));
 
@@ -258,6 +259,14 @@ const Signals = {
                 this.intradayChart.applyOptions({ width: container.clientWidth });
             }
         });
+    },
+
+    _parseIST(dateStr) {
+        // Parse "YYYY-MM-DD HH:MM" as UTC so LightweightCharts displays IST face value
+        const [datePart, timePart] = dateStr.split(' ');
+        const [y, m, d] = datePart.split('-').map(Number);
+        const [h, min] = (timePart || '00:00').split(':').map(Number);
+        return Math.floor(Date.UTC(y, m - 1, d, h, min) / 1000);
     },
 
     displaySignalHistory(history) {

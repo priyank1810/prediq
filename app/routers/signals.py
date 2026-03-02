@@ -247,9 +247,50 @@ def signal_accuracy_stats():
 @router.get("/{symbol}")
 def get_intraday_signal(symbol: str):
     try:
-        signal = signal_service.get_signal(symbol.upper())
+        sym = symbol.upper()
+        signal = signal_service.get_signal(sym)
         if not signal:
             raise HTTPException(status_code=404, detail=f"No signal data for {symbol}")
+
+        # Log to SignalLog on-demand (replaces background scanner)
+        try:
+            from datetime import timedelta
+            from app.utils.helpers import now_ist
+            db = SessionLocal()
+            try:
+                # Only log if last log for this symbol is >1 min old (avoid spam)
+                last_log = (
+                    db.query(SignalLog)
+                    .filter(SignalLog.symbol == sym)
+                    .order_by(SignalLog.created_at.desc())
+                    .first()
+                )
+                should_log = (
+                    last_log is None
+                    or (now_ist() - last_log.created_at) > timedelta(minutes=1)
+                )
+                if should_log:
+                    price = None
+                    candles = signal.get("intraday_candles", [])
+                    if candles:
+                        price = candles[-1].get("close")
+                    log = SignalLog(
+                        symbol=sym,
+                        direction=signal["direction"],
+                        confidence=signal["confidence"],
+                        composite_score=signal["composite_score"],
+                        technical_score=signal["technical"]["score"],
+                        sentiment_score=signal["sentiment"]["score"],
+                        global_score=signal["global_market"]["score"],
+                        price_at_signal=price,
+                    )
+                    db.add(log)
+                    db.commit()
+            finally:
+                db.close()
+        except Exception:
+            pass  # Don't fail the response if logging fails
+
         return signal
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -3,6 +3,7 @@ import math
 import logging
 from datetime import datetime, timedelta
 from urllib.parse import quote
+from app.utils.helpers import now_ist
 
 import feedparser
 
@@ -64,7 +65,7 @@ class SentimentService:
                         try:
                             pub_time = datetime(*entry.published_parsed[:6])
                             # Extended to 7 days for time-decay weighting
-                            if datetime.now() - pub_time > timedelta(days=7):
+                            if now_ist() - pub_time > timedelta(days=7):
                                 continue
                         except Exception:
                             pass
@@ -101,7 +102,7 @@ class SentimentService:
                     if entry.get("published_parsed"):
                         try:
                             pub_time = datetime(*entry.published_parsed[:6])
-                            if datetime.now() - pub_time > timedelta(days=7):
+                            if now_ist() - pub_time > timedelta(days=7):
                                 continue
                         except Exception:
                             pass
@@ -150,8 +151,8 @@ class SentimentService:
                 import aiohttp
                 import json
                 from urllib.request import urlopen
-                today = datetime.now().strftime("%Y-%m-%d")
-                week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+                today = now_ist().strftime("%Y-%m-%d")
+                week_ago = (now_ist() - timedelta(days=7)).strftime("%Y-%m-%d")
                 url = f"https://finnhub.io/api/v1/company-news?symbol={symbol}.NS&from={week_ago}&to={today}&token={FINNHUB_API_KEY}"
                 try:
                     resp = urlopen(url, timeout=5)
@@ -190,7 +191,7 @@ class SentimentService:
         if pub_time is None:
             return 1.0  # No time info, assume recent
 
-        hours_ago = (datetime.now() - pub_time).total_seconds() / 3600
+        hours_ago = (now_ist() - pub_time).total_seconds() / 3600
         if hours_ago < 0:
             hours_ago = 0
 

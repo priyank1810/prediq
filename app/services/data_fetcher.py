@@ -7,7 +7,7 @@ import requests
 from datetime import datetime, timedelta
 from typing import Optional
 from app.utils.cache import cache
-from app.utils.helpers import yfinance_symbol
+from app.utils.helpers import yfinance_symbol, now_ist
 from app.config import CACHE_TTL_QUOTE, CACHE_TTL_HISTORY, CACHE_TTL_STOCK_LIST, CACHE_TTL_INTRADAY, POPULAR_STOCKS, INDICES
 
 NSE_EQUITY_CSV_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -258,7 +258,7 @@ class DataFetcher:
             "volume": data.get("totalTradedVolume", 0),
             "change": data.get("change", 0),
             "pct_change": data.get("pChange", 0),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_ist().isoformat(),
         }
 
     def _fetch_from_yfinance(self, symbol: str) -> dict:
@@ -306,7 +306,7 @@ class DataFetcher:
                 "volume": volume,
                 "change": round(change, 2),
                 "pct_change": round(pct_change, 2),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": now_ist().isoformat(),
             }
         except ValueError:
             raise

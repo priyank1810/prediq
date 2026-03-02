@@ -6,6 +6,7 @@ import feedparser
 import yfinance as yf
 
 from app.utils.cache import cache
+from app.utils.helpers import now_ist
 from app.config import (
     CACHE_TTL_GLOBAL, GLOBAL_MARKET_SYMBOLS,
     POSITIVE_KEYWORDS, NEGATIVE_KEYWORDS,
@@ -178,7 +179,7 @@ class GlobalMarketService:
                     if entry.get("published_parsed"):
                         try:
                             pub_time = datetime(*entry.published_parsed[:6])
-                            if datetime.now() - pub_time > timedelta(days=3):
+                            if now_ist() - pub_time > timedelta(days=3):
                                 continue
                         except Exception:
                             pass

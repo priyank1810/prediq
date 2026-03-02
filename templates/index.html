@@ -73,7 +73,6 @@
             <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
             <button class="nav-tab" data-tab="watchlist">Watchlist</button>
             <button class="nav-tab" data-tab="insights">AI Insights</button>
-            <button class="nav-tab" data-tab="options">F&O</button>
         </div>
     </nav>
 
@@ -258,9 +257,6 @@
                 </div>
             </div>
 
-            <!-- F&O Summary Card (auto-loaded when stock selected) -->
-            <div id="optionSummaryCard" class="hidden mt-4 bg-dark-800 rounded-lg p-3 sm:p-4"></div>
-
             <!-- Prediction Panel -->
             <div id="predictionPanel" class="hidden mt-4 bg-dark-800 rounded-lg p-3 sm:p-4">
                 <h3 class="text-base sm:text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
@@ -358,6 +354,23 @@
                         <span class="text-xs text-gray-500">Market Regime: </span>
                         <span id="regimeBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium">-</span>
                     </div>
+                    <!-- Market Context: Sentiment + Global (same data as signal panel) -->
+                    <div id="predMarketContext" class="hidden mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <!-- Sentiment -->
+                        <div class="bg-dark-700 rounded-lg p-3">
+                            <h4 class="text-white text-sm font-semibold mb-2">News Sentiment</h4>
+                            <div id="predSentimentSummary" class="text-xs text-gray-400 mb-2"></div>
+                            <div id="predSentimentHeadlines" class="max-h-40 overflow-y-auto"></div>
+                        </div>
+                        <!-- Global Markets -->
+                        <div class="bg-dark-700 rounded-lg p-3">
+                            <h4 class="text-white text-sm font-semibold mb-2">Global Markets</h4>
+                            <div id="predGlobalTicker" class="flex flex-wrap gap-1.5 mb-2"></div>
+                            <div id="predGlobalNews" class="max-h-40 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                    <!-- Market Adjustment Badge -->
+                    <div id="predAdjustmentBadge" class="hidden mt-2 text-xs text-gray-500"></div>
                     <div id="predictionTable" class="hidden mt-4 overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
@@ -592,37 +605,6 @@
             </div>
         </div>
 
-        <!-- F&O Tab -->
-        <div id="tab-options" class="tab-content hidden">
-            <!-- Symbol + Expiry Controls -->
-            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <h3 class="text-lg font-semibold text-white">Option Chain</h3>
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <input type="text" id="optionSymbolInput" placeholder="Symbol (e.g. NIFTY)"
-                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white flex-1 sm:w-44 min-w-[120px] placeholder-gray-500 focus:outline-none focus:border-accent-blue">
-                        <select id="optionExpirySelect"
-                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-accent-blue flex-1 sm:flex-none">
-                            <option value="">Select expiry...</option>
-                        </select>
-                        <button id="optionLoadBtn"
-                            class="px-4 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium whitespace-nowrap">
-                            Load
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Summary Bar -->
-            <div id="optionSummary" class="hidden bg-dark-800 rounded-lg p-3 sm:p-4 mb-4"></div>
-
-            <!-- Option Chain Table -->
-            <div id="optionChainContainer" class="bg-dark-800 rounded-lg overflow-x-auto">
-                <div class="text-center py-8 text-gray-500 text-sm">
-                    Enter a symbol and click Load to view the option chain.
-                </div>
-            </div>
-        </div>
     </main>
 
     <!-- Toast Container -->
@@ -636,7 +618,6 @@
     <script src="/static/js/insights.js?v=7"></script>
     <script src="/static/js/signals.js?v=7"></script>
     <script src="/static/js/notifications.js?v=7"></script>
-    <script src="/static/js/options.js?v=7"></script>
     <script src="/static/js/app.js?v=7"></script>
 </body>
 </html>

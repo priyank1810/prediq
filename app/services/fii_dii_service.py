@@ -1,6 +1,6 @@
 import logging
-from datetime import datetime
 from app.utils.cache import cache
+from app.utils.helpers import now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class FIIDIIService:
                 dii_net = round(-fii_net * 0.6, 2)  # DII often counter-trades FII
 
                 return {
-                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "date": now_ist().strftime("%Y-%m-%d"),
                     "fii": {
                         "buy": round(abs(fii_net) if fii_net > 0 else 0, 2),
                         "sell": round(abs(fii_net) if fii_net < 0 else 0, 2),
@@ -73,7 +73,7 @@ class FIIDIIService:
             logger.warning(f"FII/DII daily fetch failed: {e}")
 
         return {
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": now_ist().strftime("%Y-%m-%d"),
             "fii": {"buy": 0, "sell": 0, "net": 0},
             "dii": {"buy": 0, "sell": 0, "net": 0},
             "total_net": 0,

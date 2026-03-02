@@ -100,20 +100,25 @@ class MarketMoodService:
         return 50.0
 
     def _get_breadth_component(self) -> float:
-        """% of Nifty50 above their 20-day SMA -> 0-100."""
+        """% of Nifty50 above their 20-day SMA -> 0-100.
+        Uses yfinance directly — no Angel One calls for background mood."""
         try:
-            from app.services.data_fetcher import data_fetcher
             from app.config import NIFTY_50_SYMBOLS
+            from app.utils.helpers import yfinance_symbol
+            import yfinance as yf
             import ta
 
             above_sma = 0
             total = 0
 
-            for symbol in NIFTY_50_SYMBOLS[:5]:  # Sample 5 stocks (was 20)
+            for symbol in NIFTY_50_SYMBOLS[:5]:  # Sample 5 stocks
                 try:
-                    df = data_fetcher.get_historical_data(symbol, period="3mo")
+                    yf_sym = yfinance_symbol(symbol)
+                    df = yf.download(yf_sym, period="3mo", progress=False)
                     if df is not None and len(df) >= 25:
-                        close = df["close"]
+                        if hasattr(df.columns, 'levels'):
+                            df.columns = df.columns.get_level_values(0)
+                        close = df["Close"]
                         sma20 = ta.trend.SMAIndicator(close, window=20).sma_indicator()
                         if float(close.iloc[-1]) > float(sma20.iloc[-1]):
                             above_sma += 1

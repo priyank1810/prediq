@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from sqlalchemy.orm import Session
 from app.models import PriceAlert, SmartAlert
 from app.services.data_fetcher import data_fetcher
+from app.utils.helpers import now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class AlertService:
 
                 if should_trigger:
                     alert.is_triggered = True
-                    alert.triggered_at = datetime.utcnow()
+                    alert.triggered_at = now_ist()
                     db.commit()
                     triggered.append({
                         "symbol": alert.symbol,
@@ -94,7 +94,7 @@ class AlertService:
 
             if should_trigger:
                 alert.is_triggered = True
-                alert.triggered_at = datetime.utcnow()
+                alert.triggered_at = now_ist()
                 db.commit()
                 triggered.append({
                     "symbol": alert.symbol,
@@ -150,7 +150,7 @@ class AlertService:
 
                 if result:
                     alert.is_triggered = True
-                    alert.triggered_at = datetime.utcnow()
+                    alert.triggered_at = now_ist()
                     alert.trigger_data = json.dumps(result)
                     db.commit()
                     triggered.append({

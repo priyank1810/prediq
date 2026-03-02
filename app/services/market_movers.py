@@ -8,7 +8,7 @@ Uses a 3-tier fallback:
 
 import logging
 import time
-from datetime import datetime
+from app.utils.helpers import now_ist
 
 from app.config import CACHE_TTL_MARKET_MOVERS, NIFTY_50_SYMBOLS
 from app.utils.cache import cache
@@ -161,7 +161,7 @@ class MarketMoversService:
                 "losers": [],
                 "source": "unavailable",
                 "total_stocks": 0,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": now_ist().isoformat(),
             }
 
         # Sort by pct_change descending for gainers, ascending for losers
@@ -175,7 +175,7 @@ class MarketMoversService:
             "losers": losers,
             "source": source,
             "total_stocks": len(stocks),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_ist().isoformat(),
         }
 
         cache.set(cache_key, result, CACHE_TTL_MARKET_MOVERS)

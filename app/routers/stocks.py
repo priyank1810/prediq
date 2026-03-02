@@ -73,7 +73,12 @@ def get_history(symbol: str, period: str = Query("1y")):
             if df is None or df.empty:
                 raise HTTPException(status_code=404, detail=f"No intraday data for {symbol}")
             # Convert datetime to Unix timestamp (seconds) for LightweightCharts
-            df["date"] = pd.to_datetime(df["datetime"]).astype("int64") // 10**9
+            dt_col = pd.to_datetime(df["datetime"])
+            df["date"] = dt_col.astype("int64") // 10**9
+            # LightweightCharts displays UTC; if timestamps are tz-aware (IST),
+            # add IST offset so chart axis shows IST time instead of UTC
+            if dt_col.dt.tz is not None:
+                df["date"] = df["date"] + 19800  # +5h30m IST offset
             cols = ["date", "open", "high", "low", "close", "volume"]
             df = df[[c for c in cols if c in df.columns]]
             return df.to_dict(orient="records")

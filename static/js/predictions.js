@@ -103,6 +103,9 @@ const Predictions = {
         // Regime badge
         this.renderRegime(data.regime);
 
+        // Market context: sentiment + global data
+        this.renderMarketContext(data);
+
         // Multi-step prediction table (show for horizons with multiple data points)
         const table = document.getElementById('predictionTable');
         const tbody = document.getElementById('predictionTableBody');
@@ -241,6 +244,102 @@ const Predictions = {
         document.getElementById('contribBarSeasonal').style.width = seasonal + '%';
         document.getElementById('contribBarFund').style.width = fund + '%';
         document.getElementById('contribBarSent').style.width = sent + '%';
+    },
+
+    renderMarketContext(data) {
+        const panel = document.getElementById('predMarketContext');
+        if (!panel) return;
+
+        const hasSentiment = data.sentiment && (data.sentiment.headline_count > 0 || data.sentiment.score !== 0);
+        const hasGlobal = data.global_market && (data.global_market.markets?.length > 0 || data.global_market.headlines?.length > 0);
+
+        if (!hasSentiment && !hasGlobal) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        // Sentiment summary + headlines (merged: stock-specific + global)
+        const summaryEl = document.getElementById('predSentimentSummary');
+        const headlinesEl = document.getElementById('predSentimentHeadlines');
+        if (data.sentiment) {
+            const s = data.sentiment;
+            const scoreColor = s.score > 10 ? 'text-green-400' : (s.score < -10 ? 'text-red-400' : 'text-gray-400');
+            const magBadge = s.news_magnitude >= 60
+                ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-900 text-red-400 ml-2">High Impact</span>'
+                : s.news_magnitude >= 30
+                ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-900 text-yellow-400 ml-2">Moderate</span>'
+                : '';
+            summaryEl.innerHTML = `Score: <span class="${scoreColor} font-medium">${s.score > 0 ? '+' : ''}${s.score.toFixed(0)}</span> | ${s.positive_count} positive, ${s.negative_count} negative, ${s.neutral_count} neutral${magBadge}`;
+
+            if (s.headlines && s.headlines.length > 0) {
+                headlinesEl.innerHTML = s.headlines.slice(0, 8).map(h => {
+                    const c = h.sentiment === 'positive' ? 'text-green-400 bg-green-900' :
+                              (h.sentiment === 'negative' ? 'text-red-400 bg-red-900' : 'text-gray-400 bg-gray-800');
+                    const bigTag = h.big_event ? '<span class="text-yellow-400 ml-1">!</span>' : '';
+                    const srcTag = h.source === 'global' ? '<span class="text-[9px] text-gray-600 ml-1">[global]</span>' : '';
+                    return `<div class="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
+                        <span class="text-[10px] px-1.5 py-0.5 rounded ${c} whitespace-nowrap">${h.sentiment}</span>
+                        <a href="${h.link || '#'}" target="_blank" rel="noopener" class="text-[11px] text-gray-300 hover:text-white line-clamp-2">${h.title}${bigTag}${srcTag}</a>
+                    </div>`;
+                }).join('');
+            } else {
+                headlinesEl.innerHTML = '<div class="text-gray-500 text-xs">No recent headlines</div>';
+            }
+        }
+
+        // Global markets ticker + news
+        const tickerEl = document.getElementById('predGlobalTicker');
+        const newsEl = document.getElementById('predGlobalNews');
+        if (data.global_market) {
+            const gm = data.global_market;
+            // Market ticker
+            if (gm.markets && gm.markets.length > 0) {
+                tickerEl.innerHTML = gm.markets.map(m => {
+                    const color = m.change_pct > 0 ? 'text-green-400' : (m.change_pct < 0 ? 'text-red-400' : 'text-gray-400');
+                    const sign = m.change_pct > 0 ? '+' : '';
+                    const arrow = m.change_pct > 0 ? '&#9650;' : (m.change_pct < 0 ? '&#9660;' : '&#9654;');
+                    return `<div class="flex items-center gap-1 px-2 py-1 bg-dark-600 rounded text-[10px]">
+                        <span class="text-gray-400">${m.name}</span>
+                        <span class="${color}">${arrow} ${sign}${m.change_pct}%</span>
+                    </div>`;
+                }).join('');
+            }
+
+            // Global news headlines
+            const magnitude = gm.news_magnitude || 0;
+            const magBadge = magnitude >= 60
+                ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-900 text-red-400 mb-1 inline-block">High Impact (${magnitude})</span>`
+                : magnitude >= 30
+                ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-400 mb-1 inline-block">Moderate (${magnitude})</span>`
+                : '';
+
+            if (gm.headlines && gm.headlines.length > 0) {
+                newsEl.innerHTML = magBadge + gm.headlines.slice(0, 5).map(h => {
+                    const c = h.sentiment === 'positive' ? 'text-green-400 bg-green-900' :
+                              (h.sentiment === 'negative' ? 'text-red-400 bg-red-900' : 'text-gray-400 bg-gray-800');
+                    const bigTag = h.big_event ? '<span class="text-yellow-400 ml-1">!</span>' : '';
+                    return `<div class="flex items-start gap-2 py-1 border-b border-gray-800 last:border-0">
+                        <span class="text-[10px] px-1.5 py-0.5 rounded ${c} whitespace-nowrap">${h.sentiment}</span>
+                        <span class="text-[11px] text-gray-300 line-clamp-2">${h.title}${bigTag}</span>
+                    </div>`;
+                }).join('');
+            } else {
+                newsEl.innerHTML = magBadge || '<div class="text-gray-500 text-xs">No global news</div>';
+            }
+        }
+
+        // Market adjustment badge
+        const adjEl = document.getElementById('predAdjustmentBadge');
+        if (adjEl && data.ensemble && data.ensemble.market_adjustment) {
+            const adj = data.ensemble.market_adjustment;
+            adjEl.classList.remove('hidden');
+            const sign = adj.adjustment_pct >= 0 ? '+' : '';
+            const color = adj.adjustment_pct > 0 ? 'text-green-400' : (adj.adjustment_pct < 0 ? 'text-red-400' : 'text-gray-400');
+            adjEl.innerHTML = `Market context adjustment: <span class="${color} font-medium">${sign}${adj.adjustment_pct.toFixed(2)}%</span> (sentiment w: ${(adj.sentiment_weight * 100).toFixed(0)}%, global w: ${(adj.global_weight * 100).toFixed(0)}%, magnitude: ${adj.news_magnitude})`;
+        } else if (adjEl) {
+            adjEl.classList.add('hidden');
+        }
     },
 
     renderRegime(regime) {

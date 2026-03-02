@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from collections import defaultdict
+from app.utils.helpers import now_ist
 
 
 class LiveCandleBuilder:
@@ -24,7 +25,7 @@ class LiveCandleBuilder:
 
     def on_tick(self, symbol: str, ltp: float, volume: int = 0, bid: float = 0.0, ask: float = 0.0):
         """Called from WebSocket price_streamer when Angel One provides a quote."""
-        now = datetime.now()
+        now = now_ist()
         self._ticks[symbol].append((now, ltp, volume, bid, ask))
 
         # Track spread

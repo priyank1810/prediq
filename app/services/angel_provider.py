@@ -16,6 +16,7 @@ import logging
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Optional
+from app.utils.helpers import now_ist
 
 import pyotp
 from dotenv import load_dotenv
@@ -305,7 +306,7 @@ class AngelOneProvider:
                 "volume": int(data.get("volume", 0) or 0),
                 "change": change,
                 "pct_change": pct_change,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": now_ist().isoformat(),
                 "source": "angel_one",
             }
 
@@ -377,7 +378,7 @@ class AngelOneProvider:
                                 "volume": int(item.get("tradeVolume", 0) or 0),
                                 "change": change,
                                 "pct_change": pct_change,
-                                "timestamp": datetime.now().isoformat(),
+                                "timestamp": now_ist().isoformat(),
                                 "source": "angel_one",
                             }
 
@@ -399,7 +400,7 @@ class AngelOneProvider:
             return None
 
         days = PERIOD_TO_DAYS.get(period, 365)
-        to_date = datetime.now()
+        to_date = now_ist()
         from_date = to_date - timedelta(days=days)
 
         # Use current time if before market close, otherwise 15:30
@@ -463,7 +464,7 @@ class AngelOneProvider:
 
         angel_interval = INTERVAL_MAP.get(interval, "FIFTEEN_MINUTE")
         days = PERIOD_TO_DAYS.get(period, 5)
-        to_date = datetime.now()
+        to_date = now_ist()
         from_date = to_date - timedelta(days=days)
 
         # Use current time if before market close, otherwise 15:30
