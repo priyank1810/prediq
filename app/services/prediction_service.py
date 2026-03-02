@@ -465,40 +465,44 @@ class PredictionService:
             "news_magnitude": news_magnitude,
         }
 
-    def _compute_contribution_breakdown(self, model_results: dict, regime: dict = None) -> dict:
-        """Compute contribution breakdown: technical, seasonal, fundamental, sentiment."""
-        weights = {}
-        for name in model_results:
-            weights[name] = 1.0 / max(model_results[name].get("mape", 5.0), 0.01)
+    def _compute_contribution_breakdown(self, ensemble_result: dict, adj_info: dict = None) -> dict:
+        """Compute contribution breakdown using actual ensemble weights.
 
-        total = sum(weights.values())
-        if total <= 0:
+        Uses the weights from the ensemble (already reflecting MAPE + regime adjustments)
+        rather than recomputing from raw MAPEs which misses Prophet.
+        """
+        # Extract actual weights from ensemble result
+        lstm_w = ensemble_result.get("lstm_weight", 0)
+        xgb_w = ensemble_result.get("xgboost_weight", 0)
+        prophet_w = ensemble_result.get("prophet_weight", 0)
+
+        total_model_w = lstm_w + xgb_w + prophet_w
+        if total_model_w <= 0:
             return {"technical": 33.0, "seasonal": 33.0, "fundamental": 0.0, "sentiment": 34.0}
 
-        weights = {k: v / total for k, v in weights.items()}
+        # Normalize model weights to sum to 1
+        lstm_w /= total_model_w
+        xgb_w /= total_model_w
+        prophet_w /= total_model_w
 
-        # Map models to contribution categories:
-        # XGBoost → technical (it's feature-based)
-        # Prophet → seasonal (it's time-series with seasonality)
-        # LSTM → mix of technical and sentiment (uses context features)
-        technical = weights.get("xgboost", 0) * 100 + weights.get("lstm", 0) * 50
-        seasonal = weights.get("prophet", 0) * 100
-        sentiment = weights.get("lstm", 0) * 30  # LSTM uses sentiment features
-        fundamental = weights.get("lstm", 0) * 20  # Small fundamental component
+        # If market context adjustment was applied, carve out sentiment portion
+        adj_pct = abs(adj_info.get("adjustment_pct", 0)) if adj_info else 0
+        # Sentiment contribution: scale from 0% (no adjustment) to ~15% (max 2% adjustment)
+        sentiment_share = min(15.0, adj_pct * 7.5)
+        model_share = 100.0 - sentiment_share
 
-        total_pct = technical + seasonal + sentiment + fundamental
-        if total_pct > 0:
-            factor = 100.0 / total_pct
-            technical *= factor
-            seasonal *= factor
-            sentiment *= factor
-            fundamental *= factor
+        # Map models to categories:
+        # LSTM → Deep learning pattern recognition (technical)
+        # XGBoost → Feature-engineered technical indicators
+        # Prophet → Time-series decomposition with seasonality
+        technical = (lstm_w + xgb_w) * model_share
+        seasonal = prophet_w * model_share
 
         return {
             "technical": round(technical, 1),
             "seasonal": round(seasonal, 1),
-            "fundamental": round(fundamental, 1),
-            "sentiment": round(sentiment, 1),
+            "fundamental": 0.0,
+            "sentiment": round(sentiment_share, 1),
         }
 
     def predict(self, symbol: str, horizon: str = "1d", models: list = None) -> dict:
@@ -611,6 +615,7 @@ class PredictionService:
             }
 
         # Apply market context adjustment to ensemble predictions
+        adj_info = {}
         if result.get("ensemble") and result["ensemble"].get("predictions"):
             current_price = 0
             if daily_df is not None and not daily_df.empty:
@@ -665,7 +670,7 @@ class PredictionService:
             blended_score = stock_score * 0.7 + global_score_val * 0.3
         blended_score = max(-100, min(100, round(blended_score, 2)))
 
-        result["sentiment"] = {
+        merged_sentiment = {
             "score": blended_score,
             "stock_score": stock_score,
             "global_score": round(global_score_val, 2),
@@ -676,6 +681,7 @@ class PredictionService:
             "headlines": combined_headlines[:15],
             "news_magnitude": news_mag,
         }
+        result["sentiment"] = merged_sentiment
 
         if global_data:
             result["global_market"] = {
@@ -685,7 +691,7 @@ class PredictionService:
                 "headlines": global_data.get("headlines", []),
             }
 
-        # SHAP drivers (Step 4)
+        # SHAP drivers
         if not is_intraday and daily_df is not None:
             try:
                 shap_drivers = self._get_shap_drivers(symbol, daily_df)
@@ -694,11 +700,13 @@ class PredictionService:
             except Exception:
                 pass
 
-        # Contribution breakdown (Step 15)
-        if model_results:
-            result["contribution_breakdown"] = self._compute_contribution_breakdown(model_results, regime)
+        # Contribution breakdown — uses actual ensemble weights, not recomputed MAPEs
+        if result.get("ensemble"):
+            result["contribution_breakdown"] = self._compute_contribution_breakdown(
+                result["ensemble"], adj_info
+            )
 
-        # Fundamental bias (Step 8)
+        # Fundamental bias
         try:
             fundamental = self._get_fundamental_bias(symbol)
             if fundamental:
@@ -706,13 +714,14 @@ class PredictionService:
         except Exception:
             pass
 
-        # Generate explanation
+        # Generate explanation — pass MERGED sentiment (stock + global combined)
+        # so the explainer shows correct headline counts
         try:
             explanation = prediction_explainer.explain(
                 symbol=symbol,
                 prediction_result=result,
                 df=daily_df,
-                sentiment=sentiment,
+                sentiment=merged_sentiment,
                 global_data=global_data,
             )
             result["explanation"] = explanation
