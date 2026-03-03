@@ -1,6 +1,6 @@
 const App = {
     currentSymbol: null,
-    currentPeriod: '1y',
+    currentPeriod: '1mo',
     chart: null,
     rsiChart: null,
     macdChart: null,
@@ -446,7 +446,7 @@ const App = {
 
     async loadIndicators(symbol) {
         try {
-            const data = await API.getIndicators(symbol);
+            const data = await API.getIndicators(symbol, this.currentPeriod);
 
             this.chart.clearOverlays();
 
@@ -480,6 +480,11 @@ const App = {
                 const signalLine = data.macd_signal.dates.map((d, i) => ({ time: d, value: data.macd_signal.values[i] }));
                 const histogram = data.macd_histogram.dates.map((d, i) => ({ time: d, value: data.macd_histogram.values[i] }));
                 this.macdChart.setMACDData(macdLine, signalLine, histogram);
+            }
+
+            // Re-fit chart to selected period after overlays are added
+            if (this.chart && this.chart.chart) {
+                this.chart.chart.timeScale().fitContent();
             }
         } catch (e) {
             console.error('Failed to load indicators:', e);

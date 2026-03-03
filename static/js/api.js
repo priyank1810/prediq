@@ -112,7 +112,7 @@ const API = {
     },
 
     // Indicators (public)
-    getIndicators(symbol) { return this.request(`/api/indicators/${encodeURIComponent(symbol)}`); },
+    getIndicators(symbol, period = '1y') { return this.request(`/api/indicators/${encodeURIComponent(symbol)}?period=${period}`); },
 
     // Watchlist
     getWatchlist() { return this.request('/api/watchlist'); },
