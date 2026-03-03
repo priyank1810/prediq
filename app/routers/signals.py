@@ -163,6 +163,18 @@ def backtest_pnl_simulation():
         db.close()
 
 
+@router.get("/stats/backtest-signal")
+def backtest_signal(symbol: str = Query(...), test_days: int = Query(60, ge=10, le=252)):
+    """Backtest new vs old signal system on historical data."""
+    try:
+        from app.services.backtest_service import backtest_service
+        return backtest_service.backtest_signal(symbol.upper(), test_days)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+
+
 @router.get("/scan/high-confidence")
 def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
     """Get the most recent high-confidence signal for each symbol."""

@@ -171,6 +171,12 @@ const API = {
     onMarketMoodUpdate: null,
     setMarketMoodHandler(handler) { this.onMarketMoodUpdate = handler; },
 
+    // OI/MTF push handlers
+    onOIUpdate: null,
+    setOIUpdateHandler(handler) { this.onOIUpdate = handler; },
+    onMTFUpdate: null,
+    setMTFUpdateHandler(handler) { this.onMTFUpdate = handler; },
+
     // WebSocket with exponential backoff
     connectWebSocket(symbols, onPriceUpdate, onAlert) {
         this._wsBackoff = 1000; // Reset on fresh connect
@@ -197,6 +203,8 @@ const API = {
             if (msg.type === 'high_confidence_alert' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
             if (msg.type === 'market_mood_update' && this.onMarketMoodUpdate) this.onMarketMoodUpdate(msg.data);
             if (msg.type === 'smart_alert_triggered' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
+            if (msg.type === 'oi_update' && this.onOIUpdate) this.onOIUpdate(msg.data);
+            if (msg.type === 'mtf_update' && this.onMTFUpdate) this.onMTFUpdate(msg.data);
         };
         this.ws.onclose = () => {
             setTimeout(() => this._connectWS(), this._wsBackoff);

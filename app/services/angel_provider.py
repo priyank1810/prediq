@@ -282,17 +282,6 @@ class AngelOneProvider:
             low = float(data.get("low", 0))
             close = float(data.get("close", 0))  # prev close
 
-            # ltpData typically returns rupees, but may return paise for
-            # some endpoints. Index tokens (starting with '999') always
-            # return actual points — never divide those.
-            is_index = token.startswith("999")
-            if not is_index and ltp > 100000:
-                ltp /= 100
-                open_price /= 100
-                high /= 100
-                low /= 100
-                close /= 100
-
             change = round(ltp - close, 2) if close else 0
             pct_change = round((change / close) * 100, 2) if close else 0
 
@@ -358,22 +347,17 @@ class AngelOneProvider:
                             if not sym:
                                 continue
 
-                            # Index tokens (starting with '999') return values in
-                            # actual points; stock tokens return paise (÷100).
-                            is_index = token.startswith("999")
-                            divisor = 1 if is_index else 100
-
-                            ltp = float(item.get("ltp", 0)) / divisor
-                            close = float(item.get("close", 0)) / divisor
+                            ltp = float(item.get("ltp", 0))
+                            close = float(item.get("close", 0))
                             change = round(ltp - close, 2) if close else 0
                             pct_change = round((change / close) * 100, 2) if close else 0
 
                             results[sym] = {
                                 "symbol": sym,
                                 "ltp": round(ltp, 2),
-                                "open": round(float(item.get("open", 0)) / divisor, 2),
-                                "high": round(float(item.get("high", 0)) / divisor, 2),
-                                "low": round(float(item.get("low", 0)) / divisor, 2),
+                                "open": round(float(item.get("open", 0)), 2),
+                                "high": round(float(item.get("high", 0)), 2),
+                                "low": round(float(item.get("low", 0)), 2),
                                 "close": round(close, 2),
                                 "volume": int(item.get("tradeVolume", 0) or 0),
                                 "change": change,

@@ -43,6 +43,8 @@ LSTM_LEARNING_RATE = 0.0005
 # Price streaming
 PRICE_STREAM_INTERVAL = 5  # seconds
 ALERT_CHECK_INTERVAL = 30  # seconds
+OI_STREAM_INTERVAL = 300  # 5 minutes
+MTF_STREAM_INTERVAL = 300  # 5 minutes
 
 # --- Intraday Signal Config ---
 CACHE_TTL_INTRADAY = 120
@@ -59,9 +61,17 @@ SIGNAL_WEIGHT_OI = 0.10
 # Adaptive Weights
 ADAPTIVE_WEIGHTS_MIN_SIGNALS = 30
 ADAPTIVE_WEIGHTS_CACHE_TTL = 600  # 10 minutes
+ADAPTIVE_WEIGHTS_DECAY_HALFLIFE_DAYS = 7
 
 # OI Analysis
 CACHE_TTL_OI = 300  # 5 minutes
+
+# MTF Confluence Cache
+CACHE_TTL_MTF_DAILY = 900  # 15 minutes
+CACHE_TTL_MTF_1H = 120  # 2 minutes
+
+# Sector-Relative Strength
+CACHE_TTL_SECTOR_STRENGTH = 300  # 5 minutes
 
 HIGH_CONFIDENCE_THRESHOLD = 60
 HIGH_CONFIDENCE_SCAN_INTERVAL = 300  # seconds (5 min to avoid API rate limiting)

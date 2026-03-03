@@ -1,7 +1,11 @@
 import logging
+import math
 import time
 import numpy as np
-from app.config import SIGNAL_WEIGHT_TECHNICAL, SIGNAL_WEIGHT_SENTIMENT, SIGNAL_WEIGHT_GLOBAL, SECTOR_MAP
+from app.config import (
+    SIGNAL_WEIGHT_TECHNICAL, SIGNAL_WEIGHT_SENTIMENT, SIGNAL_WEIGHT_GLOBAL,
+    SECTOR_MAP, ADAPTIVE_WEIGHTS_DECAY_HALFLIFE_DAYS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,42 +68,60 @@ class AdaptiveWeightService:
                     self._cache[cache_key] = (time.time(), fallback)
                     return fallback
 
-                # Compute per-component accuracy
-                tech_correct = 0
-                sent_correct = 0
-                glob_correct = 0
-                total = len(signals)
+                # Compute per-component accuracy with exponential decay
+                halflife_sec = ADAPTIVE_WEIGHTS_DECAY_HALFLIFE_DAYS * 86400
+                ln2 = math.log(2)
+                now = time.time()
+
+                tech_weighted_correct = 0.0
+                sent_weighted_correct = 0.0
+                glob_weighted_correct = 0.0
+                total_weight = 0.0
 
                 for sig in signals:
+                    # Compute decay weight based on signal age
+                    try:
+                        age_seconds = now - sig.created_at.timestamp()
+                    except Exception:
+                        age_seconds = 0  # Timezone-naive fallback
+                    w = math.exp(-ln2 / halflife_sec * max(0, age_seconds))
+
                     correct = sig.was_correct
-                    # Check if each component agreed with the correct outcome
-                    # If signal was correct, components with same sign as composite agreed
-                    # If signal was incorrect, components with same sign were wrong
                     if correct:
                         if sig.technical_score > 0 and sig.composite_score > 0:
-                            tech_correct += 1
+                            tech_weighted_correct += w
                         elif sig.technical_score < 0 and sig.composite_score < 0:
-                            tech_correct += 1
+                            tech_weighted_correct += w
                         elif abs(sig.technical_score) < 5:
-                            tech_correct += 0.5
+                            tech_weighted_correct += 0.5 * w
 
                         if sig.sentiment_score > 0 and sig.composite_score > 0:
-                            sent_correct += 1
+                            sent_weighted_correct += w
                         elif sig.sentiment_score < 0 and sig.composite_score < 0:
-                            sent_correct += 1
+                            sent_weighted_correct += w
                         elif abs(sig.sentiment_score) < 5:
-                            sent_correct += 0.5
+                            sent_weighted_correct += 0.5 * w
 
                         if sig.global_score > 0 and sig.composite_score > 0:
-                            glob_correct += 1
+                            glob_weighted_correct += w
                         elif sig.global_score < 0 and sig.composite_score < 0:
-                            glob_correct += 1
+                            glob_weighted_correct += w
                         elif abs(sig.global_score) < 5:
-                            glob_correct += 0.5
+                            glob_weighted_correct += 0.5 * w
 
-                tech_acc = tech_correct / total
-                sent_acc = sent_correct / total
-                glob_acc = glob_correct / total
+                    total_weight += w
+
+                # Guard: if effective sample too small, fall back to static
+                effective_sample_size = total_weight
+                if effective_sample_size < ADAPTIVE_WEIGHTS_MIN_SIGNALS / 2:
+                    fallback["effective_sample_size"] = round(effective_sample_size, 1)
+                    fallback["decay_halflife_days"] = ADAPTIVE_WEIGHTS_DECAY_HALFLIFE_DAYS
+                    self._cache[cache_key] = (time.time(), fallback)
+                    return fallback
+
+                tech_acc = tech_weighted_correct / total_weight
+                sent_acc = sent_weighted_correct / total_weight
+                glob_acc = glob_weighted_correct / total_weight
 
                 # Softmax-like weighting with temperature=2.0
                 temp = 2.0
@@ -125,7 +147,9 @@ class AdaptiveWeightService:
                         "sentiment": round(w_sent, 4),
                         "global": round(w_glob, 4),
                     },
-                    "sample_size": total,
+                    "sample_size": len(signals),
+                    "effective_sample_size": round(effective_sample_size, 1),
+                    "decay_halflife_days": ADAPTIVE_WEIGHTS_DECAY_HALFLIFE_DAYS,
                     "component_accuracies": {
                         "technical": round(tech_acc, 4),
                         "sentiment": round(sent_acc, 4),

@@ -17,7 +17,7 @@ from app.database import engine, Base
 from app.routers import stocks, predictions, portfolio, alerts, indicators, signals, watchlist
 from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
-from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator
+from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, oi_streamer, mtf_streamer
 
 
 async def smart_alert_checker():
@@ -118,6 +118,8 @@ async def lifespan(app: FastAPI):
     validator_task = asyncio.create_task(signal_accuracy_validator())
     smart_alert_task = asyncio.create_task(smart_alert_checker())
     mood_task = asyncio.create_task(market_mood_broadcaster())
+    oi_task = asyncio.create_task(oi_streamer())
+    mtf_task = asyncio.create_task(mtf_streamer())
     yield
     # Shutdown
     streamer_task.cancel()
@@ -125,6 +127,8 @@ async def lifespan(app: FastAPI):
     validator_task.cancel()
     smart_alert_task.cancel()
     mood_task.cancel()
+    oi_task.cancel()
+    mtf_task.cancel()
 
 
 app = FastAPI(title="Indian Stock Market Tracker & AI Predictor", lifespan=lifespan)

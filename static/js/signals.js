@@ -17,6 +17,16 @@ const Signals = {
                 this.displaySignal(data);
             }
         });
+        API.setOIUpdateHandler((data) => {
+            if (data.symbol === App.currentSymbol) {
+                this.renderOIAnalysis({ oi_analysis: { ...data, available: true } });
+            }
+        });
+        API.setMTFUpdateHandler((data) => {
+            if (data.symbol === App.currentSymbol) {
+                this.renderMTFConfluence(data);
+            }
+        });
     },
 
     async loadSignal(symbol) {
@@ -120,6 +130,9 @@ const Signals = {
             `;
         }
 
+        // Sector-relative strength badge
+        this.renderSectorBadge(data.sector_strength);
+
         // News
         this.displayHeadlines(data.sentiment.headlines || []);
 
@@ -141,7 +154,7 @@ const Signals = {
 
         // Intraday chart
         if (data.intraday_candles && data.intraday_candles.length > 0) {
-            this.renderIntradayChart(data.intraday_candles, data.support_resistance);
+            this.renderIntradayChart(data.intraday_candles, data.support_resistance, data.technical && data.technical.raw);
         }
 
         // Timestamp — always display in IST regardless of browser timezone
@@ -382,7 +395,22 @@ const Signals = {
         }
     },
 
-    renderIntradayChart(candles, sr) {
+    renderSectorBadge(sector) {
+        const el = document.getElementById('sectorStrengthBadge');
+        if (!el) return;
+        if (!sector || !sector.available) {
+            el.classList.add('hidden');
+            return;
+        }
+        el.classList.remove('hidden');
+        const rel = sector.relative_pct;
+        const dir = rel >= 0 ? 'Outperforming' : 'Underperforming';
+        const cls = rel >= 0 ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400';
+        const sign = rel >= 0 ? '+' : '';
+        el.innerHTML = `<span class="text-[10px] px-2 py-0.5 rounded-full ${cls}">${dir} ${sector.sector} ${sign}${rel.toFixed(1)}%</span>`;
+    },
+
+    renderIntradayChart(candles, sr, techRaw) {
         const container = document.getElementById('intradayChart');
         if (!container) return;
 
@@ -442,6 +470,31 @@ const Signals = {
                     });
                 }
             });
+        }
+
+        // VWAP + band lines
+        if (techRaw && techRaw.vwap && techRaw.datetimes) {
+            const dts = techRaw.datetimes;
+            const mkSeries = (values, color, style) => {
+                const lineData = [];
+                for (let i = 0; i < values.length && i < dts.length; i++) {
+                    if (values[i] != null) {
+                        lineData.push({ time: this._parseIST(dts[i]), value: values[i] });
+                    }
+                }
+                if (lineData.length > 0) {
+                    const ls = this.intradayChart.addLineSeries({
+                        color, lineWidth: 1, lineStyle: style, priceLineVisible: false,
+                        lastValueVisible: false, crosshairMarkerVisible: false,
+                    });
+                    ls.setData(lineData);
+                }
+            };
+            mkSeries(techRaw.vwap, '#ffd600', 0);              // solid yellow
+            mkSeries(techRaw.vwap_upper_1, 'rgba(255,214,0,0.5)', 2); // dashed
+            mkSeries(techRaw.vwap_lower_1, 'rgba(255,214,0,0.5)', 2);
+            mkSeries(techRaw.vwap_upper_2, 'rgba(255,214,0,0.25)', 2);
+            mkSeries(techRaw.vwap_lower_2, 'rgba(255,214,0,0.25)', 2);
         }
 
         this.intradayChart.timeScale().fitContent();

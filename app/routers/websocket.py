@@ -7,6 +7,7 @@ from app.database import SessionLocal
 from app.utils.helpers import is_market_open
 from app.config import (
     PRICE_STREAM_INTERVAL, ALERT_CHECK_INTERVAL,
+    OI_STREAM_INTERVAL, MTF_STREAM_INTERVAL,
 )
 
 router = APIRouter()
@@ -70,6 +71,24 @@ class ConnectionManager:
     async def broadcast_mood(self, data: dict):
         """Broadcast Market Mood Score to all connected clients."""
         await self.broadcast_to_all("market_mood_update", data)
+
+    async def broadcast_oi_update(self, symbol: str, data: dict):
+        """Broadcast OI analysis update to subscribers of a symbol."""
+        for ws in self.active_connections:
+            if symbol in self.subscriptions.get(id(ws), set()):
+                try:
+                    await ws.send_json({"type": "oi_update", "data": data})
+                except Exception:
+                    pass
+
+    async def broadcast_mtf_update(self, symbol: str, data: dict):
+        """Broadcast MTF confluence update to subscribers of a symbol."""
+        for ws in self.active_connections:
+            if symbol in self.subscriptions.get(id(ws), set()):
+                try:
+                    await ws.send_json({"type": "mtf_update", "data": data})
+                except Exception:
+                    pass
 
 
 manager = ConnectionManager()
@@ -229,3 +248,48 @@ async def signal_accuracy_validator():
         await asyncio.sleep(180)
 
 
+async def oi_streamer():
+    """Periodically push OI analysis updates for subscribed symbols."""
+    await asyncio.sleep(60)
+    while True:
+        try:
+            if is_market_open() and manager.active_connections:
+                symbols = list(manager.get_all_subscribed_symbols())
+                if symbols:
+                    loop = asyncio.get_event_loop()
+                    for sym in symbols:
+                        try:
+                            from app.services.oi_service import oi_service
+                            result = await loop.run_in_executor(None, oi_service.get_oi_analysis, sym)
+                            if result.get("available"):
+                                result["symbol"] = sym
+                                await manager.broadcast_oi_update(sym, result)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        await asyncio.sleep(OI_STREAM_INTERVAL)
+
+
+async def mtf_streamer():
+    """Periodically push MTF confluence updates for subscribed symbols."""
+    await asyncio.sleep(90)
+    while True:
+        try:
+            if is_market_open() and manager.active_connections:
+                symbols = list(manager.get_all_subscribed_symbols())
+                if symbols:
+                    loop = asyncio.get_event_loop()
+                    for sym in symbols:
+                        try:
+                            from app.services.signal_service import signal_service
+                            result = await loop.run_in_executor(
+                                None, signal_service._compute_mtf_confluence, sym, None, 0
+                            )
+                            result["symbol"] = sym
+                            await manager.broadcast_mtf_update(sym, result)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        await asyncio.sleep(MTF_STREAM_INTERVAL)

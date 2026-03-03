@@ -306,16 +306,31 @@ class IndicatorService:
             bb_score = -100  # above upper band — strong bearish
         bb_score = max(-100, min(100, bb_score))
 
-        # ── 4. VWAP ──
+        # ── 4. VWAP + Bands (±1σ, ±2σ) ──
         typical_price = (high + low + close) / 3
         cumvol = volume.cumsum()
         vwap_series = (typical_price * volume).cumsum() / cumvol.replace(0, np.nan)
         current_vwap = float(vwap_series.iloc[-1]) if not pd.isna(vwap_series.iloc[-1]) else current_price
 
-        # VWAP score: distance from VWAP as % of price
+        # VWAP standard deviation bands
+        vwap_var = ((typical_price - vwap_series) ** 2 * volume).cumsum() / cumvol.replace(0, np.nan)
+        vwap_std = np.sqrt(vwap_var)
+        vwap_upper_1 = vwap_series + vwap_std
+        vwap_lower_1 = vwap_series - vwap_std
+        vwap_upper_2 = vwap_series + 2 * vwap_std
+        vwap_lower_2 = vwap_series - 2 * vwap_std
+
+        current_std = float(vwap_std.iloc[-1]) if not pd.isna(vwap_std.iloc[-1]) else 0
+        vwap_z = ((current_price - current_vwap) / current_std) if current_std > 0 else 0
+
+        # VWAP score: enhanced with band-aware scoring
         vwap_pct = ((current_price - current_vwap) / current_price * 100) if current_price > 0 else 0
-        # Above VWAP = bullish, below = bearish. Scale: ±0.5% = strong signal
-        vwap_score = max(-100, min(100, vwap_pct * 200))
+        if abs(vwap_z) >= 2:
+            # Beyond 2σ — strong mean-reversion signal
+            vwap_score = max(-100, min(100, -vwap_z * 50))
+        else:
+            # Normal: above VWAP = bullish, below = bearish
+            vwap_score = max(-100, min(100, vwap_pct * 200))
 
         # ── 5. MA Crossover (5 vs 9) ──
         ma5 = ta.trend.SMAIndicator(close, window=5).sma_indicator()
@@ -364,6 +379,10 @@ class IndicatorService:
             "vwap": round(current_vwap, 2),
             "vwap_pct": round(vwap_pct, 4),
             "vwap_score": round(vwap_score, 2),
+            "vwap_upper_1": round(float(vwap_upper_1.iloc[-1]), 2) if not pd.isna(vwap_upper_1.iloc[-1]) else None,
+            "vwap_lower_1": round(float(vwap_lower_1.iloc[-1]), 2) if not pd.isna(vwap_lower_1.iloc[-1]) else None,
+            "vwap_upper_2": round(float(vwap_upper_2.iloc[-1]), 2) if not pd.isna(vwap_upper_2.iloc[-1]) else None,
+            "vwap_lower_2": round(float(vwap_lower_2.iloc[-1]), 2) if not pd.isna(vwap_lower_2.iloc[-1]) else None,
             "ma5": round(ma5_now, 2),
             "ma9": round(ma9_now, 2),
             "ma_cross": "bullish" if cross_bullish else ("bearish" if cross_bearish else "none"),
@@ -377,6 +396,11 @@ class IndicatorService:
         raw = {
             "datetimes": datetimes,
             "rsi": [None if pd.isna(v) else round(v, 2) for v in rsi_series],
+            "vwap": [None if pd.isna(v) else round(v, 2) for v in vwap_series],
+            "vwap_upper_1": [None if pd.isna(v) else round(v, 2) for v in vwap_upper_1],
+            "vwap_lower_1": [None if pd.isna(v) else round(v, 2) for v in vwap_lower_1],
+            "vwap_upper_2": [None if pd.isna(v) else round(v, 2) for v in vwap_upper_2],
+            "vwap_lower_2": [None if pd.isna(v) else round(v, 2) for v in vwap_lower_2],
         }
 
         return {"score": technical_score, "details": details, "raw": raw}

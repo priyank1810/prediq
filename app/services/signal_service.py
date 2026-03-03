@@ -6,7 +6,11 @@ from app.services.indicator_service import indicator_service
 from app.services.sentiment_service import sentiment_service
 from app.services.global_market_service import global_market_service
 from app.utils.helpers import now_ist, is_market_open
-from app.config import SIGNAL_WEIGHT_TECHNICAL, SIGNAL_WEIGHT_SENTIMENT, SIGNAL_WEIGHT_GLOBAL
+from app.utils.cache import cache
+from app.config import (
+    SIGNAL_WEIGHT_TECHNICAL, SIGNAL_WEIGHT_SENTIMENT, SIGNAL_WEIGHT_GLOBAL,
+    CACHE_TTL_MTF_DAILY, CACHE_TTL_MTF_1H,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,44 +24,57 @@ class SignalService:
         dir_15m = "BULLISH" if tech_score_15m > 5 else ("BEARISH" if tech_score_15m < -5 else "NEUTRAL")
         timeframes.append({"label": "15m", "direction": dir_15m, "score": round(tech_score_15m, 1)})
 
-        # 1h — resample 15m data to 1h
+        # 1h — resample 15m data to 1h (cached)
         score_1h = 0
         dir_1h = "NEUTRAL"
-        try:
-            if intraday_df is not None and len(intraday_df) >= 20:
-                df_1h = intraday_df.copy()
-                if "datetime_str" in df_1h.columns:
-                    df_1h["_dt"] = pd.to_datetime(df_1h["datetime_str"], format="%Y-%m-%d %H:%M")
-                    df_1h = df_1h.set_index("_dt")
-                    resampled = df_1h.resample("1h").agg({
-                        "open": "first", "high": "max", "low": "min",
-                        "close": "last", "volume": "sum"
-                    }).dropna()
-                    if "datetime_str" not in resampled.columns:
-                        resampled["datetime_str"] = resampled.index.strftime("%Y-%m-%d %H:%M")
-                    resampled = resampled.reset_index(drop=True)
-                    if len(resampled) >= 20:
-                        res_1h = indicator_service.compute_intraday_indicators(resampled)
-                        score_1h = res_1h["score"]
-                        dir_1h = "BULLISH" if score_1h > 5 else ("BEARISH" if score_1h < -5 else "NEUTRAL")
-        except Exception as e:
-            logger.warning(f"MTF 1h failed: {e}")
+        cache_key_1h = f"mtf_1h_indicators:{symbol}"
+        cached_1h = cache.get(cache_key_1h)
+        if cached_1h:
+            score_1h = cached_1h["score"]
+            dir_1h = cached_1h["direction"]
+        else:
+            try:
+                if intraday_df is not None and len(intraday_df) >= 20:
+                    df_1h = intraday_df.copy()
+                    if "datetime_str" in df_1h.columns:
+                        df_1h["_dt"] = pd.to_datetime(df_1h["datetime_str"], format="%Y-%m-%d %H:%M")
+                        df_1h = df_1h.set_index("_dt")
+                        resampled = df_1h.resample("1h").agg({
+                            "open": "first", "high": "max", "low": "min",
+                            "close": "last", "volume": "sum"
+                        }).dropna()
+                        if "datetime_str" not in resampled.columns:
+                            resampled["datetime_str"] = resampled.index.strftime("%Y-%m-%d %H:%M")
+                        resampled = resampled.reset_index(drop=True)
+                        if len(resampled) >= 20:
+                            res_1h = indicator_service.compute_intraday_indicators(resampled)
+                            score_1h = res_1h["score"]
+                            dir_1h = "BULLISH" if score_1h > 5 else ("BEARISH" if score_1h < -5 else "NEUTRAL")
+                            cache.set(cache_key_1h, {"score": score_1h, "direction": dir_1h}, CACHE_TTL_MTF_1H)
+            except Exception as e:
+                logger.warning(f"MTF 1h failed: {e}")
         timeframes.append({"label": "1h", "direction": dir_1h, "score": round(score_1h, 1)})
 
-        # Daily — fetch 3mo historical
+        # Daily — fetch 3mo historical (cached)
         score_daily = 0
         dir_daily = "NEUTRAL"
-        try:
-            daily_df = data_fetcher.get_historical_data(symbol, period="3mo")
-            if daily_df is not None and len(daily_df) >= 20:
-                # Add datetime_str for compatibility
-                if "datetime_str" not in daily_df.columns and "date" in daily_df.columns:
-                    daily_df["datetime_str"] = daily_df["date"].astype(str)
-                res_daily = indicator_service.compute_intraday_indicators(daily_df)
-                score_daily = res_daily["score"]
-                dir_daily = "BULLISH" if score_daily > 5 else ("BEARISH" if score_daily < -5 else "NEUTRAL")
-        except Exception as e:
-            logger.warning(f"MTF daily failed: {e}")
+        cache_key_daily = f"mtf_daily_indicators:{symbol}"
+        cached_daily = cache.get(cache_key_daily)
+        if cached_daily:
+            score_daily = cached_daily["score"]
+            dir_daily = cached_daily["direction"]
+        else:
+            try:
+                daily_df = data_fetcher.get_historical_data(symbol, period="3mo")
+                if daily_df is not None and len(daily_df) >= 20:
+                    if "datetime_str" not in daily_df.columns and "date" in daily_df.columns:
+                        daily_df["datetime_str"] = daily_df["date"].astype(str)
+                    res_daily = indicator_service.compute_intraday_indicators(daily_df)
+                    score_daily = res_daily["score"]
+                    dir_daily = "BULLISH" if score_daily > 5 else ("BEARISH" if score_daily < -5 else "NEUTRAL")
+                    cache.set(cache_key_daily, {"score": score_daily, "direction": dir_daily}, CACHE_TTL_MTF_DAILY)
+            except Exception as e:
+                logger.warning(f"MTF daily failed: {e}")
         timeframes.append({"label": "Daily", "direction": dir_daily, "score": round(score_daily, 1)})
 
         # Confluence scoring
@@ -94,8 +111,9 @@ class SignalService:
                        "negative_count": 0, "neutral_count": 0, "headlines": []}
         global_result = {"score": 0, "markets": [], "news_magnitude": 0}
         oi_result = {"score": 0, "available": False}
+        sector_result = {"available": False, "score": 0}
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=5) as executor:
             future_intraday = executor.submit(
                 data_fetcher.get_intraday_data, symbol, "5d", "15m"
             )
@@ -107,6 +125,8 @@ class SignalService:
             )
             # OI analysis (may not be available)
             future_oi = executor.submit(self._fetch_oi, symbol)
+            # Sector-relative strength
+            future_sector = executor.submit(self._fetch_sector_strength, symbol)
 
             try:
                 intraday_df = future_intraday.result(timeout=15)
@@ -128,11 +148,18 @@ class SignalService:
             except Exception as e:
                 logger.warning(f"OI analysis failed for {symbol}: {e}")
 
+            try:
+                sector_result = future_sector.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"Sector strength failed for {symbol}: {e}")
+
         # Technical score (depends on intraday data)
+        tech_raw = {}
         if intraday_df is not None and not intraday_df.empty:
             tech_result = indicator_service.compute_intraday_indicators(intraday_df)
             technical_score = tech_result["score"]
             tech_details = tech_result["details"]
+            tech_raw = tech_result.get("raw", {})
         else:
             technical_score = 0
             tech_details = {}
@@ -220,6 +247,10 @@ class SignalService:
         except Exception as e:
             logger.warning(f"MTF confluence failed: {e}")
 
+        # Sector-Relative Strength modifier
+        if sector_result.get("available"):
+            composite += sector_result["score"] * 0.10
+
         composite = max(-100, min(100, round(composite, 2)))
 
         # 6. Direction and confidence
@@ -255,6 +286,7 @@ class SignalService:
                 "score": technical_score,
                 "weight": round(w_tech, 2),
                 "details": tech_details,
+                "raw": tech_raw,
             },
             "sentiment": {
                 "score": sentiment_score,
@@ -290,6 +322,7 @@ class SignalService:
                 "call_oi_change": oi_result.get("call_oi_change"),
                 "put_oi_change": oi_result.get("put_oi_change"),
             },
+            "sector_strength": sector_result,
         }
 
     def _fetch_oi(self, symbol: str) -> dict:
@@ -300,6 +333,15 @@ class SignalService:
         except Exception as e:
             logger.debug(f"OI service unavailable: {e}")
             return {"score": 0, "available": False}
+
+    def _fetch_sector_strength(self, symbol: str) -> dict:
+        """Fetch sector-relative strength, returns default if unavailable."""
+        try:
+            from app.services.sector_service import sector_service
+            return sector_service.get_sector_strength(symbol)
+        except Exception as e:
+            logger.debug(f"Sector strength unavailable: {e}")
+            return {"available": False, "score": 0}
 
 
 signal_service = SignalService()

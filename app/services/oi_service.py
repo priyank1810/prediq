@@ -68,10 +68,11 @@ class OIService:
             total_put_oi = 0
             total_call_oi_change = 0
             total_put_oi_change = 0
-            strike_pain = {}  # strike -> total pain
 
             underlying = records.get("underlyingValue", 0)
 
+            # Collect strike data and sort ascending for O(n) max pain sweep
+            strikes_data = []
             for row in oc_data:
                 strike = row.get("strikePrice", 0)
                 ce = row.get("CE", {})
@@ -86,25 +87,53 @@ class OIService:
                 total_put_oi += pe_oi
                 total_call_oi_change += ce_oi_chg
                 total_put_oi_change += pe_oi_chg
+                strikes_data.append((strike, ce_oi, pe_oi))
 
-                # Max Pain calculation: for each strike, sum ITM option buyer losses
-                # At expiry price = strike: calls above strike expire worthless, puts below strike expire worthless
-                strike_pain[strike] = 0
-                for inner_row in oc_data:
-                    inner_strike = inner_row.get("strikePrice", 0)
-                    inner_ce_oi = (inner_row.get("CE", {}).get("openInterest", 0) or 0)
-                    inner_pe_oi = (inner_row.get("PE", {}).get("openInterest", 0) or 0)
-                    # Call buyer loss if expiry < their strike (they lose premium, approx as OI * distance)
-                    if inner_strike < strike:
-                        strike_pain[strike] += inner_pe_oi * (strike - inner_strike)
-                    elif inner_strike > strike:
-                        strike_pain[strike] += inner_ce_oi * (inner_strike - strike)
+            strikes_data.sort(key=lambda x: x[0])
+
+            # O(n) max pain using running prefix sums
+            # pain(k) = Σ(i<k) pe_oi[i]*(strike[k]-strike[i])
+            #          + Σ(i>k) ce_oi[i]*(strike[i]-strike[k])
+            # Rewrite as:
+            #   strike[k]*sum_pe_below - sum_pe_weighted_below
+            #   + sum_ce_weighted_above - strike[k]*sum_ce_above
+            if strikes_data:
+                n = len(strikes_data)
+                strikes = [sd[0] for sd in strikes_data]
+                ce_ois = [sd[1] for sd in strikes_data]
+                pe_ois = [sd[2] for sd in strikes_data]
+
+                # Running sums updated incrementally in O(1) per step
+                sum_pe_below = 0        # Σ pe_oi[i] for i < k
+                sum_pe_str_below = 0    # Σ pe_oi[i]*strike[i] for i < k
+                sum_ce_above = sum(ce_ois)          # Σ ce_oi[i] for i > k (starts as total)
+                sum_ce_str_above = sum(ce_ois[i] * strikes[i] for i in range(n))
+
+                best_pain = -1
+                best_strike = strikes[0]
+
+                for k in range(n):
+                    # Remove current strike from CE above sums
+                    sum_ce_above -= ce_ois[k]
+                    sum_ce_str_above -= ce_ois[k] * strikes[k]
+
+                    pain = (strikes[k] * sum_pe_below - sum_pe_str_below +
+                            sum_ce_str_above - strikes[k] * sum_ce_above)
+
+                    if pain > best_pain:
+                        best_pain = pain
+                        best_strike = strikes[k]
+
+                    # Add current strike to PE below sums for next iteration
+                    sum_pe_below += pe_ois[k]
+                    sum_pe_str_below += pe_ois[k] * strikes[k]
+
+                max_pain = best_strike
+            else:
+                max_pain = underlying
 
             # PCR
             pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 1.0
-
-            # Max Pain: strike with maximum total pain to option buyers
-            max_pain = max(strike_pain, key=strike_pain.get) if strike_pain else underlying
 
             # PCR scoring
             if pcr > 1.5:
