@@ -141,6 +141,17 @@ const API = {
     // Chart Patterns
     getPatterns(symbol) { return this.request(`/api/indicators/${encodeURIComponent(symbol)}/patterns`); },
 
+    // Portfolio
+    getPortfolio() { return this.request('/api/portfolio'); },
+    getPortfolioSummary() { return this.request('/api/portfolio/summary'); },
+    addHolding(data) { return this.request('/api/portfolio', { method: 'POST', body: JSON.stringify(data) }); },
+    deleteHolding(id) { return this.request(`/api/portfolio/${id}`, { method: 'DELETE' }); },
+
+    // Price Alerts
+    getAlerts() { return this.request('/api/alerts'); },
+    createAlert(data) { return this.request('/api/alerts', { method: 'POST', body: JSON.stringify(data) }); },
+    deleteAlert(id) { return this.request(`/api/alerts/${id}`, { method: 'DELETE' }); },
+
     // Smart Alerts
     getSmartAlerts() { return this.request('/api/alerts/smart'); },
     createSmartAlert(data) { return this.request('/api/alerts/smart', { method: 'POST', body: JSON.stringify(data) }); },

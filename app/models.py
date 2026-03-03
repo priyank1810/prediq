@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.utils.helpers import now_ist
@@ -32,7 +32,7 @@ class PortfolioHolding(Base):
     buy_date = Column(Date, nullable=False)
     notes = Column(String, nullable=True)
     created_at = Column(DateTime, default=now_ist)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     owner = relationship("User", back_populates="holdings")
 
@@ -44,10 +44,10 @@ class PriceAlert(Base):
     symbol = Column(String, nullable=False)
     target_price = Column(Float, nullable=False)
     condition = Column(String, nullable=False)  # "above" or "below"
-    is_triggered = Column(Boolean, default=False)
+    is_triggered = Column(Boolean, default=False, index=True)
     triggered_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=now_ist)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     owner = relationship("User", back_populates="alerts")
 
@@ -56,7 +56,7 @@ class PredictionLog(Base):
     __tablename__ = "prediction_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String, nullable=False)
+    symbol = Column(String, nullable=False, index=True)
     model_type = Column(String, nullable=False)  # "lstm" or "prophet"
     prediction_date = Column(Date, nullable=False)
     target_date = Column(Date, nullable=False)
@@ -71,6 +71,9 @@ class PredictionLog(Base):
 
 class SignalLog(Base):
     __tablename__ = "signal_logs"
+    __table_args__ = (
+        Index("ix_signal_logs_symbol_created", "symbol", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String, nullable=False, index=True)
@@ -85,7 +88,7 @@ class SignalLog(Base):
     was_correct = Column(Boolean, nullable=True)
     sector = Column(String, nullable=True)
     regime = Column(String, nullable=True)
-    created_at = Column(DateTime, default=now_ist)
+    created_at = Column(DateTime, default=now_ist, index=True)
 
 
 class SmartAlert(Base):

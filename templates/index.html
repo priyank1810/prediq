@@ -501,37 +501,44 @@
 
         <!-- Watchlist Tab -->
         <div id="tab-watchlist" class="tab-content hidden">
+            <!-- Header: title + add form + sort -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <h3 class="text-lg font-semibold text-white">My Watchlist</h3>
-                    <form id="addWatchlistForm" class="flex gap-2 items-center">
-                        <input type="text" id="watchlistSymbolInput" placeholder="Add symbol (e.g. RELIANCE)"
-                            class="bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white flex-1 sm:w-56 placeholder-gray-500 focus:outline-none focus:border-accent-blue">
-                        <button type="submit" class="px-3 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium whitespace-nowrap">
-                            + Add
-                        </button>
-                    </form>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <form id="addWatchlistForm" class="flex gap-2 items-center relative">
+                            <div class="relative flex-1 sm:w-48">
+                                <input type="text" id="watchlistSymbolInput" placeholder="Add symbol (e.g. RELIANCE)" autocomplete="off"
+                                    class="w-full bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent-blue">
+                                <div id="watchlistSearchResults" class="absolute top-full left-0 w-full bg-dark-700 border border-gray-600 rounded-b-lg mt-0.5 hidden z-50 max-h-48 overflow-y-auto shadow-xl"></div>
+                            </div>
+                            <button type="submit" class="px-3 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium whitespace-nowrap">
+                                + Add
+                            </button>
+                        </form>
+                        <select id="watchlistSort" class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-blue">
+                            <option value="name">Sort: Name</option>
+                            <option value="pct_change">Sort: % Change</option>
+                            <option value="confidence">Sort: Confidence</option>
+                            <option value="sentiment">Sort: Sentiment</option>
+                        </select>
+                    </div>
                 </div>
             </div>
-            <div class="bg-dark-800 rounded-lg overflow-x-auto">
-                <table class="w-full text-sm min-w-[600px]">
-                    <thead>
-                        <tr class="text-gray-400 border-b border-gray-700">
-                            <th class="text-left px-3 sm:px-4 py-3">Symbol</th>
-                            <th class="text-left px-3 sm:px-4 py-3 hidden sm:table-cell">Type</th>
-                            <th class="text-right px-3 sm:px-4 py-3">Price</th>
-                            <th class="text-right px-3 sm:px-4 py-3">Change</th>
-                            <th class="text-center px-3 sm:px-4 py-3">Signal</th>
-                            <th class="text-right px-3 sm:px-4 py-3 hidden sm:table-cell">Confidence</th>
-                            <th class="text-center px-3 sm:px-4 py-3">Action</th>
-                            <th class="px-3 sm:px-4 py-3"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="watchlistTable"></tbody>
-                </table>
-                <div id="emptyWatchlist" class="text-center py-8 text-gray-500">
-                    No stocks in watchlist. Add one above to get started.
+
+            <!-- Card Grid -->
+            <div id="watchlistCards" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4"></div>
+            <div id="emptyWatchlist" class="text-center py-12 text-gray-500">
+                No stocks in watchlist. Add one above to get started.
+            </div>
+
+            <!-- Active Alerts Section -->
+            <div id="alertsSection" class="bg-dark-800 rounded-lg p-3 sm:p-4 hidden">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold text-white">Active Price Alerts</h3>
+                    <span id="alertCount" class="text-xs text-gray-500">0 alerts</span>
                 </div>
+                <div id="alertsList" class="space-y-2"></div>
             </div>
         </div>
 
@@ -636,14 +643,14 @@
     <!-- Toast Container -->
     <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 space-y-2"></div>
 
-    <script defer src="/static/js/api.js?v=8"></script>
-    <script defer src="/static/js/chart.js?v=8"></script>
-    <script defer src="/static/js/search.js?v=8"></script>
-    <script defer src="/static/js/predictions.js?v=8"></script>
-    <script defer src="/static/js/watchlist.js?v=8"></script>
-    <script defer src="/static/js/insights.js?v=8"></script>
-    <script defer src="/static/js/signals.js?v=8"></script>
-    <script defer src="/static/js/notifications.js?v=8"></script>
-    <script defer src="/static/js/app.js?v=8"></script>
+    <script defer src="/static/js/api.js?v=10"></script>
+    <script defer src="/static/js/chart.js?v=10"></script>
+    <script defer src="/static/js/search.js?v=10"></script>
+    <script defer src="/static/js/predictions.js?v=10"></script>
+    <script defer src="/static/js/watchlist.js?v=10"></script>
+    <script defer src="/static/js/insights.js?v=10"></script>
+    <script defer src="/static/js/signals.js?v=10"></script>
+    <script defer src="/static/js/notifications.js?v=10"></script>
+    <script defer src="/static/js/app.js?v=10"></script>
 </body>
 </html>

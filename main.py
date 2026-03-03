@@ -88,6 +88,21 @@ def _migrate_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+    # Add indexes for performance (idempotent — IF NOT EXISTS)
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS ix_portfolio_holdings_user_id ON portfolio_holdings(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_price_alerts_user_id ON price_alerts(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_price_alerts_is_triggered ON price_alerts(is_triggered)",
+        "CREATE INDEX IF NOT EXISTS ix_prediction_logs_symbol ON prediction_logs(symbol)",
+        "CREATE INDEX IF NOT EXISTS ix_signal_logs_created_at ON signal_logs(created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_signal_logs_symbol_created ON signal_logs(symbol, created_at)",
+    ]
+    for idx_sql in indexes:
+        try:
+            cursor.execute(idx_sql)
+        except sqlite3.OperationalError:
+            pass
+
     conn.commit()
     conn.close()
 

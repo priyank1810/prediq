@@ -73,19 +73,37 @@ def watchlist_overview(db: Session = Depends(get_db)):
         .order_by(WatchlistItem.added_at.desc())
         .all()
     )
+    if not items:
+        return []
+
+    # Batch-fetch all quotes in one call instead of N individual calls
+    symbols = [item.symbol for item in items]
+    quotes = data_fetcher.get_bulk_quotes(symbols)
+    quote_map = {q["symbol"]: q for q in quotes if q.get("symbol")}
+
+    # Batch-fetch latest signals for all symbols
+    from sqlalchemy import func
+    latest_ids = (
+        db.query(func.max(SignalLog.id))
+        .filter(SignalLog.symbol.in_(symbols))
+        .group_by(SignalLog.symbol)
+    )
+    signals = (
+        db.query(SignalLog)
+        .filter(SignalLog.id.in_(latest_ids))
+        .all()
+    )
+    signal_map = {s.symbol: s for s in signals}
+
     results = []
     for item in items:
-        try:
-            quote = data_fetcher.get_live_quote(item.symbol)
-        except Exception:
-            quote = {}
+        quote = quote_map.get(item.symbol, {})
+        latest_signal = signal_map.get(item.symbol)
 
-        latest_signal = (
-            db.query(SignalLog)
-            .filter(SignalLog.symbol == item.symbol)
-            .order_by(SignalLog.created_at.desc())
-            .first()
-        )
+        # Volume ratio: current volume / 20-day avg
+        volume = quote.get("volume", 0) or 0
+        avg_volume = quote.get("avg_volume", 0) or 0
+        volume_ratio = round(volume / avg_volume, 2) if avg_volume > 0 else None
 
         results.append({
             "symbol": item.symbol,
@@ -93,6 +111,11 @@ def watchlist_overview(db: Session = Depends(get_db)):
             "ltp": quote.get("ltp", 0),
             "change": quote.get("change", 0),
             "pct_change": quote.get("pct_change", 0),
+            "open": quote.get("open", 0),
+            "day_high": quote.get("high", 0),
+            "day_low": quote.get("low", 0),
+            "volume_ratio": volume_ratio,
+            "sentiment_score": latest_signal.sentiment_score if latest_signal else None,
             "signal_direction": latest_signal.direction if latest_signal else None,
             "signal_confidence": latest_signal.confidence if latest_signal else None,
         })

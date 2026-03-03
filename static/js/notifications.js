@@ -3,6 +3,11 @@ const Notifications = {
     unreadCount: 0,
 
     init() {
+        // Request notification permission proactively
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
         document.getElementById('notificationBell').addEventListener('click', (e) => {
             e.stopPropagation();
             const dropdown = document.getElementById('notificationDropdown');

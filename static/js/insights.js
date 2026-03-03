@@ -1,9 +1,14 @@
 const Insights = {
     _seeded: false,
+    _lastLoadTime: 0,
 
     init() {},
 
     async load() {
+        // Skip if data is fresh (loaded within last 30s)
+        if (this._lastLoadTime && Date.now() - this._lastLoadTime < 30000) {
+            return;
+        }
         // Check if we have any signal data; if not, seed a few signals first
         if (!this._seeded) {
             this._seeded = true;
@@ -15,6 +20,7 @@ const Insights = {
             } catch (e) { /* ignore */ }
         }
 
+        this._lastLoadTime = Date.now();
         await Promise.all([
             this.loadHighConfidence(),
             this.loadAccuracy(),

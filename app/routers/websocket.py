@@ -112,7 +112,18 @@ async def price_streamer():
                     quotes = data_fetcher.get_bulk_quotes(symbols)
                     for quote in quotes:
                         if quote.get("ltp"):
-                            await manager.broadcast_price(quote["symbol"], quote)
+                            # Trim to only fields the frontend needs
+                            trimmed = {
+                                "symbol": quote["symbol"],
+                                "ltp": quote["ltp"],
+                                "change": quote.get("change", 0),
+                                "pct_change": quote.get("pct_change", 0),
+                                "high": quote.get("high"),
+                                "low": quote.get("low"),
+                                "open": quote.get("open"),
+                                "volume": quote.get("volume"),
+                            }
+                            await manager.broadcast_price(trimmed["symbol"], trimmed)
 
                             # Feed tick to candle builder when Angel One is active
                             if candle_builder and ANGEL_AVAILABLE:

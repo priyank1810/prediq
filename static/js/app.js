@@ -35,7 +35,9 @@ const App = {
 
         // WebSocket — subscribe to all overview symbols immediately
         try {
-            API.connectWebSocket(this._overviewSymbols, this.onPriceUpdate.bind(this), () => {});
+            API.connectWebSocket(this._overviewSymbols, this.onPriceUpdate.bind(this), (data) => {
+                this.onAlertTriggered(data);
+            });
             API.setHighConfidenceHandler((data) => {
                 Notifications.addNotification(data);
             });
@@ -405,25 +407,29 @@ const App = {
     },
 
     displayQuote(quote) {
-        document.getElementById('stockPrice').textContent = `₹${quote.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+        if (quote.ltp != null) {
+            document.getElementById('stockPrice').textContent = `₹${quote.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+        }
 
-        const changeEl = document.getElementById('stockChange');
-        const sign = quote.change >= 0 ? '+' : '';
-        changeEl.textContent = `${sign}${quote.change.toFixed(2)} (${sign}${quote.pct_change.toFixed(2)}%)`;
-        changeEl.className = `text-sm ${quote.change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+        if (quote.change != null && quote.pct_change != null) {
+            const changeEl = document.getElementById('stockChange');
+            const sign = quote.change >= 0 ? '+' : '';
+            changeEl.textContent = `${sign}${quote.change.toFixed(2)} (${sign}${quote.pct_change.toFixed(2)}%)`;
+            changeEl.className = `text-sm ${quote.change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+        }
 
-        document.getElementById('stockOpen').textContent = `₹${quote.open.toFixed(2)}`;
-        document.getElementById('stockHigh').textContent = `₹${quote.high.toFixed(2)}`;
-        document.getElementById('stockLow').textContent = `₹${quote.low.toFixed(2)}`;
-        document.getElementById('stockVolume').textContent = quote.volume.toLocaleString('en-IN');
+        if (quote.open != null) document.getElementById('stockOpen').textContent = `₹${quote.open.toFixed(2)}`;
+        if (quote.high != null) document.getElementById('stockHigh').textContent = `₹${quote.high.toFixed(2)}`;
+        if (quote.low != null) document.getElementById('stockLow').textContent = `₹${quote.low.toFixed(2)}`;
+        if (quote.volume != null) document.getElementById('stockVolume').textContent = quote.volume.toLocaleString('en-IN');
 
         const volAvgEl = document.getElementById('stockVolAvg');
-        if (volAvgEl && quote.avg_volume && quote.avg_volume > 0) {
+        if (volAvgEl && quote.volume && quote.avg_volume && quote.avg_volume > 0) {
             const ratio = (quote.volume / quote.avg_volume).toFixed(1);
             const color = ratio >= 1.2 ? 'text-green-400' : (ratio <= 0.8 ? 'text-red-400' : 'text-gray-500');
             volAvgEl.innerHTML = `<span class="${color} font-medium">${ratio}x avg</span>`;
-        } else if (volAvgEl) {
-            volAvgEl.innerHTML = '';
+        } else if (volAvgEl && !quote.avg_volume) {
+            // Don't clear vol avg on WebSocket ticks that lack it
         }
     },
 
@@ -547,6 +553,9 @@ const App = {
             this._overviewQuotes[data.symbol] = { ...this._overviewQuotes[data.symbol], ...data };
             this.updateOverviewCard(data);
         }
+
+        // Update watchlist cards in-place
+        Watchlist.updateCard(data);
     },
 
     updateOverviewCard(data) {
@@ -711,6 +720,25 @@ const App = {
         }
 
         confEl.textContent = conf != null ? conf.toFixed(0) + '% conf' : '';
+    },
+
+    onAlertTriggered(data) {
+        const cond = data.condition === 'above' ? 'crossed above' : 'dropped below';
+        const msg = `Price Alert: ${data.symbol} ${cond} ₹${data.target_price}`;
+        this.showToast(msg, 'alert');
+
+        // Browser notification if permitted
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('StockAI Price Alert', { body: msg, icon: '/static/favicon.ico' });
+        } else if ('Notification' in window && Notification.permission !== 'denied') {
+            Notification.requestPermission();
+        }
+
+        // Refresh watchlist alerts if tab is visible
+        const tab = document.getElementById('tab-watchlist');
+        if (tab && !tab.classList.contains('hidden')) {
+            Watchlist.load(true);
+        }
     },
 
     showToast(message, type = 'success') {

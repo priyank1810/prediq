@@ -9,20 +9,24 @@ class PortfolioService:
         if user_id is not None:
             query = query.filter(PortfolioHolding.user_id == user_id)
         holdings = query.all()
+        if not holdings:
+            return []
+
+        # Batch-fetch all quotes in one call
+        symbols = list({h.symbol for h in holdings})
+        quotes = data_fetcher.get_bulk_quotes(symbols)
+        price_map = {q["symbol"]: q.get("ltp") for q in quotes if q.get("ltp")}
+
         result = []
         for h in holdings:
-            current_price = None
+            current_price = price_map.get(h.symbol)
             pnl = None
             pnl_pct = None
-            try:
-                quote = data_fetcher.get_live_quote(h.symbol)
-                current_price = quote["ltp"]
+            if current_price:
                 invested = h.quantity * h.buy_price
                 current_val = h.quantity * current_price
                 pnl = round(current_val - invested, 2)
                 pnl_pct = round((pnl / invested) * 100, 2) if invested else 0
-            except Exception:
-                pass
 
             result.append({
                 "id": h.id,
