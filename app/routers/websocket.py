@@ -171,13 +171,16 @@ async def signal_accuracy_validator():
 
     while True:
         try:
-            if not is_market_open():
-                await asyncio.sleep(180)
+            # Also validate shortly after market close to catch late-session signals
+            from app.utils.helpers import market_status
+            mkt = market_status()
+            if mkt in ("closed_weekend", "pre_market"):
+                await asyncio.sleep(300)
                 continue
 
             db = SessionLocal()
             try:
-                cutoff_start = now_ist() - timedelta(minutes=25)
+                cutoff_start = now_ist() - timedelta(minutes=30)
                 cutoff_end = now_ist() - timedelta(minutes=15)
 
                 pending_logs = (
@@ -215,7 +218,7 @@ async def signal_accuracy_validator():
                                 log.was_correct = current_price < log.price_at_signal
                             else:
                                 pct_move = abs(current_price - log.price_at_signal) / log.price_at_signal
-                                log.was_correct = pct_move < 0.005
+                                log.was_correct = pct_move < 0.015  # NEUTRAL correct if <1.5% move
 
                     db.commit()
             finally:

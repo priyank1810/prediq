@@ -197,7 +197,7 @@ const App = {
         const el = document.getElementById('overviewLastUpdated');
         if (el && this._lastOverviewUpdate) {
             const time = new Date(this._lastOverviewUpdate).toLocaleTimeString('en-IN', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit'
+                timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
             el.textContent = `Updated ${time}`;
         }
@@ -271,7 +271,7 @@ const App = {
             const borderClass = isBull ? 'border-l-4 border-green-500 bg-green-900/10' : 'border-l-4 border-red-500 bg-red-900/10';
             const color = isBull ? 'text-green-400' : 'text-red-400';
             const arrow = isBull ? '&#9650;' : '&#9660;';
-            const time = s.created_at ? new Date(s.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+            const time = s.created_at ? new Date(s.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '';
             return `
                 <div class="${borderClass} rounded-lg p-3 cursor-pointer hover:bg-dark-700 transition flex items-center gap-4"
                      onclick="Search.select('${s.symbol}', '${s.symbol}')">
@@ -542,7 +542,7 @@ const App = {
             const liveEl = document.getElementById('liveBadge');
             if (liveEl) {
                 liveEl.classList.remove('hidden');
-                const ts = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const ts = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 const tsEl = document.getElementById('liveTimestamp');
                 if (tsEl) tsEl.textContent = ts;
             }

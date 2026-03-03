@@ -2,6 +2,8 @@ const Signals = {
     intradayChart: null,
     isLoading: false,
     _intradayResizeHandler: null,
+    _signalTimestamp: null,
+    _ageTimer: null,
 
     init() {
         const btn = document.getElementById('btnSignal');
@@ -120,11 +122,14 @@ const Signals = {
             this.renderIntradayChart(data.intraday_candles);
         }
 
-        // Timestamp
+        // Timestamp — always display in IST regardless of browser timezone
         const tsEl = document.getElementById('signalTimestamp');
-        if (tsEl) {
+        if (tsEl && data.timestamp) {
+            this._signalTimestamp = Date.now();
             const ts = new Date(data.timestamp);
-            tsEl.textContent = `Updated: ${ts.toLocaleTimeString('en-IN')}`;
+            const timeStr = ts.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            tsEl.textContent = `Updated: ${timeStr} IST`;
+            this._startAgeTimer();
         }
 
         // Market status badge
@@ -279,6 +284,25 @@ const Signals = {
         return Math.floor(Date.UTC(y, m - 1, d, h, min) / 1000);
     },
 
+    _startAgeTimer() {
+        if (this._ageTimer) clearInterval(this._ageTimer);
+        this._ageTimer = setInterval(() => {
+            if (!this._signalTimestamp) return;
+            const ageSec = Math.floor((Date.now() - this._signalTimestamp) / 1000);
+            const badge = document.getElementById('marketBadge');
+            if (!badge) return;
+            if (ageSec > 300) {
+                // Signal older than 5 min — mark stale
+                badge.textContent = `${Math.floor(ageSec / 60)}m ago`;
+                badge.className = 'text-xs px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-400';
+                // Auto-refresh if panel visible and stock selected
+                if (App.currentSymbol && !this.isLoading) {
+                    this.loadSignal(App.currentSymbol);
+                }
+            }
+        }, 30000);
+    },
+
     displaySignalHistory(history) {
         const el = document.getElementById('signalHistoryTable');
         if (!el) return;
@@ -291,7 +315,7 @@ const Signals = {
                       (h.direction === 'BEARISH' ? 'text-red-400' : 'text-yellow-400');
             const icon = h.was_correct === true ? '<span class="text-green-400">&#10003;</span>' :
                          (h.was_correct === false ? '<span class="text-red-400">&#10007;</span>' : '-');
-            const time = h.created_at ? new Date(h.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-';
+            const time = h.created_at ? new Date(h.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
             return `
                 <tr class="border-b border-gray-800">
                     <td class="py-1.5 px-3 text-xs text-gray-400">${time}</td>

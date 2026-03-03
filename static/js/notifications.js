@@ -87,7 +87,7 @@ const Notifications = {
             const color = n.direction === 'BULLISH' ? 'text-green-400' : 'text-red-400';
             const bg = n.direction === 'BULLISH' ? 'bg-green-900/20' : 'bg-red-900/20';
             const arrow = n.direction === 'BULLISH' ? '&#9650;' : '&#9660;';
-            const time = new Date(n.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            const time = new Date(n.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
             const unreadDot = !n.read ? '<div class="w-1.5 h-1.5 bg-accent-blue rounded-full"></div>' : '';
             const priceStr = n.price ? ` | ₹${n.price.toFixed(2)}` : '';
             return `
