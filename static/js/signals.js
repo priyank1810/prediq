@@ -97,16 +97,26 @@ const Signals = {
             const d = data.technical.details;
             const maCrossColor = d.ma_cross === 'bullish' ? 'text-green-400' : (d.ma_cross === 'bearish' ? 'text-red-400' : 'text-gray-500');
             const volColor = d.volume_ratio > 1.5 ? 'text-yellow-400' : 'text-gray-500';
+            // Candlestick pattern tags
+            const candleTags = (d.candlestick_patterns || []).map(p => {
+                const cls = p.type === 'bullish' ? 'bg-green-900 text-green-400' :
+                            p.type === 'bearish' ? 'bg-red-900 text-red-400' : 'bg-gray-800 text-gray-400';
+                return `<span class="text-[10px] px-1.5 py-0.5 rounded ${cls}">${p.name}</span>`;
+            }).join(' ');
+
             techDet.innerHTML = `
-                <span class="text-xs text-gray-500">RSI: ${d.rsi || '-'}</span>
-                <span class="mx-1 text-gray-600">|</span>
-                <span class="text-xs ${volColor}">Vol: ${d.volume_ratio ? d.volume_ratio.toFixed(1) + 'x' : '-'}</span>
-                <span class="mx-1 text-gray-600">|</span>
-                <span class="text-xs text-gray-500">BB: ${d.bb_position != null ? (d.bb_position * 100).toFixed(0) + '%' : '-'}</span>
-                <span class="mx-1 text-gray-600">|</span>
-                <span class="text-xs text-gray-500">VWAP: ₹${d.vwap || '-'}</span>
-                <span class="mx-1 text-gray-600">|</span>
-                <span class="text-xs ${maCrossColor}">MA 5/9: ${d.ma_cross || '-'}</span>
+                <div class="flex flex-wrap items-center gap-1 mb-1">
+                    <span class="text-xs text-gray-500">RSI: ${d.rsi || '-'}</span>
+                    <span class="mx-1 text-gray-600">|</span>
+                    <span class="text-xs ${volColor}">Vol: ${d.volume_ratio ? d.volume_ratio.toFixed(1) + 'x' : '-'}</span>
+                    <span class="mx-1 text-gray-600">|</span>
+                    <span class="text-xs text-gray-500">BB: ${d.bb_position != null ? (d.bb_position * 100).toFixed(0) + '%' : '-'}</span>
+                    <span class="mx-1 text-gray-600">|</span>
+                    <span class="text-xs text-gray-500">VWAP: ₹${d.vwap || '-'}</span>
+                    <span class="mx-1 text-gray-600">|</span>
+                    <span class="text-xs ${maCrossColor}">MA 5/9: ${d.ma_cross || '-'}</span>
+                </div>
+                ${candleTags ? '<div class="flex flex-wrap gap-1 mt-1">' + candleTags + '</div>' : ''}
             `;
         }
 
@@ -117,9 +127,21 @@ const Signals = {
         this.displayGlobalMarkets(data.global_market.markets || []);
         this.displayGlobalNews(data.global_market.headlines || [], data.global_market.news_magnitude || 0);
 
+        // Support/Resistance levels
+        this.renderSRLevels(data.support_resistance);
+
+        // Multi-Timeframe Confluence
+        this.renderMTFConfluence(data.mtf_confluence);
+
+        // OI Analysis
+        this.renderOIAnalysis(data);
+
+        // Adaptive weights badge
+        this.renderAdaptiveBadge(data);
+
         // Intraday chart
         if (data.intraday_candles && data.intraday_candles.length > 0) {
-            this.renderIntradayChart(data.intraday_candles);
+            this.renderIntradayChart(data.intraday_candles, data.support_resistance);
         }
 
         // Timestamp — always display in IST regardless of browser timezone
@@ -229,7 +251,138 @@ const Signals = {
         }).join('');
     },
 
-    renderIntradayChart(candles) {
+    renderSRLevels(sr) {
+        const panel = document.getElementById('srLevelsPanel');
+        const grid = document.getElementById('srLevelsGrid');
+        const badge = document.getElementById('srProximityBadge');
+        if (!panel || !grid) return;
+        if (!sr || !sr.levels || Object.keys(sr.levels).length === 0) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+        const lvls = sr.levels;
+        const items = [
+            { label: 'S3', val: lvls.s3, cls: 'text-red-400' },
+            { label: 'S2', val: lvls.s2, cls: 'text-red-400' },
+            { label: 'S1', val: lvls.s1, cls: 'text-red-300' },
+            { label: 'Pivot', val: lvls.pivot, cls: 'text-yellow-400' },
+            { label: 'R1', val: lvls.r1, cls: 'text-green-300' },
+            { label: 'R2', val: lvls.r2, cls: 'text-green-400' },
+            { label: 'R3', val: lvls.r3, cls: 'text-green-400' },
+        ];
+        grid.innerHTML = items.map(i =>
+            `<div class="bg-dark-700 rounded p-1.5">
+                <div class="text-[10px] text-gray-500">${i.label}</div>
+                <div class="text-xs font-mono ${i.cls}">₹${i.val != null ? i.val.toFixed(2) : '-'}</div>
+            </div>`
+        ).join('');
+
+        if (badge) {
+            const sig = sr.proximity_signal || 0;
+            if (sig > 0) {
+                badge.textContent = `Near level (+${sig})`;
+                badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-green-900 text-green-400';
+            } else if (sig < 0) {
+                badge.textContent = `Near level (${sig})`;
+                badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-900 text-red-400';
+            } else {
+                badge.textContent = 'No proximity';
+                badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-500';
+            }
+        }
+    },
+
+    renderMTFConfluence(mtf) {
+        const panel = document.getElementById('mtfPanel');
+        const grid = document.getElementById('mtfGrid');
+        const badge = document.getElementById('confluenceBadge');
+        if (!panel || !grid) return;
+        if (!mtf || !mtf.timeframes) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+        grid.innerHTML = mtf.timeframes.map(tf => {
+            const dirCls = tf.direction === 'BULLISH' ? 'text-green-400' :
+                           tf.direction === 'BEARISH' ? 'text-red-400' : 'text-yellow-400';
+            const arrow = tf.direction === 'BULLISH' ? '&#9650;' :
+                          tf.direction === 'BEARISH' ? '&#9660;' : '&#9654;';
+            return `<div class="bg-dark-700 rounded p-2">
+                <div class="text-[10px] text-gray-500">${tf.label}</div>
+                <div class="text-sm ${dirCls} font-bold">${arrow} ${tf.direction}</div>
+                <div class="text-[10px] text-gray-500">Score: ${tf.score != null ? tf.score.toFixed(1) : '-'}</div>
+            </div>`;
+        }).join('');
+
+        if (badge) {
+            const level = mtf.level || 'LOW';
+            const cls = level === 'HIGH' ? 'bg-green-900 text-green-400' :
+                        level === 'MEDIUM' ? 'bg-yellow-900 text-yellow-400' : 'bg-gray-800 text-gray-400';
+            badge.textContent = `${level} (${mtf.agreement_count || 0}/3)`;
+            badge.className = `text-[10px] px-2 py-0.5 rounded-full ${cls}`;
+        }
+    },
+
+    renderOIAnalysis(data) {
+        const oiSection = document.getElementById('oiScoreSection');
+        const oiPanel = document.getElementById('oiPanel');
+        const oiMetrics = document.getElementById('oiMetrics');
+
+        if (!data.oi_analysis || !data.oi_analysis.available) {
+            if (oiSection) oiSection.classList.add('hidden');
+            if (oiPanel) oiPanel.classList.add('hidden');
+            return;
+        }
+        const oi = data.oi_analysis;
+
+        // Show OI score bar
+        if (oiSection) {
+            oiSection.classList.remove('hidden');
+            this.renderScoreBar('oiBar', 'oiScore', oi.score, data.oi_analysis.weight || 0.10);
+        }
+
+        // Show OI metrics panel
+        if (oiPanel && oiMetrics) {
+            oiPanel.classList.remove('hidden');
+            const pcrColor = oi.pcr > 1.0 ? 'text-green-400' : 'text-red-400';
+            oiMetrics.innerHTML = `
+                <div class="bg-dark-700 rounded p-1.5">
+                    <div class="text-[10px] text-gray-500">PCR</div>
+                    <div class="text-sm font-mono ${pcrColor}">${oi.pcr != null ? oi.pcr.toFixed(2) : '-'}</div>
+                </div>
+                <div class="bg-dark-700 rounded p-1.5">
+                    <div class="text-[10px] text-gray-500">Max Pain</div>
+                    <div class="text-sm font-mono text-yellow-400">₹${oi.max_pain || '-'}</div>
+                </div>
+                <div class="bg-dark-700 rounded p-1.5">
+                    <div class="text-[10px] text-gray-500">Call OI Chg</div>
+                    <div class="text-sm font-mono ${oi.call_oi_change > 0 ? 'text-red-400' : 'text-green-400'}">${oi.call_oi_change != null ? (oi.call_oi_change > 0 ? '+' : '') + oi.call_oi_change.toLocaleString() : '-'}</div>
+                </div>
+                <div class="bg-dark-700 rounded p-1.5">
+                    <div class="text-[10px] text-gray-500">Put OI Chg</div>
+                    <div class="text-sm font-mono ${oi.put_oi_change > 0 ? 'text-green-400' : 'text-red-400'}">${oi.put_oi_change != null ? (oi.put_oi_change > 0 ? '+' : '') + oi.put_oi_change.toLocaleString() : '-'}</div>
+                </div>
+            `;
+        }
+    },
+
+    renderAdaptiveBadge(data) {
+        // Update weight labels with actual values from signal
+        const techLabel = document.querySelector('#signalResults .space-y-3 > div:nth-child(1) .text-xs.text-gray-400');
+        const sentLabel = document.querySelector('#signalResults .space-y-3 > div:nth-child(2) .text-xs.text-gray-400');
+        if (techLabel) {
+            const pct = (data.technical.weight * 100).toFixed(0);
+            const adaptiveTag = data.adaptive_weights && data.adaptive_weights.adapted ? ' <span class="text-[10px] text-purple-400">[Adaptive]</span>' : '';
+            techLabel.innerHTML = `Technical (${pct}%)${adaptiveTag}`;
+        }
+        if (sentLabel) {
+            const pct = (data.sentiment.weight * 100).toFixed(0);
+            sentLabel.textContent = `Sentiment (${pct}%)`;
+        }
+    },
+
+    renderIntradayChart(candles, sr) {
         const container = document.getElementById('intradayChart');
         if (!container) return;
 
@@ -266,6 +419,31 @@ const Signals = {
         }));
 
         series.setData(chartData);
+
+        // Draw S/R price lines on chart
+        if (sr && sr.levels && Object.keys(sr.levels).length > 0) {
+            const lvls = sr.levels;
+            const lines = [
+                { price: lvls.s2, title: 'S2', color: '#ff5252' },
+                { price: lvls.s1, title: 'S1', color: '#ff8a80' },
+                { price: lvls.pivot, title: 'P', color: '#ffd600' },
+                { price: lvls.r1, title: 'R1', color: '#69f0ae' },
+                { price: lvls.r2, title: 'R2', color: '#00c853' },
+            ];
+            lines.forEach(l => {
+                if (l.price != null) {
+                    series.createPriceLine({
+                        price: l.price,
+                        color: l.color,
+                        lineWidth: 1,
+                        lineStyle: 2, // dashed
+                        axisLabelVisible: true,
+                        title: l.title,
+                    });
+                }
+            });
+        }
+
         this.intradayChart.timeScale().fitContent();
 
         this._intradayResizeHandler = () => {

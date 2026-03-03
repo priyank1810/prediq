@@ -80,6 +80,7 @@ def _migrate_db():
         ("prediction_logs", "regime", "TEXT"),
         ("signal_logs", "sector", "TEXT"),
         ("signal_logs", "regime", "TEXT"),
+        ("signal_logs", "oi_score", "REAL"),
     ]
 
     for table, column, col_type in migrations:

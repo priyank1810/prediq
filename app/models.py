@@ -83,6 +83,7 @@ class SignalLog(Base):
     technical_score = Column(Float, nullable=False)
     sentiment_score = Column(Float, nullable=False)
     global_score = Column(Float, nullable=False)
+    oi_score = Column(Float, nullable=True)
     price_at_signal = Column(Float, nullable=True)
     price_after_15min = Column(Float, nullable=True)
     was_correct = Column(Boolean, nullable=True)

@@ -4,6 +4,183 @@ import ta
 
 
 class IndicatorService:
+    # ── Candlestick Pattern Detection ──
+    def _detect_candlestick_patterns(self, df: pd.DataFrame) -> dict:
+        """Detect 9 candlestick patterns from last 3 bars using raw OHLC math."""
+        patterns = []
+        if df is None or len(df) < 3:
+            return {"patterns": patterns, "score": 0.0}
+
+        o = df["open"].values
+        h = df["high"].values
+        l = df["low"].values
+        c = df["close"].values
+
+        # Helper: body and shadow sizes
+        def body(i):
+            return abs(c[i] - o[i])
+
+        def upper_shadow(i):
+            return h[i] - max(o[i], c[i])
+
+        def lower_shadow(i):
+            return min(o[i], c[i]) - l[i]
+
+        def is_bullish(i):
+            return c[i] > o[i]
+
+        def candle_range(i):
+            return h[i] - l[i] if h[i] != l[i] else 0.001
+
+        i = len(df) - 1  # current bar
+        p = i - 1         # previous bar
+        pp = i - 2        # two bars ago
+
+        # --- Single-bar patterns ---
+        # Doji: body < 10% of range
+        if body(i) < 0.10 * candle_range(i):
+            patterns.append({"name": "Doji", "type": "neutral", "score": 0})
+
+        # Hammer: small body at top, long lower shadow >= 2x body, small upper shadow
+        if (lower_shadow(i) >= 2 * body(i) and
+                upper_shadow(i) <= body(i) * 0.5 and
+                body(i) > 0.05 * candle_range(i)):
+            patterns.append({"name": "Hammer", "type": "bullish", "score": 60})
+
+        # Shooting Star: small body at bottom, long upper shadow >= 2x body
+        if (upper_shadow(i) >= 2 * body(i) and
+                lower_shadow(i) <= body(i) * 0.5 and
+                body(i) > 0.05 * candle_range(i)):
+            patterns.append({"name": "Shooting Star", "type": "bearish", "score": -60})
+
+        # --- Two-bar patterns ---
+        # Bullish Engulfing: prev bearish, current bullish, current body engulfs prev body
+        if (not is_bullish(p) and is_bullish(i) and
+                o[i] <= c[p] and c[i] >= o[p] and body(i) > body(p)):
+            patterns.append({"name": "Bullish Engulfing", "type": "bullish", "score": 70})
+
+        # Bearish Engulfing: prev bullish, current bearish, current body engulfs prev body
+        if (is_bullish(p) and not is_bullish(i) and
+                o[i] >= c[p] and c[i] <= o[p] and body(i) > body(p)):
+            patterns.append({"name": "Bearish Engulfing", "type": "bearish", "score": -70})
+
+        # Bullish Harami: prev bearish with big body, current bullish inside prev body
+        if (not is_bullish(p) and is_bullish(i) and
+                body(p) > body(i) and
+                o[i] >= c[p] and c[i] <= o[p]):
+            patterns.append({"name": "Bullish Harami", "type": "bullish", "score": 40})
+
+        # Bearish Harami: prev bullish with big body, current bearish inside prev body
+        if (is_bullish(p) and not is_bullish(i) and
+                body(p) > body(i) and
+                o[i] <= c[p] and c[i] >= o[p]):
+            patterns.append({"name": "Bearish Harami", "type": "bearish", "score": -40})
+
+        # --- Three-bar patterns ---
+        # Morning Star: bar[pp] bearish, bar[p] small body (star), bar[i] bullish closes above mid of pp
+        mid_pp = (o[pp] + c[pp]) / 2
+        if (not is_bullish(pp) and body(pp) > 0.3 * candle_range(pp) and
+                body(p) < 0.3 * candle_range(p) and
+                is_bullish(i) and c[i] > mid_pp):
+            patterns.append({"name": "Morning Star", "type": "bullish", "score": 80})
+
+        # Evening Star: bar[pp] bullish, bar[p] small body (star), bar[i] bearish closes below mid of pp
+        if (is_bullish(pp) and body(pp) > 0.3 * candle_range(pp) and
+                body(p) < 0.3 * candle_range(p) and
+                not is_bullish(i) and c[i] < mid_pp):
+            patterns.append({"name": "Evening Star", "type": "bearish", "score": -80})
+
+        # Aggregate score: average of detected pattern scores (or 0 if none)
+        if patterns:
+            avg_score = sum(p["score"] for p in patterns) / len(patterns)
+        else:
+            avg_score = 0.0
+
+        return {"patterns": patterns, "score": max(-100, min(100, round(avg_score, 2)))}
+
+    # ── Support/Resistance Levels ──
+    def compute_support_resistance(self, df: pd.DataFrame, current_price: float = None) -> dict:
+        """Compute pivot points, previous day levels, and Fibonacci retracement."""
+        if df is None or len(df) < 20:
+            return {"levels": {}, "proximity_signal": 0}
+
+        if current_price is None:
+            current_price = float(df["close"].iloc[-1])
+
+        # Determine previous day H/L/C from intraday data
+        # Group by date and take the last complete day
+        if "datetime_str" in df.columns:
+            df_copy = df.copy()
+            df_copy["_date"] = df_copy["datetime_str"].str[:10]
+            dates = df_copy["_date"].unique()
+            if len(dates) >= 2:
+                prev_day = df_copy[df_copy["_date"] == dates[-2]]
+                prev_high = float(prev_day["high"].max())
+                prev_low = float(prev_day["low"].min())
+                prev_close = float(prev_day["close"].iloc[-1])
+            else:
+                prev_high = float(df["high"].iloc[:-1].max()) if len(df) > 1 else float(df["high"].iloc[-1])
+                prev_low = float(df["low"].iloc[:-1].min()) if len(df) > 1 else float(df["low"].iloc[-1])
+                prev_close = float(df["close"].iloc[-2]) if len(df) > 1 else float(df["close"].iloc[-1])
+        else:
+            prev_high = float(df["high"].iloc[-2]) if len(df) > 1 else float(df["high"].iloc[-1])
+            prev_low = float(df["low"].iloc[-2]) if len(df) > 1 else float(df["low"].iloc[-1])
+            prev_close = float(df["close"].iloc[-2]) if len(df) > 1 else float(df["close"].iloc[-1])
+
+        # Classic Pivot Points
+        pivot = (prev_high + prev_low + prev_close) / 3
+        r1 = 2 * pivot - prev_low
+        r2 = pivot + (prev_high - prev_low)
+        r3 = prev_high + 2 * (pivot - prev_low)
+        s1 = 2 * pivot - prev_high
+        s2 = pivot - (prev_high - prev_low)
+        s3 = prev_low - 2 * (prev_high - pivot)
+
+        # Fibonacci Retracement from 20-bar swing
+        swing_high = float(df["high"].tail(20).max())
+        swing_low = float(df["low"].tail(20).min())
+        fib_range = swing_high - swing_low
+        fib_levels = {
+            "fib_236": round(swing_high - 0.236 * fib_range, 2),
+            "fib_382": round(swing_high - 0.382 * fib_range, 2),
+            "fib_500": round(swing_high - 0.500 * fib_range, 2),
+            "fib_618": round(swing_high - 0.618 * fib_range, 2),
+        }
+
+        levels = {
+            "pivot": round(pivot, 2),
+            "r1": round(r1, 2), "r2": round(r2, 2), "r3": round(r3, 2),
+            "s1": round(s1, 2), "s2": round(s2, 2), "s3": round(s3, 2),
+            "prev_high": round(prev_high, 2),
+            "prev_low": round(prev_low, 2),
+            "prev_close": round(prev_close, 2),
+            **fib_levels,
+        }
+
+        # Proximity signal: check if price is within 0.5% of any level
+        threshold_pct = 0.005
+        support_levels = [s1, s2, s3, swing_low, fib_levels["fib_618"], fib_levels["fib_500"]]
+        resistance_levels = [r1, r2, r3, swing_high, fib_levels["fib_236"], fib_levels["fib_382"]]
+
+        # Determine trend from last 5 bars
+        if len(df) >= 5:
+            trend = 1 if float(df["close"].iloc[-1]) > float(df["close"].iloc[-5]) else -1
+        else:
+            trend = 0
+
+        proximity_signal = 0
+        for lvl in support_levels:
+            if lvl > 0 and abs(current_price - lvl) / current_price <= threshold_pct:
+                proximity_signal += 30 if trend >= 0 else -20
+                break
+        for lvl in resistance_levels:
+            if lvl > 0 and abs(current_price - lvl) / current_price <= threshold_pct:
+                proximity_signal += 30 if trend < 0 else -20
+                break
+
+        proximity_signal = max(-100, min(100, proximity_signal))
+
+        return {"levels": levels, "proximity_signal": proximity_signal, "trend": "up" if trend >= 0 else "down"}
     def compute_all(self, df: pd.DataFrame) -> dict:
         close = df["close"]
         high = df["high"]
@@ -162,13 +339,18 @@ class IndicatorService:
             # Ongoing spread: 5 above 9 = bullish, scaled by distance
             ma_score = max(-100, min(100, ma_spread_pct * 300))
 
-        # ── Weighted composite ──
+        # ── 6. Candlestick Patterns ──
+        candle_result = self._detect_candlestick_patterns(df)
+        candle_score = candle_result["score"]
+
+        # ── Weighted composite (with candlestick) ──
         technical_score = (
-            0.25 * rsi_score +
-            0.20 * volume_score +
-            0.20 * bb_score +
-            0.20 * vwap_score +
-            0.15 * ma_score
+            0.22 * rsi_score +
+            0.18 * volume_score +
+            0.18 * bb_score +
+            0.17 * vwap_score +
+            0.12 * ma_score +
+            0.13 * candle_score
         )
         technical_score = max(-100, min(100, round(technical_score, 2)))
 
@@ -187,6 +369,8 @@ class IndicatorService:
             "ma_cross": "bullish" if cross_bullish else ("bearish" if cross_bearish else "none"),
             "ma_score": round(ma_score, 2),
             "current_price": round(current_price, 2),
+            "candlestick_patterns": candle_result["patterns"],
+            "candlestick_score": candle_result["score"],
         }
 
         datetimes = df["datetime_str"].tolist() if "datetime_str" in df.columns else list(range(len(df)))

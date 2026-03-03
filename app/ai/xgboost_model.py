@@ -77,6 +77,81 @@ class XGBoostPredictor:
 
         return float(np.mean(mapes)) if mapes else 5.0
 
+    def _add_candlestick_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add binary candlestick pattern features for each row."""
+        o = df["open"].values
+        h = df["high"].values
+        l = df["low"].values
+        c = df["close"].values
+
+        patterns = {
+            "candle_doji": np.zeros(len(df)),
+            "candle_hammer": np.zeros(len(df)),
+            "candle_shooting_star": np.zeros(len(df)),
+            "candle_bull_engulf": np.zeros(len(df)),
+            "candle_bear_engulf": np.zeros(len(df)),
+            "candle_bull_harami": np.zeros(len(df)),
+            "candle_bear_harami": np.zeros(len(df)),
+            "candle_morning_star": np.zeros(len(df)),
+            "candle_evening_star": np.zeros(len(df)),
+        }
+
+        for i in range(2, len(df)):
+            body_i = abs(c[i] - o[i])
+            rng_i = h[i] - l[i] if h[i] != l[i] else 0.001
+            upper_i = h[i] - max(o[i], c[i])
+            lower_i = min(o[i], c[i]) - l[i]
+
+            # Doji
+            if body_i < 0.10 * rng_i:
+                patterns["candle_doji"][i] = 1
+
+            # Hammer
+            if lower_i >= 2 * body_i and upper_i <= body_i * 0.5 and body_i > 0.05 * rng_i:
+                patterns["candle_hammer"][i] = 1
+
+            # Shooting Star
+            if upper_i >= 2 * body_i and lower_i <= body_i * 0.5 and body_i > 0.05 * rng_i:
+                patterns["candle_shooting_star"][i] = 1
+
+            p = i - 1
+            body_p = abs(c[p] - o[p])
+
+            # Bullish Engulfing
+            if c[p] < o[p] and c[i] > o[i] and o[i] <= c[p] and c[i] >= o[p] and body_i > body_p:
+                patterns["candle_bull_engulf"][i] = 1
+
+            # Bearish Engulfing
+            if c[p] > o[p] and c[i] < o[i] and o[i] >= c[p] and c[i] <= o[p] and body_i > body_p:
+                patterns["candle_bear_engulf"][i] = 1
+
+            # Bullish Harami
+            if c[p] < o[p] and c[i] > o[i] and body_p > body_i and o[i] >= c[p] and c[i] <= o[p]:
+                patterns["candle_bull_harami"][i] = 1
+
+            # Bearish Harami
+            if c[p] > o[p] and c[i] < o[i] and body_p > body_i and o[i] <= c[p] and c[i] >= o[p]:
+                patterns["candle_bear_harami"][i] = 1
+
+            # Morning Star (3-bar)
+            pp = i - 2
+            rng_pp = h[pp] - l[pp] if h[pp] != l[pp] else 0.001
+            rng_p = h[p] - l[p] if h[p] != l[p] else 0.001
+            mid_pp = (o[pp] + c[pp]) / 2
+            if (c[pp] < o[pp] and abs(c[pp] - o[pp]) > 0.3 * rng_pp and
+                    body_p < 0.3 * rng_p and c[i] > o[i] and c[i] > mid_pp):
+                patterns["candle_morning_star"][i] = 1
+
+            # Evening Star (3-bar)
+            if (c[pp] > o[pp] and abs(c[pp] - o[pp]) > 0.3 * rng_pp and
+                    body_p < 0.3 * rng_p and c[i] < o[i] and c[i] < mid_pp):
+                patterns["candle_evening_star"][i] = 1
+
+        for name, vals in patterns.items():
+            df[name] = vals
+
+        return df
+
     def _build_tabular_features(self, df: pd.DataFrame, symbol: str = "") -> pd.DataFrame:
         """Build tabular feature matrix from OHLCV data (no sequences needed)."""
         from app.ai.preprocessing import StockDataPreprocessor
@@ -188,6 +263,9 @@ class XGBoostPredictor:
             dates = pd.to_datetime(feat_df["date"])
             feat_df["day_sin"] = np.sin(2 * np.pi * dates.dt.dayofweek / 5)
             feat_df["day_cos"] = np.cos(2 * np.pi * dates.dt.dayofweek / 5)
+
+        # Candlestick pattern one-hot features
+        feat_df = self._add_candlestick_features(feat_df)
 
         feat_df = feat_df.dropna().reset_index(drop=True)
 

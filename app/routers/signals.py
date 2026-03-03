@@ -269,6 +269,17 @@ def get_intraday_signal(symbol: str):
                     candles = signal.get("intraday_candles", [])
                     if candles:
                         price = candles[-1].get("close")
+                    # Determine sector
+                    from app.config import SECTOR_MAP
+                    sector = None
+                    for s, syms in SECTOR_MAP.items():
+                        if sym in syms:
+                            sector = s
+                            break
+                    oi_s = None
+                    oi_data = signal.get("oi_analysis", {})
+                    if oi_data.get("available"):
+                        oi_s = oi_data.get("score")
                     log = SignalLog(
                         symbol=sym,
                         direction=signal["direction"],
@@ -277,7 +288,9 @@ def get_intraday_signal(symbol: str):
                         technical_score=signal["technical"]["score"],
                         sentiment_score=signal["sentiment"]["score"],
                         global_score=signal["global_market"]["score"],
+                        oi_score=oi_s,
                         price_at_signal=price,
+                        sector=sector,
                     )
                     db.add(log)
                     db.commit()
