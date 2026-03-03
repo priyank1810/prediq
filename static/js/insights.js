@@ -1,7 +1,20 @@
 const Insights = {
+    _seeded: false,
+
     init() {},
 
     async load() {
+        // Check if we have any signal data; if not, seed a few signals first
+        if (!this._seeded) {
+            this._seeded = true;
+            try {
+                const existing = await API.scanHighConfidence(0);
+                if (!existing || existing.length === 0) {
+                    await this._seedSignals();
+                }
+            } catch (e) { /* ignore */ }
+        }
+
         await Promise.all([
             this.loadHighConfidence(),
             this.loadAccuracy(),
@@ -12,6 +25,17 @@ const Insights = {
             this.loadBacktestPnL(),
             this.loadSmartAlerts(),
         ]);
+    },
+
+    async _seedSignals() {
+        // Generate signals for a few popular stocks to populate insights
+        const seeds = ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'SBIN'];
+        const container = document.getElementById('insightsHighConfidence');
+        if (container) {
+            container.innerHTML = '<div class="text-center py-6 text-gray-500 text-sm col-span-full">Generating initial signals for popular stocks...</div>';
+        }
+        // Fire all seed requests (each one logs a signal to the DB)
+        await Promise.allSettled(seeds.map(s => API.getIntradaySignal(s)));
     },
 
     async loadHighConfidence() {
@@ -141,7 +165,25 @@ const Insights = {
     async loadAccuracyByHorizon() {
         try {
             const data = await API.getStatsByHorizon();
-            this._renderStatRows('accuracyByHorizon', data, 'horizon', 'horizon');
+            const container = document.getElementById('accuracyByHorizon');
+            if (!container) return;
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="text-center py-2 text-gray-500 text-xs">No data yet</div>';
+                return;
+            }
+            container.innerHTML = data.map(row => {
+                const mape = row.avg_mape || 0;
+                const mapeColor = mape <= 3 ? 'text-green-400' : (mape <= 7 ? 'text-yellow-400' : 'text-red-400');
+                return `
+                    <div class="flex items-center justify-between py-1">
+                        <span class="text-xs text-gray-300">${row.horizon || '-'}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-gray-500">${row.total || 0} predictions</span>
+                            <span class="text-xs font-bold ${mapeColor}">${mape.toFixed(1)}% MAPE</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         } catch (e) {
             console.error('Failed to load accuracy by horizon:', e);
         }
@@ -166,14 +208,14 @@ const Insights = {
             const totalEl = document.getElementById('pnlTotal');
             const ddEl = document.getElementById('pnlDrawdown');
 
-            if (tradesEl) tradesEl.textContent = data.total_trades ?? '-';
+            if (tradesEl) tradesEl.textContent = data.trades ?? '-';
             if (winEl) {
                 const wr = data.win_rate;
                 winEl.textContent = wr != null ? wr.toFixed(1) + '%' : '-';
                 winEl.className = `text-white font-bold ${wr >= 50 ? 'text-green-400' : 'text-red-400'}`;
             }
             if (totalEl) {
-                const pnl = data.total_pnl;
+                const pnl = data.total_pnl_pct;
                 totalEl.textContent = pnl != null ? (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + '%' : '-';
                 totalEl.className = `text-white font-bold ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
             }
