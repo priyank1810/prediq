@@ -11,6 +11,7 @@ from app.utils.helpers import yfinance_symbol, now_ist
 from app.config import CACHE_TTL_QUOTE, CACHE_TTL_HISTORY, CACHE_TTL_STOCK_LIST, CACHE_TTL_INTRADAY, POPULAR_STOCKS, INDICES
 
 NSE_EQUITY_CSV_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+NSE_ETF_CSV_URL = "https://nsearchives.nseindia.com/content/equities/eq_etfseclist.csv"
 
 logger = logging.getLogger(__name__)
 
@@ -189,11 +190,12 @@ class DataFetcher:
                 if len(results) >= 20:
                     return results
 
-        # Then search all NSE stocks (symbol + company name)
+        # Then search all NSE stocks + ETFs (symbol + company name)
         stock_list = self._get_nse_stock_list()
         for item in stock_list:
             if query_upper in item["symbol"].upper() or query_upper in item["name"].upper():
-                results.append({"symbol": item["symbol"], "name": item["name"], "type": "stock"})
+                item_type = item.get("type", "stock")
+                results.append({"symbol": item["symbol"], "name": item["name"], "type": item_type})
                 if len(results) >= 20:
                     break
         return results
@@ -234,6 +236,28 @@ class DataFetcher:
                 logger.info(f"Loaded {len(stock_list)} stocks from NSE CSV")
         except Exception as e:
             logger.warning(f"NSE CSV fetch failed: {e}")
+
+        # 1b. Also fetch ETFs from NSE
+        try:
+            resp = requests.get(
+                NSE_ETF_CSV_URL,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                reader = csv.DictReader(io.StringIO(resp.text))
+                etf_count = 0
+                seen_symbols = {s["symbol"] for s in stock_list}
+                for row in reader:
+                    symbol = row.get("Symbol", "").strip()
+                    name = row.get("SecurityName", row.get("Underlying", "")).strip()
+                    if symbol and symbol not in seen_symbols:
+                        stock_list.append({"symbol": symbol, "name": name, "type": "etf"})
+                        seen_symbols.add(symbol)
+                        etf_count += 1
+                logger.info(f"Loaded {etf_count} ETFs from NSE CSV")
+        except Exception as e:
+            logger.warning(f"NSE ETF CSV fetch failed: {e}")
 
         # 2. Fallback: nsetools
         if not stock_list and NSE_AVAILABLE:

@@ -48,9 +48,9 @@ const Search = {
             return;
         }
         this.resultsDiv.innerHTML = results.map(r => {
-            const badge = r.type === 'index'
-                ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900 text-purple-300 ml-2">INDEX</span>'
-                : '';
+            let badge = '';
+            if (r.type === 'index') badge = '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900 text-purple-300 ml-2">INDEX</span>';
+            else if (r.type === 'etf') badge = '<span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-900 text-teal-300 ml-2">ETF</span>';
             return `
             <div class="px-4 py-2 hover:bg-dark-600 cursor-pointer flex justify-between items-center"
                  onclick="Search.select('${r.symbol}', '${r.name.replace(/'/g, "\\'")}')">
