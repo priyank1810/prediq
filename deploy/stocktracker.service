@@ -11,7 +11,7 @@ ExecStart=/home/ubuntu/stock-tracker/venv/bin/gunicorn main:app \
     --worker-class uvicorn.workers.UvicornWorker \
     --workers 1 \
     --bind 127.0.0.1:8000 \
-    --timeout 120 \
+    --timeout 300 \
     --graceful-timeout 30 \
     --keep-alive 120 \
     --access-logfile - \
