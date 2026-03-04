@@ -140,7 +140,10 @@ async def lifespan(app: FastAPI):
     oi_task = asyncio.create_task(oi_streamer())
     mtf_task = asyncio.create_task(mtf_streamer())
     watchlist_signal_task = asyncio.create_task(watchlist_signal_streamer())
-    keep_alive_task = asyncio.create_task(keep_alive())
+    # keep_alive only needed on Render free tier (self-ping to prevent spindown)
+    keep_alive_task = None
+    if os.getenv("RENDER_EXTERNAL_URL"):
+        keep_alive_task = asyncio.create_task(keep_alive())
     yield
     # Shutdown
     streamer_task.cancel()
@@ -151,7 +154,8 @@ async def lifespan(app: FastAPI):
     oi_task.cancel()
     mtf_task.cancel()
     watchlist_signal_task.cancel()
-    keep_alive_task.cancel()
+    if keep_alive_task:
+        keep_alive_task.cancel()
 
 
 app = FastAPI(title="Indian Stock Market Tracker & AI Predictor", lifespan=lifespan)
