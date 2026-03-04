@@ -1,6 +1,8 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy import func
-from app.services.signal_service import signal_service
+from app.services.job_service import job_service
 from app.database import SessionLocal
 from app.models import SignalLog, PredictionLog
 
@@ -252,66 +254,29 @@ def signal_accuracy_stats():
 # --- Existing endpoints (must come AFTER scan/ and stats/ routes) ---
 
 @router.get("/{symbol}")
-def get_intraday_signal(symbol: str):
+async def get_intraday_signal(symbol: str):
     try:
         sym = symbol.upper()
-        signal = signal_service.get_signal(sym)
-        if not signal:
-            raise HTTPException(status_code=404, detail=f"No signal data for {symbol}")
+        job_id = job_service.enqueue("signal", {"symbol": sym}, priority=10)
 
-        # Log to SignalLog on-demand (replaces background scanner)
-        try:
-            from datetime import timedelta
-            from app.utils.helpers import now_ist
-            db = SessionLocal()
-            try:
-                # Only log if last log for this symbol is >1 min old (avoid spam)
-                last_log = (
-                    db.query(SignalLog)
-                    .filter(SignalLog.symbol == sym)
-                    .order_by(SignalLog.created_at.desc())
-                    .first()
-                )
-                should_log = (
-                    last_log is None
-                    or (now_ist() - last_log.created_at) > timedelta(minutes=1)
-                )
-                if should_log:
-                    price = None
-                    candles = signal.get("intraday_candles", [])
-                    if candles:
-                        price = candles[-1].get("close")
-                    # Determine sector
-                    from app.config import SECTOR_MAP
-                    sector = None
-                    for s, syms in SECTOR_MAP.items():
-                        if sym in syms:
-                            sector = s
-                            break
-                    oi_s = None
-                    oi_data = signal.get("oi_analysis", {})
-                    if oi_data.get("available"):
-                        oi_s = oi_data.get("score")
-                    log = SignalLog(
-                        symbol=sym,
-                        direction=signal["direction"],
-                        confidence=signal["confidence"],
-                        composite_score=signal["composite_score"],
-                        technical_score=signal["technical"]["score"],
-                        sentiment_score=signal["sentiment"]["score"],
-                        global_score=signal["global_market"]["score"],
-                        oi_score=oi_s,
-                        price_at_signal=price,
-                        sector=sector,
-                    )
-                    db.add(log)
-                    db.commit()
-            finally:
-                db.close()
-        except Exception:
-            pass  # Don't fail the response if logging fails
+        # Poll-wait: check every 0.5s for up to 30s
+        for _ in range(60):
+            await asyncio.sleep(0.5)
+            status = job_service.get_status(job_id)
+            if not status:
+                break
+            if status["status"] == "completed":
+                return status["result"]
+            if status["status"] == "failed":
+                raise HTTPException(status_code=500, detail=f"Signal computation failed: {status.get('error', 'unknown')}")
 
-        return signal
+        # Timeout — return 202 with job_id for polling
+        return JSONResponse(
+            status_code=202,
+            content={"job_id": job_id, "status": "pending", "poll_url": f"/api/jobs/{job_id}"},
+        )
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

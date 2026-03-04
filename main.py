@@ -17,7 +17,8 @@ from app.database import engine, Base
 from app.routers import stocks, predictions, portfolio, alerts, indicators, signals, watchlist
 from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
-from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, oi_streamer, mtf_streamer, watchlist_signal_streamer
+from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator
+from app.routers.jobs import router as jobs_router
 
 
 async def smart_alert_checker():
@@ -97,6 +98,9 @@ def _migrate_db():
         "CREATE INDEX IF NOT EXISTS ix_prediction_logs_symbol ON prediction_logs(symbol)",
         "CREATE INDEX IF NOT EXISTS ix_signal_logs_created_at ON signal_logs(created_at)",
         "CREATE INDEX IF NOT EXISTS ix_signal_logs_symbol_created ON signal_logs(symbol, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_job_queue_poll ON job_queue(status, priority, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_job_queue_job_type ON job_queue(job_type)",
+        "CREATE INDEX IF NOT EXISTS ix_job_queue_status ON job_queue(status)",
     ]
     for idx_sql in indexes:
         try:
@@ -108,29 +112,87 @@ def _migrate_db():
     conn.close()
 
 
+async def periodic_job_enqueuer():
+    """Every 5 min, enqueue background jobs (watchlist_signals, mtf_stream, oi_stream)
+    if market is open and no duplicate pending jobs exist."""
+    from app.services.job_service import job_service
+    from app.utils.helpers import is_market_open
+    from app.routers.websocket import manager
+
+    await asyncio.sleep(120)  # Let services warm up
+    while True:
+        try:
+            if is_market_open():
+                # Watchlist signals (always enqueue if market open)
+                if not job_service.has_pending("watchlist_signals"):
+                    job_service.enqueue("watchlist_signals", {}, priority=0)
+
+                # MTF + OI only if WebSocket clients are subscribed
+                if manager.active_connections:
+                    symbols = list(manager.get_all_subscribed_symbols())
+                    if symbols:
+                        if not job_service.has_pending("mtf_stream"):
+                            job_service.enqueue("mtf_stream", {"symbols": symbols}, priority=0)
+                        if not job_service.has_pending("oi_stream"):
+                            job_service.enqueue("oi_stream", {"symbols": symbols}, priority=0)
+        except Exception:
+            pass
+        await asyncio.sleep(300)
+
+
+async def worker_result_broadcaster():
+    """Every 3s, read completed background jobs and broadcast results via WebSocket."""
+    from app.services.job_service import job_service
+    from app.routers.websocket import manager
+
+    await asyncio.sleep(10)
+    while True:
+        try:
+            if manager.active_connections:
+                jobs = job_service.get_completed_background_jobs()
+                for job in jobs:
+                    job_type = job["job_type"]
+                    result = job["result"]
+
+                    if job_type == "watchlist_signals":
+                        signals = result.get("signals", {})
+                        for sym, signal_data in signals.items():
+                            await manager.broadcast_signal(sym, signal_data)
+
+                    elif job_type == "mtf_stream":
+                        mtf_data = result.get("mtf_data", {})
+                        for sym, data in mtf_data.items():
+                            await manager.broadcast_mtf_update(sym, data)
+
+                    elif job_type == "oi_stream":
+                        oi_data = result.get("oi_data", {})
+                        for sym, data in oi_data.items():
+                            await manager.broadcast_oi_update(sym, data)
+
+                    job_service.mark_broadcast(job["id"])
+        except Exception:
+            pass
+        await asyncio.sleep(3)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     Base.metadata.create_all(bind=engine)
     _migrate_db()
-    streamer_task = asyncio.create_task(price_streamer())
-    alert_task = asyncio.create_task(alert_checker())
-    validator_task = asyncio.create_task(signal_accuracy_validator())
-    smart_alert_task = asyncio.create_task(smart_alert_checker())
-    mood_task = asyncio.create_task(market_mood_broadcaster())
-    oi_task = asyncio.create_task(oi_streamer())
-    mtf_task = asyncio.create_task(mtf_streamer())
-    watchlist_signal_task = asyncio.create_task(watchlist_signal_streamer())
+    tasks = [
+        asyncio.create_task(price_streamer()),
+        asyncio.create_task(alert_checker()),
+        asyncio.create_task(signal_accuracy_validator()),
+        asyncio.create_task(smart_alert_checker()),
+        asyncio.create_task(market_mood_broadcaster()),
+        asyncio.create_task(periodic_job_enqueuer()),
+        asyncio.create_task(worker_result_broadcaster()),
+    ]
     yield
     # Shutdown
-    streamer_task.cancel()
-    alert_task.cancel()
-    validator_task.cancel()
-    smart_alert_task.cancel()
-    mood_task.cancel()
-    oi_task.cancel()
-    mtf_task.cancel()
-    watchlist_signal_task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 app = FastAPI(title="Indian Stock Market Tracker & AI Predictor", lifespan=lifespan)
@@ -157,6 +219,7 @@ app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
 app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"])
 app.include_router(fii_dii_router, prefix="/api/fii-dii", tags=["fii-dii"])
 app.include_router(sectors_router, prefix="/api/sectors", tags=["sectors"])
+app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(ws_router)
 
 

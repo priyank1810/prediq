@@ -74,13 +74,14 @@ echo "[6/8] Creating data directories..."
 mkdir -p "${APP_DIR}/data"
 mkdir -p "${APP_DIR}/saved_models"
 
-# ── 7. systemd service ──────────────────────────────────────────────
-echo "[7/8] Installing systemd service..."
+# ── 7. systemd services ─────────────────────────────────────────────
+echo "[7/8] Installing systemd services..."
 sudo cp "${APP_DIR}/deploy/stocktracker.service" /etc/systemd/system/stocktracker.service
+sudo cp "${APP_DIR}/deploy/stocktracker-worker.service" /etc/systemd/system/stocktracker-worker.service
 sudo systemctl daemon-reload
-sudo systemctl enable stocktracker
-sudo systemctl start stocktracker
-echo "  Service started."
+sudo systemctl enable stocktracker stocktracker-worker
+sudo systemctl start stocktracker stocktracker-worker
+echo "  Services started."
 
 # ── 8. nginx reverse proxy ──────────────────────────────────────────
 echo "[8/8] Configuring nginx..."

@@ -1,0 +1,25 @@
+[Unit]
+Description=Stock Tracker ML Worker
+After=stocktracker.service
+Wants=stocktracker.service
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/stock-tracker
+EnvironmentFile=/home/ubuntu/stock-tracker/.env
+ExecStart=/home/ubuntu/stock-tracker/venv/bin/python worker.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stocktracker-worker
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

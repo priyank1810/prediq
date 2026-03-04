@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from sqlalchemy import Column, Index, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Index, Integer, String, Float, Boolean, DateTime, Date, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.utils.helpers import now_ist
@@ -119,3 +119,21 @@ class WatchlistItem(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     owner = relationship("User", back_populates="watchlist")
+
+
+class JobQueue(Base):
+    __tablename__ = "job_queue"
+    __table_args__ = (
+        Index("ix_job_queue_poll", "status", "priority", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_type = Column(String, nullable=False, index=True)
+    priority = Column(Integer, default=0)  # 10=user-facing, 0=background
+    status = Column(String, default="pending", index=True)  # pending, running, completed, failed, broadcast
+    params = Column(Text, nullable=True)  # JSON
+    result = Column(Text, nullable=True)  # JSON
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=now_ist)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
