@@ -1,8 +1,6 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
 from sqlalchemy import func
-from app.services.job_service import job_service
 from app.database import SessionLocal
 from app.models import SignalLog, PredictionLog
 
@@ -257,26 +255,11 @@ def signal_accuracy_stats():
 async def get_intraday_signal(symbol: str):
     try:
         sym = symbol.upper()
-        job_id = await asyncio.to_thread(job_service.enqueue, "signal", {"symbol": sym}, 10)
-
-        # Poll-wait: check every 0.5s for up to 30s
-        for _ in range(60):
-            await asyncio.sleep(0.5)
-            status = await asyncio.to_thread(job_service.get_status, job_id)
-            if not status:
-                break
-            if status["status"] == "completed":
-                return status["result"]
-            if status["status"] == "failed":
-                raise HTTPException(status_code=500, detail=f"Signal computation failed: {status.get('error', 'unknown')}")
-
-        # Timeout — return 202 with job_id for polling
-        return JSONResponse(
-            status_code=202,
-            content={"job_id": job_id, "status": "pending", "poll_url": f"/api/jobs/{job_id}"},
-        )
-    except HTTPException:
-        raise
+        from app.services.signal_service import signal_service
+        signal_data = await asyncio.to_thread(signal_service.get_signal, sym)
+        if not signal_data:
+            raise ValueError(f"No signal data for {sym}")
+        return signal_data
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
