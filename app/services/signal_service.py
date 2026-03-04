@@ -91,11 +91,11 @@ class SignalService:
             boost = 5
         else:
             level = "LOW"
-            boost = -5
+            boost = 0  # No directional agreement → no boost
 
         # Direction of boost based on majority
         if bearish_count > bullish_count:
-            boost = -abs(boost) if boost > 0 else boost
+            boost = -abs(boost)
 
         return {
             "level": level,

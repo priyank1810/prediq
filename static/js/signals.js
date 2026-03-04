@@ -398,7 +398,7 @@ const Signals = {
     renderSectorBadge(sector) {
         const el = document.getElementById('sectorStrengthBadge');
         if (!el) return;
-        if (!sector || !sector.available) {
+        if (!sector || !sector.available || sector.relative_pct == null) {
             el.classList.add('hidden');
             return;
         }

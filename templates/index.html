@@ -639,6 +639,66 @@
                 </div>
             </div>
 
+            <!-- Signal System Backtest -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Signal System Backtest — New vs Old</h3>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <input type="text" id="backtestSymbol" placeholder="Symbol (e.g. RELIANCE)" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-40 placeholder-gray-500 uppercase">
+                    <select id="backtestDays" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
+                        <option value="30">30 days</option>
+                        <option value="60" selected>60 days</option>
+                        <option value="120">120 days</option>
+                        <option value="252">1 year</option>
+                    </select>
+                    <button id="btnRunBacktest" onclick="Insights.runSignalBacktest()" class="px-3 py-1 bg-accent-blue text-white text-xs rounded hover:bg-blue-600 transition">Run Backtest</button>
+                </div>
+                <div id="backtestSignalLoading" class="hidden text-center py-4">
+                    <div class="animate-spin w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full mx-auto"></div>
+                    <p class="text-gray-500 text-xs mt-2">Running walk-forward backtest...</p>
+                </div>
+                <div id="backtestSignalResults" class="hidden">
+                    <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div class="bg-dark-700 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-gray-400 font-medium">New System <span class="text-green-400">(6 indicators)</span></span>
+                            </div>
+                            <div id="btNewAccuracy" class="text-2xl font-bold text-white">-</div>
+                            <div class="grid grid-cols-3 gap-2 mt-2">
+                                <div><div class="text-[10px] text-gray-500">Days</div><div id="btNewTotal" class="text-xs text-white font-mono">-</div></div>
+                                <div><div class="text-[10px] text-gray-500">Directional</div><div id="btNewDir" class="text-xs text-white font-mono">-</div></div>
+                                <div><div class="text-[10px] text-gray-500">Neutral</div><div id="btNewNeutral" class="text-xs text-gray-400 font-mono">-</div></div>
+                            </div>
+                        </div>
+                        <div class="bg-dark-700 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs text-gray-400 font-medium">Old System <span class="text-gray-500">(3 indicators)</span></span>
+                            </div>
+                            <div id="btOldAccuracy" class="text-2xl font-bold text-white">-</div>
+                            <div class="grid grid-cols-3 gap-2 mt-2">
+                                <div><div class="text-[10px] text-gray-500">Days</div><div id="btOldTotal" class="text-xs text-white font-mono">-</div></div>
+                                <div><div class="text-[10px] text-gray-500">Directional</div><div id="btOldDir" class="text-xs text-white font-mono">-</div></div>
+                                <div><div class="text-[10px] text-gray-500">Neutral</div><div id="btOldNeutral" class="text-xs text-gray-400 font-mono">-</div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="btDelta" class="text-center text-xs mb-3"></div>
+                    <div class="bg-dark-700 rounded-lg overflow-x-auto max-h-60 overflow-y-auto">
+                        <table class="w-full text-xs min-w-[400px]">
+                            <thead class="sticky top-0 bg-dark-700">
+                                <tr class="text-gray-400 border-b border-gray-600">
+                                    <th class="text-left px-2 py-1.5">Date</th>
+                                    <th class="text-center px-2 py-1.5">Score</th>
+                                    <th class="text-center px-2 py-1.5">Predicted</th>
+                                    <th class="text-center px-2 py-1.5">Actual</th>
+                                    <th class="text-center px-2 py-1.5">Result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="btDailyResults"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- Smart Alerts Management -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex items-center justify-between mb-3">

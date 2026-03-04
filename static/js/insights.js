@@ -299,5 +299,88 @@ const Insights = {
         } catch (e) {
             App.showToast('Failed to delete: ' + e.message, 'error');
         }
+    },
+
+    async runSignalBacktest() {
+        const symbolEl = document.getElementById('backtestSymbol');
+        const daysEl = document.getElementById('backtestDays');
+        const loading = document.getElementById('backtestSignalLoading');
+        const results = document.getElementById('backtestSignalResults');
+        const btn = document.getElementById('btnRunBacktest');
+
+        const symbol = (symbolEl.value || '').trim().toUpperCase();
+        if (!symbol) {
+            App.showToast('Enter a symbol to backtest', 'error');
+            return;
+        }
+
+        loading.classList.remove('hidden');
+        results.classList.add('hidden');
+        btn.disabled = true;
+
+        try {
+            const data = await API.getBacktestSignal(symbol, parseInt(daysEl.value));
+            this.renderSignalBacktest(data);
+        } catch (e) {
+            App.showToast('Backtest failed: ' + e.message, 'error');
+        } finally {
+            loading.classList.add('hidden');
+            btn.disabled = false;
+        }
+    },
+
+    renderSignalBacktest(data) {
+        const results = document.getElementById('backtestSignalResults');
+        results.classList.remove('hidden');
+
+        const ns = data.new_system;
+        const os = data.old_system;
+
+        // Accuracy numbers
+        const newAccEl = document.getElementById('btNewAccuracy');
+        const oldAccEl = document.getElementById('btOldAccuracy');
+        const newColor = ns.accuracy >= 55 ? 'text-green-400' : (ns.accuracy >= 45 ? 'text-yellow-400' : 'text-red-400');
+        const oldColor = os.accuracy >= 55 ? 'text-green-400' : (os.accuracy >= 45 ? 'text-yellow-400' : 'text-red-400');
+        newAccEl.textContent = ns.accuracy.toFixed(1) + '%';
+        newAccEl.className = `text-2xl font-bold ${newColor}`;
+        oldAccEl.textContent = os.accuracy.toFixed(1) + '%';
+        oldAccEl.className = `text-2xl font-bold ${oldColor}`;
+
+        document.getElementById('btNewTotal').textContent = ns.total_days;
+        document.getElementById('btNewDir').textContent = ns.directional_calls;
+        document.getElementById('btNewNeutral').textContent = ns.neutral_calls;
+        document.getElementById('btOldTotal').textContent = os.total_days;
+        document.getElementById('btOldDir').textContent = os.directional_calls;
+        document.getElementById('btOldNeutral').textContent = os.neutral_calls;
+
+        // Delta badge
+        const delta = ns.accuracy - os.accuracy;
+        const deltaEl = document.getElementById('btDelta');
+        if (delta > 0) {
+            deltaEl.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-green-900 text-green-400 font-bold">New system +${delta.toFixed(1)}% better</span>`;
+        } else if (delta < 0) {
+            deltaEl.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-red-900 text-red-400 font-bold">Old system +${Math.abs(delta).toFixed(1)}% better</span>`;
+        } else {
+            deltaEl.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">Both systems tied</span>`;
+        }
+
+        // Daily results table (new system)
+        const tbody = document.getElementById('btDailyResults');
+        if (ns.daily_results && ns.daily_results.length > 0) {
+            tbody.innerHTML = ns.daily_results.map(r => {
+                const predColor = r.predicted === 'UP' ? 'text-green-400' : (r.predicted === 'DOWN' ? 'text-red-400' : 'text-yellow-400');
+                const actColor = r.actual === 'UP' ? 'text-green-400' : 'text-red-400';
+                const icon = r.correct ? '<span class="text-green-400">&#10003;</span>' : '<span class="text-red-400">&#10007;</span>';
+                return `<tr class="border-b border-gray-800">
+                    <td class="px-2 py-1 text-gray-400">${r.date}</td>
+                    <td class="px-2 py-1 text-center font-mono text-gray-300">${r.score}</td>
+                    <td class="px-2 py-1 text-center ${predColor}">${r.predicted}</td>
+                    <td class="px-2 py-1 text-center ${actColor}">${r.actual}</td>
+                    <td class="px-2 py-1 text-center">${icon}</td>
+                </tr>`;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-gray-500">No results</td></tr>';
+        }
     }
 };

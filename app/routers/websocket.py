@@ -256,7 +256,7 @@ async def oi_streamer():
             if is_market_open() and manager.active_connections:
                 symbols = list(manager.get_all_subscribed_symbols())
                 if symbols:
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     for sym in symbols:
                         try:
                             from app.services.oi_service import oi_service
@@ -271,6 +271,18 @@ async def oi_streamer():
         await asyncio.sleep(OI_STREAM_INTERVAL)
 
 
+def _compute_mtf_for_symbol(sym):
+    """Fetch intraday data + compute full MTF confluence (runs in thread)."""
+    from app.services.signal_service import signal_service
+    from app.services.indicator_service import indicator_service
+    intraday_df = data_fetcher.get_intraday_data(sym, "5d", "15m")
+    tech_score = 0
+    if intraday_df is not None and not intraday_df.empty:
+        tech_result = indicator_service.compute_intraday_indicators(intraday_df)
+        tech_score = tech_result["score"]
+    return signal_service._compute_mtf_confluence(sym, intraday_df, tech_score)
+
+
 async def mtf_streamer():
     """Periodically push MTF confluence updates for subscribed symbols."""
     await asyncio.sleep(90)
@@ -279,12 +291,11 @@ async def mtf_streamer():
             if is_market_open() and manager.active_connections:
                 symbols = list(manager.get_all_subscribed_symbols())
                 if symbols:
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     for sym in symbols:
                         try:
-                            from app.services.signal_service import signal_service
                             result = await loop.run_in_executor(
-                                None, signal_service._compute_mtf_confluence, sym, None, 0
+                                None, _compute_mtf_for_symbol, sym
                             )
                             result["symbol"] = sym
                             await manager.broadcast_mtf_update(sym, result)

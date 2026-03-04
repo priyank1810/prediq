@@ -162,6 +162,7 @@ const API = {
     getStatsByHorizon() { return this.request('/api/signals/stats/by-horizon'); },
     getStatsByRegime() { return this.request('/api/signals/stats/by-regime'); },
     getBacktestPnL() { return this.request('/api/signals/stats/backtest-pnl'); },
+    getBacktestSignal(symbol, testDays = 60) { return this.request(`/api/signals/stats/backtest-signal?symbol=${encodeURIComponent(symbol)}&test_days=${testDays}`); },
 
     // High-confidence alert handler
     onHighConfidenceAlert: null,
