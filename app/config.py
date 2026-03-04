@@ -45,6 +45,7 @@ PRICE_STREAM_INTERVAL = 5  # seconds
 ALERT_CHECK_INTERVAL = 30  # seconds
 OI_STREAM_INTERVAL = 300  # 5 minutes
 MTF_STREAM_INTERVAL = 300  # 5 minutes
+SIGNAL_STREAM_INTERVAL = 300  # 5 minutes
 
 # --- Intraday Signal Config ---
 CACHE_TTL_INTRADAY = 120

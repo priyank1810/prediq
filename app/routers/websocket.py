@@ -8,6 +8,7 @@ from app.utils.helpers import is_market_open
 from app.config import (
     PRICE_STREAM_INTERVAL, ALERT_CHECK_INTERVAL,
     OI_STREAM_INTERVAL, MTF_STREAM_INTERVAL,
+    SIGNAL_STREAM_INTERVAL,
 )
 
 router = APIRouter()
@@ -304,3 +305,92 @@ async def mtf_streamer():
         except Exception:
             pass
         await asyncio.sleep(MTF_STREAM_INTERVAL)
+
+
+async def watchlist_signal_streamer():
+    """Auto-generate signals for all watchlist stocks and broadcast via WebSocket."""
+    from datetime import timedelta
+    from app.models import SignalLog, WatchlistItem
+    from app.services.signal_service import signal_service
+    from app.utils.helpers import now_ist
+    from app.config import SECTOR_MAP
+
+    await asyncio.sleep(120)  # Let other streamers start first
+
+    while True:
+        try:
+            if is_market_open():
+                db = SessionLocal()
+                try:
+                    symbols = [
+                        row.symbol
+                        for row in db.query(WatchlistItem.symbol).distinct().all()
+                    ]
+                finally:
+                    db.close()
+
+                if symbols:
+                    loop = asyncio.get_running_loop()
+                    for sym in symbols:
+                        try:
+                            signal = await loop.run_in_executor(
+                                None, signal_service.get_signal, sym
+                            )
+                            if not signal:
+                                continue
+
+                            # Log to SignalLog with 1-min throttle
+                            try:
+                                db = SessionLocal()
+                                try:
+                                    last_log = (
+                                        db.query(SignalLog)
+                                        .filter(SignalLog.symbol == sym)
+                                        .order_by(SignalLog.created_at.desc())
+                                        .first()
+                                    )
+                                    should_log = (
+                                        last_log is None
+                                        or (now_ist() - last_log.created_at)
+                                        > timedelta(minutes=1)
+                                    )
+                                    if should_log:
+                                        price = None
+                                        candles = signal.get("intraday_candles", [])
+                                        if candles:
+                                            price = candles[-1].get("close")
+                                        sector = None
+                                        for s, syms_list in SECTOR_MAP.items():
+                                            if sym in syms_list:
+                                                sector = s
+                                                break
+                                        oi_s = None
+                                        oi_data = signal.get("oi_analysis", {})
+                                        if oi_data.get("available"):
+                                            oi_s = oi_data.get("score")
+                                        log = SignalLog(
+                                            symbol=sym,
+                                            direction=signal["direction"],
+                                            confidence=signal["confidence"],
+                                            composite_score=signal["composite_score"],
+                                            technical_score=signal["technical"]["score"],
+                                            sentiment_score=signal["sentiment"]["score"],
+                                            global_score=signal["global_market"]["score"],
+                                            oi_score=oi_s,
+                                            price_at_signal=price,
+                                            sector=sector,
+                                        )
+                                        db.add(log)
+                                        db.commit()
+                                finally:
+                                    db.close()
+                            except Exception:
+                                pass
+
+                            # Broadcast to WebSocket subscribers
+                            await manager.broadcast_signal(sym, signal)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        await asyncio.sleep(SIGNAL_STREAM_INTERVAL)

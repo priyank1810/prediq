@@ -17,7 +17,7 @@ from app.database import engine, Base
 from app.routers import stocks, predictions, portfolio, alerts, indicators, signals, watchlist
 from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
-from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, oi_streamer, mtf_streamer
+from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, oi_streamer, mtf_streamer, watchlist_signal_streamer
 
 
 async def keep_alive():
@@ -139,6 +139,7 @@ async def lifespan(app: FastAPI):
     mood_task = asyncio.create_task(market_mood_broadcaster())
     oi_task = asyncio.create_task(oi_streamer())
     mtf_task = asyncio.create_task(mtf_streamer())
+    watchlist_signal_task = asyncio.create_task(watchlist_signal_streamer())
     keep_alive_task = asyncio.create_task(keep_alive())
     yield
     # Shutdown
@@ -149,6 +150,7 @@ async def lifespan(app: FastAPI):
     mood_task.cancel()
     oi_task.cancel()
     mtf_task.cancel()
+    watchlist_signal_task.cancel()
     keep_alive_task.cancel()
 
 
