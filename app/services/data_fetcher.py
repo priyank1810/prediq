@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 import yfinance as yf
 import requests
+from curl_cffi import requests as cffi_requests
 from datetime import datetime, timedelta
 from typing import Optional
 from app.utils.cache import cache
@@ -221,9 +222,9 @@ class DataFetcher:
 
         # 1. Try official NSE CSV (most complete — 2200+ stocks)
         try:
-            resp = requests.get(
+            resp = cffi_requests.get(
                 NSE_EQUITY_CSV_URL,
-                headers={"User-Agent": "Mozilla/5.0"},
+                impersonate="chrome",
                 timeout=10,
             )
             if resp.status_code == 200:
@@ -239,9 +240,9 @@ class DataFetcher:
 
         # 1b. Also fetch ETFs from NSE
         try:
-            resp = requests.get(
+            resp = cffi_requests.get(
                 NSE_ETF_CSV_URL,
-                headers={"User-Agent": "Mozilla/5.0"},
+                impersonate="chrome",
                 timeout=10,
             )
             if resp.status_code == 200:
