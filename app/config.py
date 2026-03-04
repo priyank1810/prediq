@@ -171,9 +171,6 @@ FINBERT_ENABLED = True  # Set to False to fall back to keyword matching
 # --- Finnhub Config ---
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 
-# --- Render Detection ---
-IS_RENDER = os.getenv("RENDER", "").lower() in ("true", "1")
-
 # --- Market Mood Config ---
 MARKET_MOOD_REFRESH_INTERVAL = 300  # seconds (5 min)
 

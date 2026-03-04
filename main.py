@@ -2,7 +2,7 @@ import os
 
 # Configure TensorFlow before any TF import
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # Suppress TF info/warning logs
-if os.getenv("RENDER", "").lower() in ("true", "1"):
+if os.getenv("LOW_RESOURCE_MODE", "").lower() in ("true", "1"):
     os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
     os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
     os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -18,25 +18,6 @@ from app.routers import stocks, predictions, portfolio, alerts, indicators, sign
 from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
 from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, oi_streamer, mtf_streamer, watchlist_signal_streamer
-
-
-async def keep_alive():
-    """Self-ping to prevent Render free tier from spinning down."""
-    import aiohttp
-
-    url = os.getenv("RENDER_EXTERNAL_URL")
-    if not url:
-        return  # Only needed on Render
-    url = url.rstrip("/") + "/health"
-
-    await asyncio.sleep(60)
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                await session.get(url, timeout=aiohttp.ClientTimeout(total=10))
-        except Exception:
-            pass
-        await asyncio.sleep(600)  # every 10 min
 
 
 async def smart_alert_checker():
@@ -140,10 +121,6 @@ async def lifespan(app: FastAPI):
     oi_task = asyncio.create_task(oi_streamer())
     mtf_task = asyncio.create_task(mtf_streamer())
     watchlist_signal_task = asyncio.create_task(watchlist_signal_streamer())
-    # keep_alive only needed on Render free tier (self-ping to prevent spindown)
-    keep_alive_task = None
-    if os.getenv("RENDER_EXTERNAL_URL"):
-        keep_alive_task = asyncio.create_task(keep_alive())
     yield
     # Shutdown
     streamer_task.cancel()
@@ -154,8 +131,6 @@ async def lifespan(app: FastAPI):
     oi_task.cancel()
     mtf_task.cancel()
     watchlist_signal_task.cancel()
-    if keep_alive_task:
-        keep_alive_task.cancel()
 
 
 app = FastAPI(title="Indian Stock Market Tracker & AI Predictor", lifespan=lifespan)
