@@ -41,6 +41,10 @@ pip install --upgrade pip wheel setuptools -q
 pip install -r requirements.txt -q
 pip install gunicorn -q
 
+# Install cmdstan binary (required by Prophet for Bayesian inference)
+echo "  Installing cmdstan for Prophet..."
+python -m cmdstanpy.install_cmdstan --lightweight 2>/dev/null || true
+
 # ── 4. Swap file (2 GB) ─────────────────────────────────────────────
 echo "[4/8] Setting up ${SWAP_SIZE} swap file..."
 if [ ! -f /swapfile ]; then
