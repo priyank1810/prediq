@@ -38,6 +38,14 @@ const Predictions = {
 
         const horizonLabel = data.horizon_label || data.horizon;
 
+        // Model label
+        const modelLabelEl = document.getElementById('predModelLabel');
+        if (modelLabelEl && data.models_used) {
+            const nameMap = { prophet: 'Prophet', xgboost: 'XGBoost' };
+            const names = data.models_used.map(m => nameMap[m] || m).join(' + ');
+            modelLabelEl.textContent = `Powered by ${names}`;
+        }
+
         // Confidence info (show confidence band if available)
         const confEl = document.getElementById('predConfidenceInfo');
         if (confEl) {

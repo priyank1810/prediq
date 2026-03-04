@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 class PredictionExplainer:
     """Analyzes model outputs + market context to produce human-readable explanations."""
 
+    # Horizon-aware sentiment/global weight factors
+    HORIZON_FACTORS = {
+        "15m": 0.2, "1h": 0.2,
+        "1d": 1.0,
+        "1w": 0.8,
+        "1mo": 0.4,
+        "3mo": 0.15, "6mo": 0.15, "1y": 0.15,
+    }
+
     def explain(
         self,
         symbol: str,
@@ -18,6 +27,7 @@ class PredictionExplainer:
         df: pd.DataFrame,
         sentiment: Optional[dict] = None,
         global_data: Optional[dict] = None,
+        horizon: str = "1d",
     ) -> dict:
         """Generate explanation for why predictions are bullish/bearish.
 
@@ -142,6 +152,8 @@ class PredictionExplainer:
         })
 
         # 3. Sentiment (increased weight — real-time signal)
+        horizon_factor = self.HORIZON_FACTORS.get(horizon, 1.0)
+
         if sentiment:
             sent_score = sentiment.get("score", 0)
             pos_count = sentiment.get("positive_count", 0)
@@ -163,13 +175,20 @@ class PredictionExplainer:
                 sent_points *= 1.5
                 sent_points = max(-35, min(35, sent_points))
 
+            # Scale by horizon — news matters less for long-term forecasts
+            sent_points *= horizon_factor
+
             bullish_score += sent_points
             total_weight += 25
+
+            sent_detail = f"{pos_count} positive vs {neg_count} negative headlines, composite score {sent_score:.0f}"
+            if horizon_factor < 0.5:
+                sent_detail += " (reduced weight for long-term forecast)"
 
             drivers.append({
                 "factor": "News Sentiment",
                 "impact": sent_impact,
-                "detail": f"{pos_count} positive vs {neg_count} negative headlines, composite score {sent_score:.0f}",
+                "detail": sent_detail,
             })
         else:
             drivers.append({
@@ -205,6 +224,9 @@ class PredictionExplainer:
                 global_points *= 1.5
                 global_points = max(-30, min(30, global_points))
 
+            # Scale by horizon — global context fades for long-term forecasts
+            global_points *= horizon_factor
+
             bullish_score += global_points
             total_weight += 20
 
@@ -213,10 +235,14 @@ class PredictionExplainer:
             if vix_market and vix_market["change_pct"] > 3:
                 risk_factors.append("VIX trending upward — increased volatility expected")
 
+            global_detail = ", ".join(market_parts) if market_parts else f"Global score: {global_score:.0f}"
+            if horizon_factor < 0.5:
+                global_detail += " (reduced weight for long-term forecast)"
+
             drivers.append({
                 "factor": "Global Markets",
                 "impact": global_impact,
-                "detail": ", ".join(market_parts) if market_parts else f"Global score: {global_score:.0f}",
+                "detail": global_detail,
             })
 
         # 5. Model agreement (informational — lower weight to avoid double-counting with Price Forecast)

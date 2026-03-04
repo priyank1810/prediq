@@ -603,11 +603,17 @@ class PredictionService:
         else:
             base_context_w = 0.10
 
-        # Intraday: reduce context weight further (sentiment is slow-acting)
+        # Horizon-aware context weight scaling
         if is_intraday:
-            base_context_w *= 0.3
+            base_context_w *= 0.2
         elif horizon_days <= 1:
-            base_context_w *= 0.5
+            base_context_w *= 1.0
+        elif horizon_days <= 7:
+            base_context_w *= 0.8
+        elif horizon_days >= 90:
+            base_context_w *= 0.15
+        elif horizon_days >= 30:
+            base_context_w *= 0.4
 
         context_w = base_context_w
         model_w = 1.0 - context_w
@@ -1004,6 +1010,7 @@ class PredictionService:
                 df=daily_df,
                 sentiment=merged_sentiment,
                 global_data=global_data,
+                horizon=horizon,
             )
             result["explanation"] = explanation
         except Exception as e:

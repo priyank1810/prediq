@@ -87,7 +87,7 @@ class PriceAlertResponse(BaseModel):
 
 class PredictionRequest(BaseModel):
     horizon: str = "1d"  # "15m", "1h", "1d", "1w", "1mo", "3mo", "6mo", "1y"
-    models: list[str] = ["prophet", "xgboost"]
+    models: Optional[list[str]] = None  # None = auto-select best models for horizon
 
 
 class SHAPDriver(BaseModel):
