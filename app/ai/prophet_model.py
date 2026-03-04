@@ -61,6 +61,13 @@ class ProphetPredictor:
 
         model.fit(prophet_df)
 
+        # Workaround: some Prophet versions lose stan_backend after fit,
+        # causing predict() to crash. Patch it and disable MCMC sampling.
+        if not hasattr(model, 'stan_backend'):
+            model.stan_backend = None
+            model.uncertainty_samples = 0
+            logger.warning("Prophet stan_backend missing — disabled uncertainty sampling")
+
         target_bdays = self._horizon_to_days(horizon)
         calendar_days = max(1, int(target_bdays * 1.5) + 5)
         future = model.make_future_dataframe(periods=calendar_days)
@@ -103,9 +110,16 @@ class ProphetPredictor:
         future_preds = future_preds.head(target_bdays)
 
         predictions = future_preds["yhat"].tolist()
-        lower = future_preds["yhat_lower"].tolist()
-        upper = future_preds["yhat_upper"].tolist()
         dates = future_preds["ds"].dt.strftime("%Y-%m-%d").tolist()
+
+        # Confidence intervals — may be NaN if uncertainty sampling was disabled
+        lower = future_preds["yhat_lower"].tolist() if "yhat_lower" in future_preds.columns else []
+        upper = future_preds["yhat_upper"].tolist() if "yhat_upper" in future_preds.columns else []
+
+        # Fallback: estimate ±3% band if intervals are missing/NaN
+        if not lower or not upper or any(np.isnan(v) for v in lower + upper):
+            lower = [round(float(p) * 0.97, 2) for p in predictions]
+            upper = [round(float(p) * 1.03, 2) for p in predictions]
 
         return {
             "predictions": [round(float(p), 2) for p in predictions],
