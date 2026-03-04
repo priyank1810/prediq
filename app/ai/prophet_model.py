@@ -73,6 +73,16 @@ class ProphetPredictor:
             except Exception:
                 cached_model = None
 
+        # Verify cached model is usable (stan_backend can be lost during deserialization)
+        if cached_model is not None and not hasattr(cached_model, 'stan_backend'):
+            logger.warning(f"Cached Prophet model for {symbol} missing stan_backend, retraining")
+            cached_model = None
+            if model_path:
+                try:
+                    os.remove(model_path)
+                except OSError:
+                    pass
+
         if cached_model is not None:
             model = cached_model
         else:
