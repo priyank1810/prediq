@@ -46,8 +46,21 @@ const Signals = {
                 API.getIntradaySignal(symbol),
                 API.getSignalHistory(symbol, 10),
             ]);
-            this.displaySignal(signal);
-            App.displaySignalBadge(signal);
+            // Handle 202 (job still processing) — retry once after 3s
+            if (signal.status === 'pending' && signal.job_id) {
+                await new Promise(r => setTimeout(r, 3000));
+                const retry = await API.getIntradaySignal(symbol);
+                if (retry.status === 'pending') {
+                    App.showToast('Signal is still generating, try again shortly', 'info');
+                    loading.classList.add('hidden');
+                    return;
+                }
+                this.displaySignal(retry);
+                App.displaySignalBadge(retry);
+            } else {
+                this.displaySignal(signal);
+                App.displaySignalBadge(signal);
+            }
             this.displaySignalHistory(history);
         } catch (e) {
             App.showToast('Failed to load signal: ' + e.message, 'error');

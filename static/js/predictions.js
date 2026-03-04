@@ -22,7 +22,17 @@ const Predictions = {
         results.classList.add('hidden');
 
         try {
-            const data = await API.getPredictions(symbol, this.currentHorizon);
+            let data = await API.getPredictions(symbol, this.currentHorizon);
+            // Handle 202 (job still processing) — retry once after 5s
+            if (data.status === 'pending' && data.job_id) {
+                await new Promise(r => setTimeout(r, 5000));
+                data = await API.getPredictions(symbol, this.currentHorizon);
+                if (data.status === 'pending') {
+                    loading.classList.add('hidden');
+                    App.showToast('Prediction is still generating, try again shortly', 'info');
+                    return;
+                }
+            }
             this.displayResults(data);
         } catch (e) {
             loading.classList.add('hidden');
