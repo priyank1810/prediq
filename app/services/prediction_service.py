@@ -663,10 +663,8 @@ class PredictionService:
     def _select_models_for_horizon(self, horizon: str) -> list:
         """Auto-select best model(s) for a given prediction horizon.
 
-        - Intraday (15m, 1h): XGBoost only — feature-based, stable for short-term
-        - 1 Day: XGBoost only — most reliable single model
-        - 1 Week: XGBoost + Prophet — technical + seasonality
-        - 1 Month+: Prophet only — trend/seasonality dominate, others drift
+        XGBoost is always included as a reliable fallback.
+        Prophet is added for longer horizons where seasonality matters.
         """
         cfg = PREDICTION_HORIZONS.get(horizon, {})
         is_intraday = cfg.get("intraday", False)
@@ -679,7 +677,7 @@ class PredictionService:
         elif days <= 5:
             return ["xgboost", "prophet"]
         else:
-            return ["prophet"]
+            return ["xgboost", "prophet"]
 
     def predict(self, symbol: str, horizon: str = "1d", models: list = None) -> dict:
         if models is None:

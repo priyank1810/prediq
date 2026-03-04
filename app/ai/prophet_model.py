@@ -8,11 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def _patch_prophet(model):
-    """Ensure stan_backend attribute exists on Prophet object.
-
-    Some Prophet versions/installs don't set stan_backend in __init__,
-    causing fit() and predict() to crash with AttributeError.
-    """
+    """Ensure stan_backend attribute exists on a Prophet instance."""
     if not hasattr(model, 'stan_backend'):
         model.stan_backend = None
     if not hasattr(model, 'uncertainty_samples'):
@@ -23,7 +19,7 @@ class ProphetPredictor:
     def _horizon_to_days(self, horizon: str) -> int:
         cfg = PREDICTION_HORIZONS.get(horizon, {})
         if cfg.get("intraday"):
-            return 1  # Prophet works on daily data; for intraday we predict next day
+            return 1
         return cfg.get("days", 1)
 
     def predict(self, df: pd.DataFrame, horizon: str = "1d", symbol: str = "") -> dict:
@@ -54,7 +50,6 @@ class ProphetPredictor:
                 has_regressors = True
         except Exception as e:
             logger.debug(f"Prophet regressor computation failed, using basic model: {e}")
-            # Re-prepare without regressors
             prophet_df = preprocessor.prepare_prophet_data(df)
 
         model = Prophet(
@@ -72,7 +67,7 @@ class ProphetPredictor:
             model.add_regressor("volume_norm")
 
         model.fit(prophet_df)
-        _patch_prophet(model)  # Re-patch in case fit() removed it
+        _patch_prophet(model)
 
         target_bdays = self._horizon_to_days(horizon)
         calendar_days = max(1, int(target_bdays * 1.5) + 5)
@@ -88,7 +83,6 @@ class ProphetPredictor:
 
             rsi_values = np.empty(len(future))
             vol_values = np.empty(len(future))
-
             rsi_values[:hist_len] = prophet_df["rsi"].values
             vol_values[:hist_len] = prophet_df["volume_norm"].values
 
@@ -102,18 +96,14 @@ class ProphetPredictor:
 
         forecast = model.predict(future)
 
-        # Get only future predictions (after training data)
         last_train_date = prophet_df["ds"].max()
         future_preds = forecast[forecast["ds"] > last_train_date]
-
-        # Filter to business days only
         future_preds = future_preds[future_preds["ds"].dt.dayofweek < 5]
         future_preds = future_preds.head(target_bdays)
 
         predictions = future_preds["yhat"].tolist()
         dates = future_preds["ds"].dt.strftime("%Y-%m-%d").tolist()
 
-        # Confidence intervals — may be NaN if uncertainty sampling was disabled
         lower = future_preds["yhat_lower"].tolist() if "yhat_lower" in future_preds.columns else []
         upper = future_preds["yhat_upper"].tolist() if "yhat_upper" in future_preds.columns else []
 
