@@ -7,15 +7,11 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/stock-tracker
 EnvironmentFile=/home/ubuntu/stock-tracker/.env
-ExecStart=/home/ubuntu/stock-tracker/venv/bin/gunicorn main:app \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --workers 1 \
-    --bind 127.0.0.1:8000 \
-    --timeout 300 \
-    --graceful-timeout 30 \
-    --keep-alive 120 \
-    --access-logfile - \
-    --error-logfile -
+ExecStart=/home/ubuntu/stock-tracker/venv/bin/uvicorn main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --timeout-keep-alive 120 \
+    --access-log
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
