@@ -104,11 +104,13 @@ const API = {
     getMarketMovers(count = 10) { return this.request(`/api/stocks/market-movers?count=${count}`); },
 
     // Predictions
-    getPredictions(symbol, horizon = '1d') {
-        return this.request(`/api/predictions/${encodeURIComponent(symbol)}`, {
+    getPredictions(symbol, horizon = '1d', signal = null) {
+        const opts = {
             method: 'POST',
             body: JSON.stringify({ horizon })
-        });
+        };
+        if (signal) opts.signal = signal;
+        return this.request(`/api/predictions/${encodeURIComponent(symbol)}`, opts);
     },
 
     // Indicators (public)

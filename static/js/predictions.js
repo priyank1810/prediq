@@ -1,5 +1,7 @@
 const Predictions = {
     currentHorizon: '1d',
+    _abortController: null,
+    _requestId: 0,
 
     init() {
         document.querySelectorAll('.horizon-btn').forEach(btn => {
@@ -13,6 +15,13 @@ const Predictions = {
     },
 
     async loadPredictions(symbol) {
+        // Cancel any in-flight prediction request
+        if (this._abortController) {
+            this._abortController.abort();
+        }
+        this._abortController = new AbortController();
+        const requestId = ++this._requestId;
+
         const panel = document.getElementById('predictionPanel');
         const loading = document.getElementById('predictionLoading');
         const results = document.getElementById('predictionResults');
@@ -22,9 +31,12 @@ const Predictions = {
         results.classList.add('hidden');
 
         try {
-            const data = await API.getPredictions(symbol, this.currentHorizon);
+            const data = await API.getPredictions(symbol, this.currentHorizon, this._abortController.signal);
+            // Ignore stale responses from previous requests
+            if (requestId !== this._requestId) return;
             this.displayResults(data);
         } catch (e) {
+            if (e.name === 'AbortError' || requestId !== this._requestId) return;
             loading.classList.add('hidden');
             App.showToast('Failed to generate predictions: ' + e.message, 'error');
         }
@@ -38,12 +50,16 @@ const Predictions = {
 
         const horizonLabel = data.horizon_label || data.horizon;
 
-        // Model label
+        // Model label — show which models succeeded/failed
         const modelLabelEl = document.getElementById('predModelLabel');
         if (modelLabelEl && data.models_used) {
             const nameMap = { prophet: 'Prophet', xgboost: 'XGBoost' };
-            const names = data.models_used.map(m => nameMap[m] || m).join(' + ');
-            modelLabelEl.textContent = `Powered by ${names}`;
+            const parts = data.models_used.map(m => {
+                const name = nameMap[m] || m;
+                if (data[m + '_error']) return `<span class="text-red-400">${name} (failed)</span>`;
+                return name;
+            });
+            modelLabelEl.innerHTML = `Powered by ${parts.join(' + ')}`;
         }
 
         // Confidence info (show confidence band if available)
@@ -63,8 +79,16 @@ const Predictions = {
             }
         }
 
-        // Primary prediction (ensemble or single model)
-        if (data.ensemble) {
+        // Handle missing ensemble (all models failed)
+        if (!data.ensemble || !data.ensemble.predictions || data.ensemble.predictions.length === 0) {
+            const errors = data.models_used
+                ? data.models_used.filter(m => data[m + '_error']).map(m => `${m}: ${data[m + '_error']}`)
+                : [];
+            document.getElementById('ensemblePrediction').textContent = '--';
+            const changeEl = document.getElementById('ensembleChange');
+            changeEl.textContent = errors.length ? 'Model error — try again' : 'No prediction available';
+            changeEl.className = 'text-sm mt-1 text-yellow-400';
+        } else {
             const lastPred = data.ensemble.predictions[data.ensemble.predictions.length - 1];
             document.getElementById('ensemblePrediction').textContent = `₹${lastPred.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             const currentPrice = parseFloat(document.getElementById('stockPrice').textContent.replace('₹', '').replace(/,/g, ''));
