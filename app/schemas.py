@@ -87,7 +87,7 @@ class PriceAlertResponse(BaseModel):
 
 class PredictionRequest(BaseModel):
     horizon: str = "1d"  # "15m", "1h", "1d", "1w", "1mo", "3mo", "6mo", "1y"
-    models: list[str] = ["lstm", "prophet", "xgboost"]
+    models: list[str] = ["prophet", "xgboost"]
 
 
 class SHAPDriver(BaseModel):
@@ -115,7 +115,6 @@ class ContributionBreakdown(BaseModel):
 class PredictionResponse(BaseModel):
     symbol: str
     horizon: str
-    lstm: Optional[ModelPrediction] = None
     prophet: Optional[ModelPrediction] = None
     xgboost: Optional[ModelPrediction] = None
     ensemble: Optional[ModelPrediction] = None

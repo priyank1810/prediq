@@ -332,30 +332,28 @@ class LSTMPredictor:
 
         steps = self._horizon_to_steps(horizon)
 
-        # Multi-step prediction with feature evolution
+        # Multi-step prediction — hold non-close features at last observed value
+        # to prevent momentum amplification that causes LSTM to always extrapolate trends
         current_sequence = scaled_data[-self.sequence_length:].copy()
         predictions = []
 
-        # Compute per-feature trend deltas from last 5 real steps for damped extrapolation
-        if current_sequence.shape[0] >= 5:
-            recent = current_sequence[-5:]
-            feature_deltas = np.mean(np.diff(recent, axis=0), axis=0)  # avg change per step
-        else:
-            feature_deltas = np.zeros(num_features)
+        # Max per-step change in scaled space — prevents runaway drift
+        max_step_change = 0.03
 
         for step in range(steps):
             input_seq = current_sequence.reshape(1, self.sequence_length, num_features)
             pred = model.predict(input_seq, verbose=0)[0, 0]
+
+            # Cap per-step change to prevent runaway predictions
+            prev_close_scaled = current_sequence[-1, 0]
+            if abs(pred - prev_close_scaled) > max_step_change:
+                pred = prev_close_scaled + max_step_change * np.sign(pred - prev_close_scaled)
+
             predictions.append(pred)
 
+            # Only update close (col 0); keep other features at last observed values
             new_row = current_sequence[-1].copy()
-            new_row[0] = pred  # close feature always gets prediction
-
-            # For non-close features, apply damped trend continuation
-            decay = 0.9 ** (step + 1)
-            for feat_idx in range(1, num_features):
-                new_row[feat_idx] = new_row[feat_idx] + feature_deltas[feat_idx] * decay
-                new_row[feat_idx] = np.clip(new_row[feat_idx], 0.0, 1.0)  # MinMaxScaler range
+            new_row[0] = pred
 
             current_sequence = np.vstack([current_sequence[1:], new_row])
 
@@ -453,26 +451,23 @@ class LSTMPredictor:
         current_sequence = scaled_data[-seq_len:].copy()
         predictions = []
 
-        # Compute per-feature trend deltas from last 5 real steps
-        if current_sequence.shape[0] >= 5:
-            recent = current_sequence[-5:]
-            feature_deltas = np.mean(np.diff(recent, axis=0), axis=0)
-        else:
-            feature_deltas = np.zeros(num_features)
+        # Max per-step change in scaled space — prevents runaway drift
+        max_step_change = 0.03
 
         for step in range(steps):
             input_seq = current_sequence.reshape(1, seq_len, num_features)
             pred = model.predict(input_seq, verbose=0)[0, 0]
+
+            # Cap per-step change to prevent runaway predictions
+            prev_close_scaled = current_sequence[-1, 0]
+            if abs(pred - prev_close_scaled) > max_step_change:
+                pred = prev_close_scaled + max_step_change * np.sign(pred - prev_close_scaled)
+
             predictions.append(pred)
 
+            # Only update close (col 0); keep other features at last observed values
             new_row = current_sequence[-1].copy()
-            new_row[0] = pred  # close feature
-
-            # For non-close features, apply damped trend continuation
-            decay = 0.9 ** (step + 1)
-            for feat_idx in range(1, num_features):
-                new_row[feat_idx] = new_row[feat_idx] + feature_deltas[feat_idx] * decay
-                new_row[feat_idx] = np.clip(new_row[feat_idx], 0.0, 1.0)
+            new_row[0] = pred
 
             current_sequence = np.vstack([current_sequence[1:], new_row])
 

@@ -220,36 +220,45 @@ class PredictionExplainer:
             })
 
         # 5. Model agreement (informational — lower weight to avoid double-counting with Price Forecast)
-        model_directions = {}
-        for model_name in ("lstm", "prophet", "xgboost"):
+        model_changes = []
+        for model_name in ("prophet", "xgboost"):
             model_data = prediction_result.get(model_name)
             if model_data and model_data.get("predictions"):
                 pred = model_data["predictions"][-1]
                 change_pct = ((pred - current_price) / current_price) * 100
-                model_directions[model_name.upper()] = change_pct
+                model_changes.append(change_pct)
 
-        if model_directions:
-            all_bullish = all(v > 0.3 for v in model_directions.values())
-            all_bearish = all(v < -0.3 for v in model_directions.values())
+        if model_changes:
+            bullish_count = sum(1 for p in model_changes if p > 0.3)
+            bearish_count = sum(1 for p in model_changes if p < -0.3)
+            total_models = len(model_changes)
 
-            parts = [f"{name} {'+' if pct >= 0 else ''}{pct:.1f}%" for name, pct in model_directions.items()]
-
-            if all_bullish:
+            if bullish_count == total_models:
                 agreement_impact = "positive"
                 bullish_score += 5
-                agreement_detail = f"All {len(model_directions)} models predict upside ({', '.join(parts)})"
-            elif all_bearish:
+                agreement_detail = "All AI models agree on upside potential"
+            elif bearish_count == total_models:
                 agreement_impact = "negative"
                 bullish_score -= 5
-                agreement_detail = f"All {len(model_directions)} models predict downside ({', '.join(parts)})"
+                agreement_detail = "All AI models agree on downside risk"
+            elif bullish_count > bearish_count:
+                agreement_impact = "positive"
+                bullish_score += 3
+                agreement_detail = f"Majority of AI models predict upside ({bullish_count}/{total_models})"
+                risk_factors.append("Not all models agree — reduced conviction")
+            elif bearish_count > bullish_count:
+                agreement_impact = "negative"
+                bullish_score -= 3
+                agreement_detail = f"Majority of AI models predict downside ({bearish_count}/{total_models})"
+                risk_factors.append("Not all models agree — reduced conviction")
             else:
                 agreement_impact = "neutral"
-                agreement_detail = f"Models disagree ({', '.join(parts)})"
-                risk_factors.append("Models disagree on direction — lower conviction")
+                agreement_detail = "AI models are split with no clear consensus"
+                risk_factors.append("No model consensus on direction — low conviction, consider waiting")
             total_weight += 10
 
             drivers.append({
-                "factor": "Model Consensus",
+                "factor": "AI Consensus",
                 "impact": agreement_impact,
                 "detail": agreement_detail,
             })

@@ -38,45 +38,24 @@ const Predictions = {
 
         const horizonLabel = data.horizon_label || data.horizon;
 
-        // LSTM
-        if (data.lstm) {
-            const lastPred = data.lstm.predictions[data.lstm.predictions.length - 1];
-            document.getElementById('lstmPrediction').textContent = `₹${lastPred.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById('lstmConfidence').textContent = `${data.lstm.confidence_score}% conf`;
-            document.getElementById('lstmMape').textContent = `MAPE: ${data.lstm.mape}%`;
-        } else {
-            document.getElementById('lstmPrediction').textContent = data.lstm_error ? 'N/A' : '-';
-            document.getElementById('lstmConfidence').textContent = '';
-            document.getElementById('lstmMape').textContent = data.lstm_error || '';
+        // Confidence info (show confidence band if available)
+        const confEl = document.getElementById('predConfidenceInfo');
+        if (confEl) {
+            const ens = data.ensemble;
+            if (ens && ens.confidence_lower && ens.confidence_upper) {
+                const lower = ens.confidence_lower[ens.confidence_lower.length - 1];
+                const upper = ens.confidence_upper[ens.confidence_upper.length - 1];
+                confEl.textContent = `80% confidence range: ₹${lower.toFixed(0)} – ₹${upper.toFixed(0)}`;
+                confEl.classList.remove('hidden');
+            } else if (ens && ens.confidence_score) {
+                confEl.textContent = `Confidence: ${ens.confidence_score}%`;
+                confEl.classList.remove('hidden');
+            } else {
+                confEl.classList.add('hidden');
+            }
         }
 
-        // Prophet
-        if (data.prophet) {
-            const lastPred = data.prophet.predictions[data.prophet.predictions.length - 1];
-            document.getElementById('prophetPrediction').textContent = `₹${lastPred.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            const lower = data.prophet.confidence_lower[data.prophet.confidence_lower.length - 1];
-            const upper = data.prophet.confidence_upper[data.prophet.confidence_upper.length - 1];
-            document.getElementById('prophetConfidence').textContent = '80% band';
-            document.getElementById('prophetBand').textContent = `₹${lower.toFixed(0)} - ₹${upper.toFixed(0)}`;
-        } else {
-            document.getElementById('prophetPrediction').textContent = data.prophet_error ? 'N/A' : '-';
-            document.getElementById('prophetConfidence').textContent = '';
-            document.getElementById('prophetBand').textContent = data.prophet_error || '';
-        }
-
-        // XGBoost
-        if (data.xgboost) {
-            const lastPred = data.xgboost.predictions[data.xgboost.predictions.length - 1];
-            document.getElementById('xgbPrediction').textContent = `₹${lastPred.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById('xgbConfidence').textContent = `${data.xgboost.confidence_score}% conf`;
-            document.getElementById('xgbMape').textContent = `MAPE: ${data.xgboost.mape}%`;
-        } else {
-            document.getElementById('xgbPrediction').textContent = data.xgboost_error ? 'N/A' : '-';
-            document.getElementById('xgbConfidence').textContent = '';
-            document.getElementById('xgbMape').textContent = data.xgboost_error || '';
-        }
-
-        // Ensemble
+        // Primary prediction (ensemble or single model)
         if (data.ensemble) {
             const lastPred = data.ensemble.predictions[data.ensemble.predictions.length - 1];
             document.getElementById('ensemblePrediction').textContent = `₹${lastPred.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
@@ -87,7 +66,7 @@ const Predictions = {
                 const changeEl = document.getElementById('ensembleChange');
                 const sign = change >= 0 ? '+' : '';
                 changeEl.textContent = `${sign}${change.toFixed(2)} (${changePct.toFixed(2)}%) in ${horizonLabel}`;
-                changeEl.className = `text-xs mt-1 ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+                changeEl.className = `text-sm mt-1 ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
 
                 // Update signal badge with AI prediction data
                 const aiDir = changePct > 0.1 ? 'BULLISH' : (changePct < -0.1 ? 'BEARISH' : 'NEUTRAL');
@@ -114,20 +93,24 @@ const Predictions = {
         // Market context: sentiment + global data
         this.renderMarketContext(data);
 
-        // Multi-step prediction table (show for horizons with multiple data points)
+        // Multi-step prediction table
         const table = document.getElementById('predictionTable');
         const tbody = document.getElementById('predictionTableBody');
+        const thead = document.getElementById('predictionTableHead');
         if (data.ensemble && data.ensemble.predictions.length > 1) {
             table.classList.remove('hidden');
-            tbody.innerHTML = data.ensemble.dates.map((date, i) => `
-                <tr class="border-b border-gray-800">
+
+            if (thead) thead.innerHTML = `<tr>
+                <th class="py-2 text-left text-gray-500 text-xs">Date</th>
+                <th class="py-2 text-right text-yellow-400 text-xs">Predicted Price</th>
+            </tr>`;
+
+            tbody.innerHTML = data.ensemble.dates.map((date, i) => {
+                return `<tr class="border-b border-gray-800">
                     <td class="py-2 text-gray-400">${date}</td>
-                    <td class="py-2 text-right text-blue-400">${data.lstm && data.lstm.predictions[i] != null ? '₹' + data.lstm.predictions[i].toFixed(2) : '-'}</td>
-                    <td class="py-2 text-right text-green-400">${data.prophet && data.prophet.predictions[i] != null ? '₹' + data.prophet.predictions[i].toFixed(2) : '-'}</td>
-                    <td class="py-2 text-right text-purple-400">${data.xgboost && data.xgboost.predictions[i] != null ? '₹' + data.xgboost.predictions[i].toFixed(2) : '-'}</td>
                     <td class="py-2 text-right text-yellow-400">₹${data.ensemble.predictions[i].toFixed(2)}</td>
-                </tr>
-            `).join('');
+                </tr>`;
+            }).join('');
         } else {
             table.classList.add('hidden');
         }

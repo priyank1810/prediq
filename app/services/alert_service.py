@@ -223,7 +223,7 @@ class AlertService:
         try:
             from app.services.prediction_service import prediction_service
             result = prediction_service.predict(alert.symbol, "1d")
-            for model_name in ["lstm", "xgboost"]:
+            for model_name in ["xgboost"]:
                 model_data = result.get(model_name)
                 if model_data and model_data.get("confidence_score"):
                     conf = model_data["confidence_score"]

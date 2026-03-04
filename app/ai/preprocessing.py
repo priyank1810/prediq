@@ -309,6 +309,13 @@ class StockDataPreprocessor:
             "gap_flag",
         ]
 
+        # Exclude context features from LSTM — they're broadcast as constants
+        # across all rows, so MinMaxScaler produces zero-variance noise.
+        # XGBoost handles them separately via _build_tabular_features.
+        context_cols = {"sentiment_score", "global_news_score", "news_magnitude",
+                        "vix_level", "sp500_change", "usdinr_change"}
+        feature_cols = [c for c in feature_cols if c not in context_cols]
+
         # Drop features that don't exist (backward compat with older data)
         feature_cols = [c for c in feature_cols if c in feat_df.columns]
         feat_df = feat_df.dropna(subset=feature_cols).reset_index(drop=True)
@@ -422,6 +429,12 @@ class StockDataPreprocessor:
             "stoch_k", "vwap_dev", "vol_accel", "atr_norm",
             "ret_5", "ret_10", "spread",
         ] + rolling_cols
+
+        # Exclude constant context features — they're the same value for every
+        # row, causing MinMaxScaler to produce zero-variance noise for LSTM.
+        context_cols = {"sentiment_score", "global_news_score", "news_magnitude",
+                        "vix_level", "sp500_change", "usdinr_change"}
+        feature_cols = [c for c in feature_cols if c not in context_cols]
 
         # Drop features that don't exist (backward compat)
         feature_cols = [c for c in feature_cols if c in feat_df.columns]

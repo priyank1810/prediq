@@ -7,7 +7,6 @@ import pandas as pd
 import joblib
 import ta
 from concurrent.futures import ThreadPoolExecutor
-from app.ai.lstm_model import LSTMPredictor
 from app.ai.prophet_model import ProphetPredictor
 from app.ai.xgboost_model import XGBoostPredictor
 from app.ai.explainer import prediction_explainer
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 class PredictionService:
     def __init__(self):
-        self.lstm = LSTMPredictor()
         self.prophet = ProphetPredictor()
         self.xgboost = XGBoostPredictor()
 
@@ -230,8 +228,16 @@ class PredictionService:
             return max((avg_range / (2 * avg_pred)) * 100 if avg_pred > 0 else 10.0, 0.01)
         return 10.0
 
-    def _inverse_mape_ensemble(self, model_results: dict, daily_df=None, regime: dict = None, symbol: str = "") -> dict:
-        """Regime-aware inverse-MAPE weighting across all available models."""
+    def _inverse_mape_ensemble(self, model_results: dict, daily_df=None, regime: dict = None,
+                               symbol: str = "", horizon: str = "1d") -> dict:
+        """Regime-aware, direction-consensus, horizon-weighted ensemble.
+
+        Improvements over basic inverse-MAPE:
+        1. Directional consensus: if 2/3 models agree, boost majority weights
+        2. Horizon-aware: LSTM (momentum) weighted higher for short horizons,
+           XGBoost/Prophet (mean-reversion) weighted higher for long horizons
+        3. Regime adjustments (existing)
+        """
         mapes = {}
         for name, result in model_results.items():
             if name == "prophet":
@@ -242,17 +248,51 @@ class PredictionService:
         # Inverse MAPE weighting
         weights = {name: 1.0 / mape for name, mape in mapes.items()}
 
-        # Apply regime-based multipliers
+        # --- Regime-based multipliers ---
         if regime:
-            if regime.get("trending") and "lstm" in weights:
-                weights["lstm"] *= 1.3
-                logger.info(f"Regime: trending (ADX={regime.get('adx')}), LSTM weight boosted")
             if not regime.get("trending") and "prophet" in weights:
                 weights["prophet"] *= 1.3
                 logger.info(f"Regime: mean-reverting (ADX={regime.get('adx')}), Prophet weight boosted")
             if regime.get("high_vol") and "xgboost" in weights:
                 weights["xgboost"] *= 1.2
                 logger.info(f"Regime: high-volatility (ratio={regime.get('vol_ratio')}), XGBoost weight boosted")
+
+        # --- Directional consensus ---
+        # If 2/3 models agree on direction, boost majority and penalize outlier
+        if daily_df is not None and not daily_df.empty and len(model_results) >= 2:
+            current_price = float(daily_df["close"].iloc[-1])
+            directions = {}
+            for name, res in model_results.items():
+                if res.get("predictions"):
+                    pred_price = res["predictions"][-1]
+                    change_pct = ((pred_price - current_price) / current_price) * 100
+                    if change_pct > 0.3:
+                        directions[name] = "bullish"
+                    elif change_pct < -0.3:
+                        directions[name] = "bearish"
+                    else:
+                        directions[name] = "neutral"
+
+            if directions:
+                bullish = [n for n, d in directions.items() if d == "bullish"]
+                bearish = [n for n, d in directions.items() if d == "bearish"]
+
+                majority = None
+                if len(bullish) >= 2:
+                    majority = bullish
+                    minority = bearish
+                elif len(bearish) >= 2:
+                    majority = bearish
+                    minority = bullish
+
+                if majority:
+                    for name in majority:
+                        if name in weights:
+                            weights[name] *= 1.4
+                    for name in (minority or []):
+                        if name in weights:
+                            weights[name] *= 0.6
+                    logger.info(f"Direction consensus: {len(majority)} models agree, boosted {majority}")
 
         total = sum(weights.values())
         weights = {name: w / total for name, w in weights.items()}
@@ -280,7 +320,8 @@ class PredictionService:
 
         return result
 
-    def _neural_meta_learner(self, symbol: str, model_results: dict, daily_df=None, regime: dict = None) -> dict:
+    def _neural_meta_learner(self, symbol: str, model_results: dict, daily_df=None,
+                            regime: dict = None, horizon: str = "1d") -> dict:
         """Neural network meta-learner (2-layer feedforward) to combine model predictions.
         Falls back to Ridge when < 100 data points, then to inverse-MAPE."""
         meta_path = self._meta_learner_path(symbol)
@@ -331,7 +372,8 @@ class PredictionService:
                 logger.debug(f"Meta-learner load failed: {e}")
 
         # Fall back to inverse-MAPE
-        result = self._inverse_mape_ensemble(model_results, daily_df=daily_df, regime=regime, symbol=symbol)
+        result = self._inverse_mape_ensemble(model_results, daily_df=daily_df, regime=regime,
+                                             symbol=symbol, horizon=horizon)
 
         # Try to train and save meta-learner for future use (skip on Render — too heavy)
         if not LOW_RESOURCE_MODE:
@@ -516,19 +558,13 @@ class PredictionService:
         return None
 
     def _apply_market_context_adjustment(self, ensemble_preds: list, current_price: float,
-                                            sentiment: dict | None, global_data: dict | None) -> tuple[list, dict]:
+                                            sentiment: dict | None, global_data: dict | None,
+                                            horizon: str = "1d") -> tuple[list, dict]:
         """Adjust ensemble predictions based on sentiment and global market context.
         Returns (adjusted_predictions, adjustment_info).
 
-        Uses a blending approach: computes a context-implied price target from
-        current price, then blends it with the model prediction. During extreme
-        events (war/crisis), context dominates; in normal times, models lead.
-
-        Blend ratios by magnitude:
-        - Normal (0-30): 90% model, 10% context
-        - Moderate (30-60): 70% model, 30% context
-        - High (60-80): 45% model, 55% context
-        - Extreme (80+): 25% model, 75% context
+        Context move and weight are scaled by horizon — short horizons get
+        minimal adjustment since sentiment can't move a stock 5% in 15 minutes.
         """
         if not ensemble_preds or current_price <= 0:
             return ensemble_preds, {}
@@ -549,21 +585,32 @@ class PredictionService:
             return ensemble_preds, {"adjustment_pct": 0, "blended_score": round(blended, 1),
                                     "news_magnitude": news_magnitude}
 
-        # Context-implied price change from current price
-        # blended=-80 (war/crisis) → context says ~-6% from current price
-        # blended=+60 (ceasefire/rate cut) → context says ~+4.5%
-        max_context_move = 8.0  # max ±8% context-implied move
+        # Horizon-scaled max context move — 15m can't move like 1mo
+        cfg = PREDICTION_HORIZONS.get(horizon, {})
+        is_intraday = cfg.get("intraday", False)
+        horizon_days = cfg.get("days", 1) if not is_intraday else (cfg.get("bars", 1) * 15 / (6.25 * 60))
+        # Scale: 15m→0.3%, 1h→0.8%, 1d→2%, 1w→4%, 1mo→8%
+        max_context_move = min(8.0, max(0.3, horizon_days * 2.0))
         context_change_pct = (blended / 100.0) * max_context_move
 
-        # Determine how much context should override models
+        # Scale context weight down for short horizons
         if news_magnitude >= 80:
-            model_w, context_w = 0.25, 0.75   # Extreme: context dominates
+            base_context_w = 0.75
         elif news_magnitude >= 60:
-            model_w, context_w = 0.45, 0.55   # High: context leads
+            base_context_w = 0.55
         elif news_magnitude >= 30:
-            model_w, context_w = 0.70, 0.30   # Moderate: model leads
+            base_context_w = 0.30
         else:
-            model_w, context_w = 0.90, 0.10   # Normal: slight nudge
+            base_context_w = 0.10
+
+        # Intraday: reduce context weight further (sentiment is slow-acting)
+        if is_intraday:
+            base_context_w *= 0.3
+        elif horizon_days <= 1:
+            base_context_w *= 0.5
+
+        context_w = base_context_w
+        model_w = 1.0 - context_w
 
         # Compute context target for each prediction step
         adjusted = []
@@ -592,30 +639,24 @@ class PredictionService:
         rather than recomputing from raw MAPEs which misses Prophet.
         """
         # Extract actual weights from ensemble result
-        lstm_w = ensemble_result.get("lstm_weight", 0)
         xgb_w = ensemble_result.get("xgboost_weight", 0)
         prophet_w = ensemble_result.get("prophet_weight", 0)
 
-        total_model_w = lstm_w + xgb_w + prophet_w
+        total_model_w = xgb_w + prophet_w
         if total_model_w <= 0:
-            return {"technical": 33.0, "seasonal": 33.0, "fundamental": 0.0, "sentiment": 34.0}
+            return {"technical": 50.0, "seasonal": 15.0, "fundamental": 0.0, "sentiment": 35.0}
 
         # Normalize model weights to sum to 1
-        lstm_w /= total_model_w
         xgb_w /= total_model_w
         prophet_w /= total_model_w
 
-        # Sentiment contribution based on context weight (how much context influenced the prediction)
+        # Sentiment contribution based on context weight
         context_w = adj_info.get("context_weight", 0) if adj_info else 0
-        # context_weight 0.10 → ~5% sentiment share, 0.75 → ~40% sentiment share
         sentiment_share = min(45.0, round(context_w * 55, 1))
         model_share = 100.0 - sentiment_share
 
-        # Map models to categories:
-        # LSTM → Deep learning pattern recognition (technical)
-        # XGBoost → Feature-engineered technical indicators
-        # Prophet → Time-series decomposition with seasonality
-        technical = (lstm_w + xgb_w) * model_share
+        # XGBoost → Technical, Prophet → Seasonal
+        technical = xgb_w * model_share
         seasonal = prophet_w * model_share
 
         return {
@@ -635,12 +676,7 @@ class PredictionService:
 
         for name in models:
             try:
-                if name == "lstm":
-                    if is_intraday and intraday_df is not None:
-                        model_results[name] = self.lstm.predict_intraday(intraday_df, symbol, horizon)
-                    elif daily_df is not None:
-                        model_results[name] = self.lstm.predict(daily_df, symbol, horizon)
-                elif name == "xgboost":
+                if name == "xgboost":
                     if is_intraday and intraday_df is not None:
                         model_results[name] = self.xgboost.predict_intraday(intraday_df, symbol, horizon)
                     elif daily_df is not None:
@@ -669,9 +705,30 @@ class PredictionService:
 
         return model_results, sentiment, global_data
 
+    def _select_models_for_horizon(self, horizon: str) -> list:
+        """Auto-select best model(s) for a given prediction horizon.
+
+        - Intraday (15m, 1h): XGBoost only — feature-based, stable for short-term
+        - 1 Day: XGBoost only — most reliable single model
+        - 1 Week: XGBoost + Prophet — technical + seasonality
+        - 1 Month+: Prophet only — trend/seasonality dominate, others drift
+        """
+        cfg = PREDICTION_HORIZONS.get(horizon, {})
+        is_intraday = cfg.get("intraday", False)
+        days = cfg.get("days", 1) if not is_intraday else 0
+
+        if is_intraday:
+            return ["xgboost"]
+        elif days <= 1:
+            return ["xgboost"]
+        elif days <= 5:
+            return ["xgboost", "prophet"]
+        else:
+            return ["prophet"]
+
     def predict(self, symbol: str, horizon: str = "1d", models: list = None) -> dict:
         if models is None:
-            models = ["lstm", "prophet", "xgboost"]
+            models = self._select_models_for_horizon(horizon)
 
         # Cache full prediction results on Render (training is expensive)
         if LOW_RESOURCE_MODE:
@@ -683,7 +740,10 @@ class PredictionService:
         cfg = PREDICTION_HORIZONS.get(horizon, {})
         is_intraday = cfg.get("intraday", False)
 
-        result = {"symbol": symbol, "horizon": horizon, "horizon_label": cfg.get("label", horizon)}
+        result = {
+            "symbol": symbol, "horizon": horizon, "horizon_label": cfg.get("label", horizon),
+            "models_used": models,
+        }
 
         model_results = {}
 
@@ -703,8 +763,6 @@ class PredictionService:
                 # Run models + sentiment/global fetches in parallel
                 with ThreadPoolExecutor(max_workers=5) as executor:
                     futures = {}
-                    if "lstm" in models:
-                        futures["lstm"] = executor.submit(self.lstm.predict_intraday, intraday_df, symbol, horizon)
                     if "prophet" in models and daily_df is not None and not daily_df.empty:
                         futures["prophet"] = executor.submit(self.prophet.predict, daily_df, horizon, symbol)
                     if "xgboost" in models and intraday_df is not None and not intraday_df.empty:
@@ -751,8 +809,6 @@ class PredictionService:
                 # Run models + sentiment/global fetches in parallel
                 with ThreadPoolExecutor(max_workers=5) as executor:
                     futures = {}
-                    if "lstm" in models:
-                        futures["lstm"] = executor.submit(self.lstm.predict, df, symbol, horizon)
                     if "prophet" in models:
                         futures["prophet"] = executor.submit(self.prophet.predict, df, horizon, symbol)
                     if "xgboost" in models:
@@ -804,7 +860,8 @@ class PredictionService:
                 pass
 
         if len(model_results) >= 2:
-            result["ensemble"] = self._neural_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime)
+            result["ensemble"] = self._neural_meta_learner(symbol, model_results, daily_df=daily_df,
+                                                            regime=regime, horizon=horizon)
         elif len(model_results) == 1:
             single = next(iter(model_results.values()))
             result["ensemble"] = {
@@ -822,12 +879,29 @@ class PredictionService:
                 current_price = float(intraday_df["close"].iloc[-1])
 
             adjusted_preds, adj_info = self._apply_market_context_adjustment(
-                result["ensemble"]["predictions"], current_price, sentiment, global_data
+                result["ensemble"]["predictions"], current_price, sentiment, global_data,
+                horizon=horizon
             )
             if adj_info.get("adjustment_pct", 0) != 0:
                 result["ensemble"]["predictions_raw"] = result["ensemble"]["predictions"]
                 result["ensemble"]["predictions"] = adjusted_preds
                 result["ensemble"]["market_adjustment"] = adj_info
+
+        # Final sanity cap — max allowed change per horizon
+        # Prevents any model from producing unrealistic predictions
+        if result.get("ensemble") and result["ensemble"].get("predictions") and current_price > 0:
+            max_change_pct = {
+                "15m": 0.5, "1h": 1.5, "1d": 3.0, "1w": 6.0,
+                "1mo": 12.0, "3mo": 25.0, "6mo": 40.0, "1y": 60.0,
+            }.get(horizon, 5.0)
+            capped = []
+            for pred in result["ensemble"]["predictions"]:
+                change_pct = abs((pred - current_price) / current_price) * 100
+                if change_pct > max_change_pct:
+                    direction = 1 if pred > current_price else -1
+                    pred = round(current_price * (1 + direction * max_change_pct / 100), 2)
+                capped.append(pred)
+            result["ensemble"]["predictions"] = capped
 
         # Build combined sentiment: stock-specific + global headlines merged
         stock_headlines = sentiment.get("headlines", []) if sentiment else []

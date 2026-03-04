@@ -267,7 +267,7 @@
             <!-- Prediction Panel -->
             <div id="predictionPanel" class="hidden mt-4 bg-dark-800 rounded-lg p-3 sm:p-4">
                 <h3 class="text-base sm:text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
-                <div class="flex flex-wrap gap-2 mb-4">
+                <div class="flex flex-wrap gap-2 mb-2">
                     <button class="horizon-btn" data-horizon="15m">15 Min</button>
                     <button class="horizon-btn" data-horizon="1h">1 Hour</button>
                     <button class="horizon-btn active" data-horizon="1d">1 Day</button>
@@ -277,44 +277,22 @@
                     <button class="horizon-btn" data-horizon="6mo">6 Months</button>
                     <button class="horizon-btn" data-horizon="1y">1 Year</button>
                 </div>
+                <div class="mb-2"></div>
                 <div id="predictionLoading" class="hidden text-center py-8">
                     <div class="animate-spin w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div>
-                    <p class="text-gray-400 text-sm mt-2">Training AI models...</p>
+                    <p class="text-gray-400 text-sm mt-2">Generating AI prediction...</p>
                 </div>
                 <div id="predictionResults" class="hidden">
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                        <div class="bg-dark-700 rounded-lg p-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs sm:text-sm font-medium text-accent-blue">LSTM</span>
-                                <span id="lstmConfidence" class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-900 text-blue-300"></span>
-                            </div>
-                            <div id="lstmPrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
-                            <div id="lstmMape" class="text-xs text-gray-500 mt-1"></div>
+                    <!-- Primary prediction (single clear answer) -->
+                    <div class="bg-dark-700 rounded-lg p-4 mb-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm font-medium text-accent-yellow">AI Prediction</span>
                         </div>
-                        <div class="bg-dark-700 rounded-lg p-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs sm:text-sm font-medium text-green-400">Prophet</span>
-                                <span id="prophetConfidence" class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-green-900 text-green-300"></span>
-                            </div>
-                            <div id="prophetPrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
-                            <div id="prophetBand" class="text-xs text-gray-500 mt-1"></div>
-                        </div>
-                        <div class="bg-dark-700 rounded-lg p-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs sm:text-sm font-medium text-purple-400">XGBoost</span>
-                                <span id="xgbConfidence" class="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-purple-900 text-purple-300"></span>
-                            </div>
-                            <div id="xgbPrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
-                            <div id="xgbMape" class="text-xs text-gray-500 mt-1"></div>
-                        </div>
-                        <div class="bg-dark-700 rounded-lg p-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs sm:text-sm font-medium text-accent-yellow">Ensemble</span>
-                            </div>
-                            <div id="ensemblePrediction" class="text-lg sm:text-2xl font-bold text-white"></div>
-                            <div id="ensembleChange" class="text-xs mt-1"></div>
-                        </div>
+                        <div id="ensemblePrediction" class="text-2xl sm:text-3xl font-bold text-white"></div>
+                        <div id="ensembleChange" class="text-sm mt-1"></div>
                     </div>
+                    <!-- Confidence info below primary prediction -->
+                    <div id="predConfidenceInfo" class="hidden text-xs text-gray-500 mt-1 mb-3"></div>
                     <!-- Explanation Panel -->
                     <div id="predictionExplanation" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
                         <h4 class="text-white font-semibold mb-3">Why <span id="explDirection" class="font-bold">-</span>?</h4>
@@ -399,13 +377,10 @@
                     <div id="predAdjustmentBadge" class="hidden mt-2 text-xs text-gray-500"></div>
                     <div id="predictionTable" class="hidden mt-4 overflow-x-auto">
                         <table class="w-full text-sm">
-                            <thead>
+                            <thead id="predictionTableHead">
                                 <tr class="text-gray-400 border-b border-gray-700">
                                     <th class="text-left py-2">Date</th>
-                                    <th class="text-right py-2">LSTM</th>
-                                    <th class="text-right py-2">Prophet</th>
-                                    <th class="text-right py-2">XGBoost</th>
-                                    <th class="text-right py-2">Ensemble</th>
+                                    <th class="text-right py-2">Prediction</th>
                                 </tr>
                             </thead>
                             <tbody id="predictionTableBody"></tbody>

@@ -107,7 +107,7 @@ const API = {
     getPredictions(symbol, horizon = '1d') {
         return this.request(`/api/predictions/${encodeURIComponent(symbol)}`, {
             method: 'POST',
-            body: JSON.stringify({ horizon, models: ['lstm', 'prophet', 'xgboost'] })
+            body: JSON.stringify({ horizon })
         });
     },
 
