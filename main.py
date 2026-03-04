@@ -20,6 +20,25 @@ from app.routers.sectors import router as sectors_router
 from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, oi_streamer, mtf_streamer
 
 
+async def keep_alive():
+    """Self-ping to prevent Render free tier from spinning down."""
+    import aiohttp
+
+    url = os.getenv("RENDER_EXTERNAL_URL")
+    if not url:
+        return  # Only needed on Render
+    url = url.rstrip("/") + "/health"
+
+    await asyncio.sleep(60)
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                await session.get(url, timeout=aiohttp.ClientTimeout(total=10))
+        except Exception:
+            pass
+        await asyncio.sleep(600)  # every 10 min
+
+
 async def smart_alert_checker():
     """Background task to check smart alerts. Only runs when active alerts exist."""
     from app.services.alert_service import alert_service
@@ -120,6 +139,7 @@ async def lifespan(app: FastAPI):
     mood_task = asyncio.create_task(market_mood_broadcaster())
     oi_task = asyncio.create_task(oi_streamer())
     mtf_task = asyncio.create_task(mtf_streamer())
+    keep_alive_task = asyncio.create_task(keep_alive())
     yield
     # Shutdown
     streamer_task.cancel()
@@ -129,6 +149,7 @@ async def lifespan(app: FastAPI):
     mood_task.cancel()
     oi_task.cancel()
     mtf_task.cancel()
+    keep_alive_task.cancel()
 
 
 app = FastAPI(title="Indian Stock Market Tracker & AI Predictor", lifespan=lifespan)
@@ -156,6 +177,11 @@ app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"]
 app.include_router(fii_dii_router, prefix="/api/fii-dii", tags=["fii-dii"])
 app.include_router(sectors_router, prefix="/api/sectors", tags=["sectors"])
 app.include_router(ws_router)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 @app.get("/")
