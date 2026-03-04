@@ -7,6 +7,18 @@ from app.config import PREDICTION_HORIZONS
 logger = logging.getLogger(__name__)
 
 
+def _patch_prophet(model):
+    """Ensure stan_backend attribute exists on Prophet object.
+
+    Some Prophet versions/installs don't set stan_backend in __init__,
+    causing fit() and predict() to crash with AttributeError.
+    """
+    if not hasattr(model, 'stan_backend'):
+        model.stan_backend = None
+    if not hasattr(model, 'uncertainty_samples'):
+        model.uncertainty_samples = 200
+
+
 class ProphetPredictor:
     def _horizon_to_days(self, horizon: str) -> int:
         cfg = PREDICTION_HORIZONS.get(horizon, {})
@@ -45,7 +57,6 @@ class ProphetPredictor:
             # Re-prepare without regressors
             prophet_df = preprocessor.prepare_prophet_data(df)
 
-        # Always train fresh — Prophet models don't survive joblib serialization
         model = Prophet(
             daily_seasonality=True,
             yearly_seasonality=True,
@@ -54,19 +65,14 @@ class ProphetPredictor:
             changepoint_prior_scale=0.05,
             n_changepoints=30,
         )
+        _patch_prophet(model)
 
         if has_regressors:
             model.add_regressor("rsi")
             model.add_regressor("volume_norm")
 
         model.fit(prophet_df)
-
-        # Workaround: some Prophet versions lose stan_backend after fit,
-        # causing predict() to crash. Patch it and disable MCMC sampling.
-        if not hasattr(model, 'stan_backend'):
-            model.stan_backend = None
-            model.uncertainty_samples = 0
-            logger.warning("Prophet stan_backend missing — disabled uncertainty sampling")
+        _patch_prophet(model)  # Re-patch in case fit() removed it
 
         target_bdays = self._horizon_to_days(horizon)
         calendar_days = max(1, int(target_bdays * 1.5) + 5)
@@ -77,20 +83,15 @@ class ProphetPredictor:
             last_vol = float(prophet_df["volume_norm"].iloc[-1])
             hist_len = len(prophet_df)
 
-            # Apply mean-reversion for future dates
-            # RSI reverts toward 50 (half-life 10 days): decay = 0.5^(1/10) ≈ 0.933
-            # volume_norm reverts toward 1.0 (half-life 5 days): decay = 0.5^(1/5) ≈ 0.871
-            rsi_decay = 0.5 ** (1.0 / 10.0)    # ~0.933
-            vol_decay = 0.5 ** (1.0 / 5.0)     # ~0.871
+            rsi_decay = 0.5 ** (1.0 / 10.0)
+            vol_decay = 0.5 ** (1.0 / 5.0)
 
             rsi_values = np.empty(len(future))
             vol_values = np.empty(len(future))
 
-            # Historical rows get actual values
             rsi_values[:hist_len] = prophet_df["rsi"].values
             vol_values[:hist_len] = prophet_df["volume_norm"].values
 
-            # Future rows get mean-reverting values
             for i in range(hist_len, len(future)):
                 days_ahead = i - hist_len + 1
                 rsi_values[i] = 50.0 + (last_rsi - 50.0) * (rsi_decay ** days_ahead)
@@ -116,7 +117,6 @@ class ProphetPredictor:
         lower = future_preds["yhat_lower"].tolist() if "yhat_lower" in future_preds.columns else []
         upper = future_preds["yhat_upper"].tolist() if "yhat_upper" in future_preds.columns else []
 
-        # Fallback: estimate ±3% band if intervals are missing/NaN
         if not lower or not upper or any(np.isnan(v) for v in lower + upper):
             lower = [round(float(p) * 0.97, 2) for p in predictions]
             upper = [round(float(p) * 1.03, 2) for p in predictions]

@@ -13,6 +13,7 @@ from app.ai.explainer import prediction_explainer
 from app.services.data_fetcher import data_fetcher
 from app.config import PREDICTION_HORIZONS, MODEL_DIR
 from app.utils.cache import cache
+from app.ai.prophet_model import _patch_prophet
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,9 @@ class PredictionService:
                         changepoint_prior_scale=0.05,
                         n_changepoints=30,
                     )
+                    _patch_prophet(model)
                     model.fit(train_df)
+                    _patch_prophet(model)
 
                     future = model.make_future_dataframe(periods=len(test_df))
                     forecast = model.predict(future)
@@ -180,7 +183,9 @@ class PredictionService:
                         changepoint_prior_scale=0.05,
                         n_changepoints=30,
                     )
+                    _patch_prophet(model)
                     model.fit(train_df)
+                    _patch_prophet(model)
 
                     future = model.make_future_dataframe(periods=len(test_df))
                     forecast = model.predict(future)
