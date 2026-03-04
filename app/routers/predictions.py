@@ -15,16 +15,17 @@ async def predict_stock(
     _rate=rate_limit(max_calls=5, window_seconds=60),
 ):
     try:
-        job_id = job_service.enqueue(
+        job_id = await asyncio.to_thread(
+            job_service.enqueue,
             "prediction",
             {"symbol": symbol.upper(), "horizon": request.horizon, "models": request.models},
-            priority=10,
+            10,
         )
 
         # Poll-wait: check every 0.5s for up to 30s
         for _ in range(60):
             await asyncio.sleep(0.5)
-            status = job_service.get_status(job_id)
+            status = await asyncio.to_thread(job_service.get_status, job_id)
             if not status:
                 break
             if status["status"] == "completed":

@@ -257,12 +257,12 @@ def signal_accuracy_stats():
 async def get_intraday_signal(symbol: str):
     try:
         sym = symbol.upper()
-        job_id = job_service.enqueue("signal", {"symbol": sym}, priority=10)
+        job_id = await asyncio.to_thread(job_service.enqueue, "signal", {"symbol": sym}, 10)
 
         # Poll-wait: check every 0.5s for up to 30s
         for _ in range(60):
             await asyncio.sleep(0.5)
-            status = job_service.get_status(job_id)
+            status = await asyncio.to_thread(job_service.get_status, job_id)
             if not status:
                 break
             if status["status"] == "completed":

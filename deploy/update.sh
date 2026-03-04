@@ -20,9 +20,8 @@ pip install -r requirements.txt -q
 echo "[3/5] Syncing config files..."
 sudo cp "${APP_DIR}/deploy/stocktracker.service" /etc/systemd/system/stocktracker.service
 sudo cp "${APP_DIR}/deploy/stocktracker-worker.service" /etc/systemd/system/stocktracker-worker.service
-sudo cp "${APP_DIR}/deploy/nginx.conf" /etc/nginx/sites-available/stocktracker
+# Skip nginx.conf — certbot manages SSL config on the server
 sudo systemctl daemon-reload
-sudo nginx -t && sudo systemctl reload nginx
 
 echo "[4/5] Restarting server..."
 sudo systemctl restart stocktracker
