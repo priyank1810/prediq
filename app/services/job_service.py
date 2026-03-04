@@ -27,14 +27,14 @@ class JobService:
 
     def claim_next(self) -> dict | None:
         """Atomically claim the highest-priority pending job.
-        Returns dict with job info or None if no pending jobs."""
+        Returns dict with job info or None if no pending jobs.
+        Safe for single-worker — SQLite serializes writes via WAL + busy_timeout."""
         db = SessionLocal()
         try:
             job = (
                 db.query(JobQueue)
                 .filter(JobQueue.status == "pending")
                 .order_by(JobQueue.priority.desc(), JobQueue.created_at.asc())
-                .with_for_update(skip_locked=True)
                 .first()
             )
             if not job:
