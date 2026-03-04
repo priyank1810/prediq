@@ -86,9 +86,6 @@ const Predictions = {
         // Explanation panel
         this.renderExplanation(data.explanation);
 
-        // SHAP drivers
-        this.renderSHAPDrivers(data.shap_drivers);
-
         // Contribution breakdown
         this.renderContributionBreakdown(data.contribution_breakdown);
 
@@ -184,39 +181,6 @@ const Predictions = {
         } else {
             srEl.textContent = '';
         }
-    },
-
-    renderSHAPDrivers(drivers) {
-        const panel = document.getElementById('shapDriversPanel');
-        const list = document.getElementById('shapDriversList');
-        if (!panel || !list) return;
-
-        if (!drivers || drivers.length === 0) {
-            panel.classList.add('hidden');
-            return;
-        }
-        panel.classList.remove('hidden');
-
-        list.innerHTML = drivers.map(d => {
-            const isPos = d.direction === 'positive';
-            const color = isPos ? 'text-green-400' : 'text-red-400';
-            const bgColor = isPos ? 'bg-green-900/20 border-green-800' : 'bg-red-900/20 border-red-800';
-            const arrow = isPos ? '&#9650;' : '&#9660;';
-            const barWidth = Math.min(100, Math.abs(d.impact_value || 0) * 100);
-            const barColor = isPos ? 'bg-green-500' : 'bg-red-500';
-            return `
-                <div class="flex items-center gap-3 ${bgColor} border rounded-lg p-2">
-                    <span class="${color} text-sm">${arrow}</span>
-                    <div class="flex-1">
-                        <div class="text-white text-xs font-medium">${d.feature}</div>
-                        <div class="mt-1 h-1.5 bg-dark-600 rounded-full overflow-hidden">
-                            <div class="h-full ${barColor} rounded-full" style="width:${barWidth}%"></div>
-                        </div>
-                    </div>
-                    <span class="${color} text-xs font-mono">${d.impact_value ? d.impact_value.toFixed(3) : ''}</span>
-                </div>
-            `;
-        }).join('');
     },
 
     renderContributionBreakdown(breakdown) {

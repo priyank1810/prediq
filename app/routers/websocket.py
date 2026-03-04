@@ -125,7 +125,7 @@ async def price_streamer():
             if is_market_open() and manager.active_connections:
                 symbols = list(manager.get_all_subscribed_symbols())
                 if symbols:
-                    quotes = data_fetcher.get_bulk_quotes(symbols)
+                    quotes = await asyncio.to_thread(data_fetcher.get_bulk_quotes, symbols)
                     for quote in quotes:
                         if quote.get("ltp"):
                             # Trim to only fields the frontend needs
@@ -164,7 +164,7 @@ async def alert_checker():
             if is_market_open() and manager.active_connections:
                 db = SessionLocal()
                 try:
-                    triggered = alert_service.check_alerts_batched(db)
+                    triggered = await asyncio.to_thread(alert_service.check_alerts_batched, db)
                     for alert_data in triggered:
                         await manager.broadcast_alert(alert_data)
                 finally:
@@ -214,15 +214,20 @@ async def signal_accuracy_validator():
                 if pending_logs:
                     # Use yfinance directly — no Angel One calls for bookkeeping
                     symbols = list({log.symbol for log in pending_logs})
-                    price_map = {}
-                    for sym in symbols:
-                        try:
-                            ticker = yf.Ticker(yfinance_symbol(sym))
-                            info = ticker.fast_info
-                            if info.last_price:
-                                price_map[sym] = round(float(info.last_price), 2)
-                        except Exception:
-                            pass
+
+                    def _fetch_prices(syms):
+                        pm = {}
+                        for sym in syms:
+                            try:
+                                ticker = yf.Ticker(yfinance_symbol(sym))
+                                info = ticker.fast_info
+                                if info.last_price:
+                                    pm[sym] = round(float(info.last_price), 2)
+                            except Exception:
+                                pass
+                        return pm
+
+                    price_map = await asyncio.to_thread(_fetch_prices, symbols)
 
                     for log in pending_logs:
                         current_price = price_map.get(log.symbol)

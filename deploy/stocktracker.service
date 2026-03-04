@@ -9,7 +9,7 @@ WorkingDirectory=/home/ubuntu/stock-tracker
 EnvironmentFile=/home/ubuntu/stock-tracker/.env
 ExecStart=/home/ubuntu/stock-tracker/venv/bin/gunicorn main:app \
     --worker-class uvicorn.workers.UvicornWorker \
-    --workers 1 \
+    --workers 2 \
     --bind 127.0.0.1:8000 \
     --timeout 300 \
     --graceful-timeout 30 \

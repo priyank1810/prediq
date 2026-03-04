@@ -33,17 +33,20 @@ async def smart_alert_checker():
             from app.utils.helpers import is_market_open
             from app.routers.websocket import manager
             if is_market_open() and manager.active_connections:
-                db = SessionLocal()
-                try:
-                    # Skip entirely if no active smart alerts exist
-                    count = db.query(SmartAlert).filter(SmartAlert.is_triggered == False).count()
-                    if count > 0:
-                        triggered = alert_service.check_smart_alerts(db)
-                        if triggered:
-                            for alert_data in triggered:
-                                await manager.broadcast_to_all("smart_alert_triggered", alert_data)
-                finally:
-                    db.close()
+                def _check_smart():
+                    db = SessionLocal()
+                    try:
+                        count = db.query(SmartAlert).filter(SmartAlert.is_triggered == False).count()
+                        if count > 0:
+                            return alert_service.check_smart_alerts(db)
+                    finally:
+                        db.close()
+                    return None
+
+                triggered = await asyncio.to_thread(_check_smart)
+                if triggered:
+                    for alert_data in triggered:
+                        await manager.broadcast_to_all("smart_alert_triggered", alert_data)
         except Exception:
             pass
         await asyncio.sleep(300)  # 5 min (was 60s) — smart alerts don't need second-level checks
@@ -60,7 +63,7 @@ async def market_mood_broadcaster():
             from app.routers.websocket import manager
             if is_market_open() and manager.active_connections:
                 from app.services.market_mood_service import market_mood_service
-                mood = market_mood_service.get_mood()
+                mood = await asyncio.to_thread(market_mood_service.get_mood)
                 await manager.broadcast_to_all("market_mood_update", mood)
         except Exception:
             pass
@@ -123,18 +126,18 @@ async def periodic_job_enqueuer():
     while True:
         try:
             if is_market_open():
-                # Watchlist signals (always enqueue if market open)
-                if not job_service.has_pending("watchlist_signals"):
-                    job_service.enqueue("watchlist_signals", {}, priority=0)
+                def _enqueue_jobs():
+                    if not job_service.has_pending("watchlist_signals"):
+                        job_service.enqueue("watchlist_signals", {}, priority=0)
+                    if manager.active_connections:
+                        symbols = list(manager.get_all_subscribed_symbols())
+                        if symbols:
+                            if not job_service.has_pending("mtf_stream"):
+                                job_service.enqueue("mtf_stream", {"symbols": symbols}, priority=0)
+                            if not job_service.has_pending("oi_stream"):
+                                job_service.enqueue("oi_stream", {"symbols": symbols}, priority=0)
 
-                # MTF + OI only if WebSocket clients are subscribed
-                if manager.active_connections:
-                    symbols = list(manager.get_all_subscribed_symbols())
-                    if symbols:
-                        if not job_service.has_pending("mtf_stream"):
-                            job_service.enqueue("mtf_stream", {"symbols": symbols}, priority=0)
-                        if not job_service.has_pending("oi_stream"):
-                            job_service.enqueue("oi_stream", {"symbols": symbols}, priority=0)
+                await asyncio.to_thread(_enqueue_jobs)
         except Exception:
             pass
         await asyncio.sleep(300)
@@ -149,14 +152,14 @@ async def worker_result_broadcaster():
     while True:
         try:
             if manager.active_connections:
-                jobs = job_service.get_completed_background_jobs()
+                jobs = await asyncio.to_thread(job_service.get_completed_background_jobs)
                 for job in jobs:
                     job_type = job["job_type"]
                     result = job["result"]
 
                     if job_type == "watchlist_signals":
-                        signals = result.get("signals", {})
-                        for sym, signal_data in signals.items():
+                        signals_data = result.get("signals", {})
+                        for sym, signal_data in signals_data.items():
                             await manager.broadcast_signal(sym, signal_data)
 
                     elif job_type == "mtf_stream":
@@ -169,7 +172,7 @@ async def worker_result_broadcaster():
                         for sym, data in oi_data.items():
                             await manager.broadcast_oi_update(sym, data)
 
-                    job_service.mark_broadcast(job["id"])
+                    await asyncio.to_thread(job_service.mark_broadcast, job["id"])
         except Exception:
             pass
         await asyncio.sleep(3)
