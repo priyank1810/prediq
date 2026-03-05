@@ -154,7 +154,7 @@ class JobService:
         """Reset running jobs that have been stuck longer than timeout back to pending."""
         db = SessionLocal()
         try:
-            cutoff = now_ist() - timedelta(seconds=timeout_seconds)
+            cutoff = now_ist().replace(tzinfo=None) - timedelta(seconds=timeout_seconds)
             stale = (
                 db.query(JobQueue)
                 .filter(
@@ -176,7 +176,7 @@ class JobService:
         """Delete completed/failed/broadcast jobs older than the given hours."""
         db = SessionLocal()
         try:
-            cutoff = now_ist() - timedelta(hours=hours)
+            cutoff = now_ist().replace(tzinfo=None) - timedelta(hours=hours)
             deleted = (
                 db.query(JobQueue)
                 .filter(

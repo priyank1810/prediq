@@ -59,7 +59,7 @@ class SentimentService:
                     if entry.get("published_parsed"):
                         try:
                             pub_time = datetime(*entry.published_parsed[:6])
-                            if now_ist() - pub_time > timedelta(days=7):
+                            if now_ist().replace(tzinfo=None) - pub_time > timedelta(days=7):
                                 continue
                         except Exception:
                             pass
@@ -86,7 +86,7 @@ class SentimentService:
                     if entry.get("published_parsed"):
                         try:
                             pub_time = datetime(*entry.published_parsed[:6])
-                            if now_ist() - pub_time > timedelta(days=7):
+                            if now_ist().replace(tzinfo=None) - pub_time > timedelta(days=7):
                                 continue
                         except Exception:
                             pass
@@ -198,7 +198,7 @@ class SentimentService:
         if pub_time is None:
             return 1.0  # No time info, assume recent
 
-        hours_ago = (now_ist() - pub_time).total_seconds() / 3600
+        hours_ago = (now_ist().replace(tzinfo=None) - pub_time).total_seconds() / 3600
         if hours_ago < 0:
             hours_ago = 0
 

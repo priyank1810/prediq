@@ -196,8 +196,8 @@ async def signal_accuracy_validator():
 
             db = SessionLocal()
             try:
-                cutoff_start = now_ist() - timedelta(minutes=30)
-                cutoff_end = now_ist() - timedelta(minutes=15)
+                cutoff_start = now_ist().replace(tzinfo=None) - timedelta(minutes=30)
+                cutoff_end = now_ist().replace(tzinfo=None) - timedelta(minutes=15)
 
                 pending_logs = (
                     db.query(SignalLog)

@@ -179,7 +179,7 @@ class Worker:
                 )
                 should_log = (
                     last_log is None
-                    or (now_ist() - last_log.created_at) > timedelta(minutes=1)
+                    or (now_ist().replace(tzinfo=None) - last_log.created_at) > timedelta(minutes=1)
                 )
                 if not should_log:
                     return

@@ -188,7 +188,7 @@ class GlobalMarketService:
                     if entry.get("published_parsed"):
                         try:
                             pub_time = datetime(*entry.published_parsed[:6])
-                            if now_ist() - pub_time > timedelta(days=3):
+                            if now_ist().replace(tzinfo=None) - pub_time > timedelta(days=3):
                                 continue
                         except Exception:
                             pass
