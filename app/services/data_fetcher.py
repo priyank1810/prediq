@@ -2,13 +2,12 @@ import io
 import csv
 import logging
 import pandas as pd
-import yfinance as yf
-import requests
 from curl_cffi import requests as cffi_requests
 from datetime import datetime, timedelta
 from typing import Optional
 from app.utils.cache import cache
-from app.utils.helpers import yfinance_symbol, now_ist, yf_session as _yf_session
+from app.utils.helpers import yfinance_symbol, now_ist
+from app.utils.yahoo_api import yahoo_chart, yahoo_quote
 from app.config import CACHE_TTL_QUOTE, CACHE_TTL_HISTORY, CACHE_TTL_STOCK_LIST, CACHE_TTL_INTRADAY, POPULAR_STOCKS, INDICES
 
 NSE_EQUITY_CSV_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -63,11 +62,11 @@ class DataFetcher:
             except Exception:
                 pass
 
-        # 3. Fallback to yfinance (15-20 min delayed)
+        # 3. Fallback to Yahoo Finance API (15-20 min delayed)
         if quote is None:
             quote = self._fetch_from_yfinance(symbol)
 
-        # Enrich with avg_volume from cached historical data (avoids slow yf.Ticker.info call)
+        # Enrich with avg_volume from cached historical data
         if quote and not quote.get("avg_volume"):
             try:
                 hist_df = self.get_historical_data(symbol, period="1mo")
@@ -117,30 +116,13 @@ class DataFetcher:
         # 1. Try Angel One (real-time, no delay)
         df = self._intraday_from_angel(symbol, period, interval)
 
-        # 2. Fallback to yfinance
+        # 2. Fallback to Yahoo chart API (direct curl_cffi)
         if df is None or df.empty:
             yf_symbol = yfinance_symbol(symbol)
-            df = yf.download(yf_symbol, period=period, interval=interval, progress=False, session=_yf_session)
-            if df.empty:
-                df = pd.DataFrame()
-            else:
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = df.columns.get_level_values(0)
-
-                df = df.reset_index()
-                datetime_col = "Datetime" if "Datetime" in df.columns else "Date"
-                df = df.rename(columns={
-                    datetime_col: "datetime", "Open": "open", "High": "high",
-                    "Low": "low", "Close": "close", "Volume": "volume",
-                })
-                cols = ["datetime", "open", "high", "low", "close", "volume"]
-                df = df[[c for c in cols if c in df.columns]]
+            df = yahoo_chart(yf_symbol, period=period, interval=interval)
+            if not df.empty:
+                df = df.rename(columns={"date": "datetime"})
                 df["datetime_str"] = pd.to_datetime(df["datetime"]).dt.strftime("%Y-%m-%d %H:%M")
-                for col in ["open", "high", "low", "close"]:
-                    if col in df.columns:
-                        df[col] = df[col].round(2)
-                if "volume" in df.columns:
-                    df["volume"] = df["volume"].astype(int)
 
         # 3. Append live candles from Angel One when available
         try:
@@ -299,55 +281,12 @@ class DataFetcher:
 
     def _fetch_from_yfinance(self, symbol: str) -> dict:
         yf_symbol = yfinance_symbol(symbol)
-        ticker = yf.Ticker(yf_symbol, session=_yf_session)
-
-        try:
-            # fast_info can raise KeyError intermittently; fall back to history
-            try:
-                info = ticker.fast_info
-                ltp = info.last_price
-                prev_close = info.previous_close
-            except (KeyError, AttributeError):
-                ltp = None
-                prev_close = None
-
-            hist = ticker.history(period="1d")
-            if hist.empty and ltp is None:
-                raise ValueError(f"No data available for {yf_symbol}")
-
-            if not hist.empty:
-                open_price = float(hist["Open"].iloc[-1])
-                high = float(hist["High"].iloc[-1])
-                low = float(hist["Low"].iloc[-1])
-                close = float(hist["Close"].iloc[-1])
-                volume = int(hist["Volume"].iloc[-1])
-                if ltp is None:
-                    ltp = close
-                if prev_close is None:
-                    prev_close = float(hist["Close"].iloc[0]) if len(hist) > 1 else ltp
-            else:
-                open_price = high = low = volume = 0
-                close = prev_close or 0
-
-            change = ltp - prev_close if ltp and prev_close else 0
-            pct_change = (change / prev_close * 100) if prev_close else 0
-
-            return {
-                "symbol": symbol,
-                "ltp": round(ltp, 2) if ltp else 0,
-                "open": round(open_price, 2),
-                "high": round(high, 2),
-                "low": round(low, 2),
-                "close": round(prev_close, 2) if prev_close else 0,
-                "volume": volume,
-                "change": round(change, 2),
-                "pct_change": round(pct_change, 2),
-                "timestamp": now_ist().isoformat(),
-            }
-        except ValueError:
-            raise
-        except Exception as e:
-            raise ValueError(f"Failed to fetch quote for {symbol}: {e}")
+        quote = yahoo_quote(yf_symbol)
+        if not quote or quote.get("ltp", 0) == 0:
+            raise ValueError(f"No data available for {yf_symbol}")
+        quote["symbol"] = symbol
+        quote["timestamp"] = now_ist().isoformat()
+        return quote
 
     def _historical_from_angel(self, symbol: str, period: str = "1y") -> Optional[pd.DataFrame]:
         """Fetch daily OHLCV from Angel One. Returns DataFrame or None."""
@@ -385,26 +324,10 @@ class DataFetcher:
 
     def _historical_from_yfinance(self, symbol: str, period: str = "1y") -> pd.DataFrame:
         yf_symbol = yfinance_symbol(symbol)
-        df = yf.download(yf_symbol, period=period, progress=False, session=_yf_session)
+        df = yahoo_chart(yf_symbol, period=period, interval="1d")
         if df.empty:
             return pd.DataFrame()
-
-        # Handle multi-level columns from yfinance
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        df = df.reset_index()
-        df = df.rename(columns={"Date": "date", "Open": "open", "High": "high",
-                                "Low": "low", "Close": "close", "Volume": "volume"})
-        # Keep only needed columns
-        cols = ["date", "open", "high", "low", "close", "volume"]
-        df = df[[c for c in cols if c in df.columns]]
         df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
-        for col in ["open", "high", "low", "close"]:
-            if col in df.columns:
-                df[col] = df[col].round(2)
-        if "volume" in df.columns:
-            df["volume"] = df["volume"].astype(int)
         return df
 
 

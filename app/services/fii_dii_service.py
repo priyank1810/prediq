@@ -1,6 +1,6 @@
 import logging
 from app.utils.cache import cache
-from app.utils.helpers import now_ist, yf_session
+from app.utils.helpers import now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +34,11 @@ class FIIDIIService:
 
     def _fetch_daily(self) -> dict:
         """Fetch today's FII/DII data."""
-        # Try yfinance-based proxy: compare institutional flows from market data
         try:
-            import yfinance as yf
-            import pandas as pd
+            from app.utils.yahoo_api import yahoo_history
 
             # Use Nifty 50 as market proxy
-            nifty = yf.Ticker("^NSEI", session=yf_session)
-            hist = nifty.history(period="5d")
+            hist = yahoo_history("^NSEI", period="5d")
 
             if len(hist) >= 2:
                 latest = hist.iloc[-1]
@@ -83,11 +80,10 @@ class FIIDIIService:
     def _fetch_history(self, days: int = 30) -> list:
         """Fetch historical FII/DII data."""
         try:
-            import yfinance as yf
             import numpy as np
+            from app.utils.yahoo_api import yahoo_history
 
-            nifty = yf.Ticker("^NSEI", session=yf_session)
-            hist = nifty.history(period=f"{days + 5}d")
+            hist = yahoo_history("^NSEI", period=f"{days + 5}d")
 
             if len(hist) < 2:
                 return []

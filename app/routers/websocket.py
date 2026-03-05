@@ -4,7 +4,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.data_fetcher import data_fetcher
 from app.services.alert_service import alert_service
 from app.database import SessionLocal
-from app.utils.helpers import is_market_open, yf_session
+from app.utils.helpers import is_market_open
 from app.config import PRICE_STREAM_INTERVAL, ALERT_CHECK_INTERVAL
 
 router = APIRouter()
@@ -180,8 +180,8 @@ async def signal_accuracy_validator():
     Uses yfinance only — this is internal bookkeeping, no need for Angel One."""
     from datetime import timedelta
     from app.models import SignalLog
-    import yfinance as yf
     from app.utils.helpers import yfinance_symbol, now_ist
+    from app.utils.yahoo_api import yahoo_quote
 
     await asyncio.sleep(30)
 
@@ -212,17 +212,15 @@ async def signal_accuracy_validator():
                 )
 
                 if pending_logs:
-                    # Use yfinance directly — no Angel One calls for bookkeeping
                     symbols = list({log.symbol for log in pending_logs})
 
                     def _fetch_prices(syms):
                         pm = {}
                         for sym in syms:
                             try:
-                                ticker = yf.Ticker(yfinance_symbol(sym), session=yf_session)
-                                info = ticker.fast_info
-                                if info.last_price:
-                                    pm[sym] = round(float(info.last_price), 2)
+                                q = yahoo_quote(yfinance_symbol(sym))
+                                if q and q["ltp"]:
+                                    pm[sym] = round(float(q["ltp"]), 2)
                             except Exception:
                                 pass
                         return pm

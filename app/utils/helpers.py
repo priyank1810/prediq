@@ -1,21 +1,6 @@
 from datetime import datetime, timezone, timedelta
-import logging
 
 IST = timezone(timedelta(hours=5, minutes=30))
-
-# Shared yfinance session using curl_cffi to bypass Yahoo bot detection on cloud IPs
-try:
-    from curl_cffi.requests import Session as _CffiSession
-
-    class _YFSession(_CffiSession):
-        def __init__(self):
-            super().__init__(impersonate="chrome")
-            self.headers = {}
-
-    yf_session = _YFSession()
-except Exception:
-    yf_session = None
-    logging.getLogger(__name__).warning("curl_cffi not available, yfinance may be blocked")
 
 
 def now_ist() -> datetime:

@@ -101,21 +101,18 @@ class MarketMoodService:
         return 50.0
 
     def _get_breadth_component(self) -> float:
-        """% of Nifty50 above their 20-day SMA -> 0-100.
-        Uses yfinance directly — no Angel One calls for background mood."""
+        """% of Nifty50 above their 20-day SMA -> 0-100."""
         try:
             from app.config import NIFTY_50_SYMBOLS
-            from app.utils.helpers import yfinance_symbol, yf_session
-            import yfinance as yf
+            from app.utils.helpers import yfinance_symbol
+            from app.utils.yahoo_api import yahoo_chart
             import ta
 
             def _check_above_sma(symbol):
                 yf_sym = yfinance_symbol(symbol)
-                df = yf.download(yf_sym, period="3mo", progress=False, session=yf_session)
+                df = yahoo_chart(yf_sym, period="3mo", interval="1d")
                 if df is not None and len(df) >= 25:
-                    if hasattr(df.columns, 'levels'):
-                        df.columns = df.columns.get_level_values(0)
-                    close = df["Close"]
+                    close = df["close"]
                     sma20 = ta.trend.SMAIndicator(close, window=20).sma_indicator()
                     return float(close.iloc[-1]) > float(sma20.iloc[-1])
                 return None
@@ -145,11 +142,9 @@ class MarketMoodService:
     def _get_vix_component(self) -> float:
         """India VIX inverse mapping -> 0-100 (low VIX = high greed)."""
         try:
-            import yfinance as yf
-            from app.utils.helpers import yf_session
+            from app.utils.yahoo_api import yahoo_history
 
-            vix = yf.Ticker("^INDIAVIX", session=yf_session)
-            hist = vix.history(period="5d")
+            hist = yahoo_history("^INDIAVIX", period="5d")
             if len(hist) > 0:
                 current_vix = float(hist["Close"].iloc[-1])
                 # VIX typically ranges 10-40 for India

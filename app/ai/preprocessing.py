@@ -86,10 +86,8 @@ class StockDataPreprocessor:
         # 3. India VIX level (normalized by rolling mean)
         vix_val = 0.0
         try:
-            import yfinance as yf
-            from app.utils.helpers import yf_session
-            vix_ticker = yf.Ticker("^INDIAVIX", session=yf_session)
-            vix_hist = vix_ticker.history(period="3mo")
+            from app.utils.yahoo_api import yahoo_history
+            vix_hist = yahoo_history("^INDIAVIX", period="3mo")
             if len(vix_hist) > 0:
                 current_vix = float(vix_hist["Close"].iloc[-1])
                 mean_vix = float(vix_hist["Close"].mean())
@@ -101,10 +99,8 @@ class StockDataPreprocessor:
         # 4. S&P 500 change
         sp500_val = 0.0
         try:
-            import yfinance as yf
-            from app.utils.helpers import yf_session
-            sp_ticker = yf.Ticker("^GSPC", session=yf_session)
-            sp_hist = sp_ticker.history(period="5d")
+            from app.utils.yahoo_api import yahoo_history as _yh
+            sp_hist = _yh("^GSPC", period="5d")
             if len(sp_hist) >= 2:
                 sp500_val = float(
                     (sp_hist["Close"].iloc[-1] - sp_hist["Close"].iloc[-2])
@@ -117,10 +113,8 @@ class StockDataPreprocessor:
         # 5. USD/INR change
         usdinr_val = 0.0
         try:
-            import yfinance as yf
-            from app.utils.helpers import yf_session
-            usd_ticker = yf.Ticker("USDINR=X", session=yf_session)
-            usd_hist = usd_ticker.history(period="5d")
+            from app.utils.yahoo_api import yahoo_history as _yh2
+            usd_hist = _yh2("USDINR=X", period="5d")
             if len(usd_hist) >= 2:
                 usdinr_val = float(
                     (usd_hist["Close"].iloc[-1] - usd_hist["Close"].iloc[-2])

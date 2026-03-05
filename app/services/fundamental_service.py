@@ -26,36 +26,34 @@ class FundamentalService:
 
     def _fetch(self, symbol: str) -> dict:
         try:
-            import yfinance as yf
-            from app.utils.helpers import is_index, yfinance_symbol, yf_session
+            from app.utils.helpers import is_index, yfinance_symbol
+            from app.utils.yahoo_api import yahoo_fundamentals
 
             # Indices don't have fundamental data (P/E, P/B, etc.)
             if is_index(symbol):
                 return self._empty_result()
 
             ticker_symbol = yfinance_symbol(symbol)
-            ticker = yf.Ticker(ticker_symbol, session=yf_session)
-            info = ticker.info
+            info = yahoo_fundamentals(ticker_symbol)
 
-            if not info or info.get("regularMarketPrice") is None:
+            if not info or not info.get("regularMarketPrice"):
                 # Fallback to BSE
                 ticker_symbol = yfinance_symbol(symbol, exchange="BSE")
-                ticker = yf.Ticker(ticker_symbol, session=yf_session)
-                info = ticker.info
+                info = yahoo_fundamentals(ticker_symbol)
 
             if not info:
                 return self._empty_result()
 
             result = {
-                "pe": info.get("trailingPE") or info.get("forwardPE"),
-                "pb": info.get("priceToBook"),
-                "roe": self._pct(info.get("returnOnEquity")),
-                "de": info.get("debtToEquity"),
-                "rev_growth": self._pct(info.get("revenueGrowth")),
-                "earn_growth": self._pct(info.get("earningsGrowth")),
-                "div_yield": self._pct(info.get("dividendYield")),
-                "market_cap": info.get("marketCap"),
-                "promoter_holding": self._pct(info.get("heldPercentInsiders")),
+                "pe": info.get("pe"),
+                "pb": info.get("pb"),
+                "roe": self._pct(info.get("roe")),
+                "de": info.get("de"),
+                "rev_growth": self._pct(info.get("rev_growth")),
+                "earn_growth": self._pct(info.get("earn_growth")),
+                "div_yield": self._pct(info.get("div_yield")),
+                "market_cap": info.get("market_cap"),
+                "promoter_holding": self._pct(info.get("promoter_holding")),
                 "sector": info.get("sector", ""),
                 "industry": info.get("industry", ""),
                 "symbol": symbol,
@@ -66,7 +64,7 @@ class FundamentalService:
                 if result[key] is None:
                     result[key] = 0
 
-            # D/E from yfinance is sometimes as percentage (e.g., 50 means 0.5)
+            # D/E from Yahoo is sometimes as percentage (e.g., 50 means 0.5)
             if result["de"] and result["de"] > 10:
                 result["de"] = result["de"] / 100.0
 
