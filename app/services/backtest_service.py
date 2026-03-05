@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import ta
 from app.services.data_fetcher import data_fetcher
+from app.config import SIGNAL_DIRECTION_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +106,10 @@ class BacktestService:
                 actual_prev = float(df.iloc[idx - 1]["close"])
                 actual_dir = "UP" if actual_next > actual_prev else "DOWN"
 
-                if score > 5:
+                if score > SIGNAL_DIRECTION_THRESHOLD:
                     predicted_dir = "UP"
                     directional += 1
-                elif score < -5:
+                elif score < -SIGNAL_DIRECTION_THRESHOLD:
                     predicted_dir = "DOWN"
                     directional += 1
                 else:

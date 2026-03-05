@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
 import feedparser
+from curl_cffi import requests as cffi_requests
 
 from app.utils.cache import cache
 from app.utils.helpers import now_ist
@@ -14,6 +15,17 @@ from app.config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _fetch_rss(url: str) -> str:
+    """Fetch RSS XML using curl_cffi to bypass cloud IP blocks."""
+    try:
+        resp = cffi_requests.get(url, impersonate="chrome", timeout=10)
+        return resp.text
+    except Exception as e:
+        logger.warning(f"curl_cffi RSS fetch failed for {url}: {e}")
+        return ""
+
 
 INFLUENCE_WEIGHTS = {
     "S&P 500": 1.5,
@@ -179,7 +191,7 @@ class GlobalMarketService:
         def _fetch_feed(feed_url):
             entries = []
             try:
-                feed = feedparser.parse(feed_url)
+                feed = feedparser.parse(_fetch_rss(feed_url))
                 for entry in feed.entries[:15]:
                     title = entry.get("title", "").strip()
                     if not title:

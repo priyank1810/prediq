@@ -332,40 +332,81 @@ class IndicatorService:
             # Normal: above VWAP = bullish, below = bearish
             vwap_score = max(-100, min(100, vwap_pct * 200))
 
-        # ── 5. MA Crossover (5 vs 9) ──
-        ma5 = ta.trend.SMAIndicator(close, window=5).sma_indicator()
-        ma9 = ta.trend.SMAIndicator(close, window=9).sma_indicator()
-        ma5_now = float(ma5.iloc[-1]) if not pd.isna(ma5.iloc[-1]) else current_price
-        ma9_now = float(ma9.iloc[-1]) if not pd.isna(ma9.iloc[-1]) else current_price
-        ma5_prev = float(ma5.iloc[-2]) if len(ma5) >= 2 and not pd.isna(ma5.iloc[-2]) else ma5_now
-        ma9_prev = float(ma9.iloc[-2]) if len(ma9) >= 2 and not pd.isna(ma9.iloc[-2]) else ma9_now
+        # ── 5. EMA Crossover (9 vs 21) ──
+        ema9 = ta.trend.EMAIndicator(close, window=9).ema_indicator()
+        ema21 = ta.trend.EMAIndicator(close, window=21).ema_indicator()
+        ema9_now = float(ema9.iloc[-1]) if not pd.isna(ema9.iloc[-1]) else current_price
+        ema21_now = float(ema21.iloc[-1]) if not pd.isna(ema21.iloc[-1]) else current_price
+        ema9_prev = float(ema9.iloc[-2]) if len(ema9) >= 2 and not pd.isna(ema9.iloc[-2]) else ema9_now
+        ema21_prev = float(ema21.iloc[-2]) if len(ema21) >= 2 and not pd.isna(ema21.iloc[-2]) else ema21_now
 
-        # Detect crossover: 5 crosses above 9 = bullish, below = bearish
-        cross_bullish = ma5_prev <= ma9_prev and ma5_now > ma9_now
-        cross_bearish = ma5_prev >= ma9_prev and ma5_now < ma9_now
+        # Detect crossover: 9 crosses above 21 = bullish, below = bearish
+        cross_bullish = ema9_prev <= ema21_prev and ema9_now > ema21_now
+        cross_bearish = ema9_prev >= ema21_prev and ema9_now < ema21_now
 
         # Score: fresh cross = strong signal; ongoing separation = moderate
-        ma_spread_pct = ((ma5_now - ma9_now) / current_price * 100) if current_price > 0 else 0
+        ma_spread_pct = ((ema9_now - ema21_now) / current_price * 100) if current_price > 0 else 0
         if cross_bullish:
             ma_score = 80  # fresh bullish cross
         elif cross_bearish:
             ma_score = -80  # fresh bearish cross
         else:
-            # Ongoing spread: 5 above 9 = bullish, scaled by distance
+            # Ongoing spread: 9 above 21 = bullish, scaled by distance
             ma_score = max(-100, min(100, ma_spread_pct * 300))
 
         # ── 6. Candlestick Patterns ──
         candle_result = self._detect_candlestick_patterns(df)
         candle_score = candle_result["score"]
 
-        # ── Weighted composite (with candlestick) ──
+        # ── 7. MACD ──
+        macd_obj = ta.trend.MACD(close, window_slow=26, window_fast=12, window_sign=9)
+        macd_line = float(macd_obj.macd().iloc[-1]) if not pd.isna(macd_obj.macd().iloc[-1]) else 0
+        macd_signal_line = float(macd_obj.macd_signal().iloc[-1]) if not pd.isna(macd_obj.macd_signal().iloc[-1]) else 0
+        macd_hist = float(macd_obj.macd_diff().iloc[-1]) if not pd.isna(macd_obj.macd_diff().iloc[-1]) else 0
+
+        # MACD scoring: histogram direction + crossover
+        macd_prev = float(macd_obj.macd().iloc[-2]) if len(close) >= 2 and not pd.isna(macd_obj.macd().iloc[-2]) else macd_line
+        macd_sig_prev = float(macd_obj.macd_signal().iloc[-2]) if len(close) >= 2 and not pd.isna(macd_obj.macd_signal().iloc[-2]) else macd_signal_line
+        macd_cross_bull = macd_prev <= macd_sig_prev and macd_line > macd_signal_line
+        macd_cross_bear = macd_prev >= macd_sig_prev and macd_line < macd_signal_line
+
+        if macd_cross_bull:
+            macd_score = 80
+        elif macd_cross_bear:
+            macd_score = -80
+        elif macd_hist > 0:
+            macd_score = min(100, macd_hist / (abs(macd_line) + 0.01) * 200)
+        else:
+            macd_score = max(-100, macd_hist / (abs(macd_line) + 0.01) * 200)
+        macd_score = max(-100, min(100, macd_score))
+
+        # ── 8. ADX ──
+        adx_obj = ta.trend.ADXIndicator(high, low, close, window=14)
+        adx_val = float(adx_obj.adx().iloc[-1]) if not pd.isna(adx_obj.adx().iloc[-1]) else 0
+        plus_di = float(adx_obj.adx_pos().iloc[-1]) if not pd.isna(adx_obj.adx_pos().iloc[-1]) else 0
+        minus_di = float(adx_obj.adx_neg().iloc[-1]) if not pd.isna(adx_obj.adx_neg().iloc[-1]) else 0
+
+        # ADX scoring: ADX > 25 = trending, direction from +DI vs -DI
+        if adx_val < 20:
+            adx_score = 0  # Weak/no trend — neutral
+        else:
+            trend_strength = min(100, (adx_val - 20) * 2.5)  # 20→0, 60→100
+            if plus_di > minus_di:
+                adx_score = trend_strength
+            else:
+                adx_score = -trend_strength
+        adx_score = max(-100, min(100, adx_score))
+
+        # ── Weighted composite (8 indicators) ──
         technical_score = (
-            0.22 * rsi_score +
-            0.18 * volume_score +
-            0.18 * bb_score +
-            0.17 * vwap_score +
-            0.12 * ma_score +
-            0.13 * candle_score
+            0.18 * rsi_score +
+            0.14 * volume_score +
+            0.14 * bb_score +
+            0.13 * vwap_score +
+            0.10 * ma_score +
+            0.10 * candle_score +
+            0.12 * macd_score +
+            0.09 * adx_score
         )
         technical_score = max(-100, min(100, round(technical_score, 2)))
 
@@ -383,10 +424,18 @@ class IndicatorService:
             "vwap_lower_1": round(float(vwap_lower_1.iloc[-1]), 2) if not pd.isna(vwap_lower_1.iloc[-1]) else None,
             "vwap_upper_2": round(float(vwap_upper_2.iloc[-1]), 2) if not pd.isna(vwap_upper_2.iloc[-1]) else None,
             "vwap_lower_2": round(float(vwap_lower_2.iloc[-1]), 2) if not pd.isna(vwap_lower_2.iloc[-1]) else None,
-            "ma5": round(ma5_now, 2),
-            "ma9": round(ma9_now, 2),
+            "ema9": round(ema9_now, 2),
+            "ema21": round(ema21_now, 2),
             "ma_cross": "bullish" if cross_bullish else ("bearish" if cross_bearish else "none"),
             "ma_score": round(ma_score, 2),
+            "macd_line": round(macd_line, 4),
+            "macd_signal_line": round(macd_signal_line, 4),
+            "macd_histogram": round(macd_hist, 4),
+            "macd_score": round(macd_score, 2),
+            "adx": round(adx_val, 2),
+            "plus_di": round(plus_di, 2),
+            "minus_di": round(minus_di, 2),
+            "adx_score": round(adx_score, 2),
             "current_price": round(current_price, 2),
             "candlestick_patterns": candle_result["patterns"],
             "candlestick_score": candle_result["score"],

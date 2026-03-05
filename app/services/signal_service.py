@@ -9,6 +9,7 @@ from app.utils.helpers import now_ist, is_market_open
 from app.utils.cache import cache
 from app.config import (
     SIGNAL_WEIGHT_TECHNICAL, SIGNAL_WEIGHT_SENTIMENT, SIGNAL_WEIGHT_GLOBAL,
+    SIGNAL_DIRECTION_THRESHOLD,
     CACHE_TTL_MTF_DAILY, CACHE_TTL_MTF_1H,
 )
 
@@ -21,7 +22,7 @@ class SignalService:
         timeframes = []
 
         # 15m — already computed
-        dir_15m = "BULLISH" if tech_score_15m > 5 else ("BEARISH" if tech_score_15m < -5 else "NEUTRAL")
+        dir_15m = "BULLISH" if tech_score_15m > SIGNAL_DIRECTION_THRESHOLD else ("BEARISH" if tech_score_15m < -SIGNAL_DIRECTION_THRESHOLD else "NEUTRAL")
         timeframes.append({"label": "15m", "direction": dir_15m, "score": round(tech_score_15m, 1)})
 
         # 1h — resample 15m data to 1h (cached)
@@ -49,7 +50,7 @@ class SignalService:
                         if len(resampled) >= 20:
                             res_1h = indicator_service.compute_intraday_indicators(resampled)
                             score_1h = res_1h["score"]
-                            dir_1h = "BULLISH" if score_1h > 5 else ("BEARISH" if score_1h < -5 else "NEUTRAL")
+                            dir_1h = "BULLISH" if score_1h > SIGNAL_DIRECTION_THRESHOLD else ("BEARISH" if score_1h < -SIGNAL_DIRECTION_THRESHOLD else "NEUTRAL")
                             cache.set(cache_key_1h, {"score": score_1h, "direction": dir_1h}, CACHE_TTL_MTF_1H)
             except Exception as e:
                 logger.warning(f"MTF 1h failed: {e}")
@@ -71,7 +72,7 @@ class SignalService:
                         daily_df["datetime_str"] = daily_df["date"].astype(str)
                     res_daily = indicator_service.compute_intraday_indicators(daily_df)
                     score_daily = res_daily["score"]
-                    dir_daily = "BULLISH" if score_daily > 5 else ("BEARISH" if score_daily < -5 else "NEUTRAL")
+                    dir_daily = "BULLISH" if score_daily > SIGNAL_DIRECTION_THRESHOLD else ("BEARISH" if score_daily < -SIGNAL_DIRECTION_THRESHOLD else "NEUTRAL")
                     cache.set(cache_key_daily, {"score": score_daily, "direction": dir_daily}, CACHE_TTL_MTF_DAILY)
             except Exception as e:
                 logger.warning(f"MTF daily failed: {e}")
@@ -254,9 +255,9 @@ class SignalService:
         composite = max(-100, min(100, round(composite, 2)))
 
         # 6. Direction and confidence
-        if composite > 5:
+        if composite > SIGNAL_DIRECTION_THRESHOLD:
             direction = "BULLISH"
-        elif composite < -5:
+        elif composite < -SIGNAL_DIRECTION_THRESHOLD:
             direction = "BEARISH"
         else:
             direction = "NEUTRAL"

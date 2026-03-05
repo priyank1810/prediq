@@ -17,7 +17,7 @@ from app.database import engine, Base
 from app.routers import stocks, predictions, portfolio, alerts, indicators, signals, watchlist
 from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
-from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator
+from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, signal_accuracy_validator_30min, signal_accuracy_validator_1hr
 from app.routers.jobs import router as jobs_router
 
 
@@ -85,6 +85,10 @@ def _migrate_db():
         ("signal_logs", "sector", "TEXT"),
         ("signal_logs", "regime", "TEXT"),
         ("signal_logs", "oi_score", "REAL"),
+        ("signal_logs", "price_after_30min", "REAL"),
+        ("signal_logs", "price_after_1hr", "REAL"),
+        ("signal_logs", "was_correct_30min", "BOOLEAN"),
+        ("signal_logs", "was_correct_1hr", "BOOLEAN"),
     ]
 
     for table, column, col_type in migrations:
@@ -187,6 +191,8 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(price_streamer()),
         asyncio.create_task(alert_checker()),
         asyncio.create_task(signal_accuracy_validator()),
+        asyncio.create_task(signal_accuracy_validator_30min()),
+        asyncio.create_task(signal_accuracy_validator_1hr()),
         asyncio.create_task(smart_alert_checker()),
         asyncio.create_task(market_mood_broadcaster()),
         asyncio.create_task(periodic_job_enqueuer()),

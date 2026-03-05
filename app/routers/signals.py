@@ -333,7 +333,11 @@ def get_signal_history(symbol: str, limit: int = 20):
                     "global_score": log.global_score,
                     "price_at_signal": log.price_at_signal,
                     "price_after_15min": log.price_after_15min,
+                    "price_after_30min": getattr(log, "price_after_30min", None),
+                    "price_after_1hr": getattr(log, "price_after_1hr", None),
                     "was_correct": log.was_correct,
+                    "was_correct_30min": getattr(log, "was_correct_30min", None),
+                    "was_correct_1hr": getattr(log, "was_correct_1hr", None),
                     "created_at": log.created_at.isoformat() if log.created_at else None,
                 }
                 for log in logs

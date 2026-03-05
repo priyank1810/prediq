@@ -7,11 +7,22 @@ from concurrent.futures import ThreadPoolExecutor
 from app.utils.helpers import now_ist
 
 import feedparser
+from curl_cffi import requests as cffi_requests
 
 from app.utils.cache import cache
 from app.config import CACHE_TTL_SENTIMENT, NEWS_RSS_SOURCES, POSITIVE_KEYWORDS, NEGATIVE_KEYWORDS
 
 logger = logging.getLogger(__name__)
+
+
+def _fetch_rss(url: str) -> str:
+    """Fetch RSS XML using curl_cffi to bypass cloud IP blocks."""
+    try:
+        resp = cffi_requests.get(url, impersonate="chrome", timeout=10)
+        return resp.text
+    except Exception as e:
+        logger.warning(f"curl_cffi RSS fetch failed for {url}: {e}")
+        return ""
 
 
 class SentimentService:
@@ -50,7 +61,7 @@ class SentimentService:
             entries = []
             try:
                 url = url_template.format(symbol=quote(symbol))
-                feed = feedparser.parse(url)
+                feed = feedparser.parse(_fetch_rss(url))
                 for entry in feed.entries[:15]:
                     title = entry.get("title", "").strip()
                     if not title:
@@ -77,7 +88,7 @@ class SentimentService:
         def _fetch_mc_feed(mc_url):
             entries = []
             try:
-                feed = feedparser.parse(mc_url)
+                feed = feedparser.parse(_fetch_rss(mc_url))
                 for entry in feed.entries[:20]:
                     title = entry.get("title", "").strip()
                     if not title or symbol.lower() not in title.lower():
@@ -105,7 +116,7 @@ class SentimentService:
             entries = []
             try:
                 et_url = "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms"
-                feed = feedparser.parse(et_url)
+                feed = feedparser.parse(_fetch_rss(et_url))
                 for entry in feed.entries[:10]:
                     title = entry.get("title", "").strip()
                     if not title or symbol.lower() not in title.lower():

@@ -231,13 +231,157 @@ async def signal_accuracy_validator():
                         current_price = price_map.get(log.symbol)
                         if current_price:
                             log.price_after_15min = current_price
+                            pct_move = (current_price - log.price_at_signal) / log.price_at_signal
                             if log.direction == "BULLISH":
-                                log.was_correct = current_price > log.price_at_signal
+                                log.was_correct = pct_move >= 0.003  # +0.3%
                             elif log.direction == "BEARISH":
-                                log.was_correct = current_price < log.price_at_signal
+                                log.was_correct = pct_move <= -0.003  # -0.3%
                             else:
-                                pct_move = abs(current_price - log.price_at_signal) / log.price_at_signal
-                                log.was_correct = pct_move < 0.015  # NEUTRAL correct if <1.5% move
+                                log.was_correct = abs(pct_move) < 0.015  # NEUTRAL correct if <1.5% move
+
+                    db.commit()
+            finally:
+                db.close()
+        except Exception:
+            pass
+
+        await asyncio.sleep(180)
+
+
+async def signal_accuracy_validator_30min():
+    """Background task that checks signals from ~30-60 minutes ago
+    and populates price_after_30min and was_correct_30min fields."""
+    from datetime import timedelta
+    from app.models import SignalLog
+    from app.utils.helpers import yfinance_symbol, now_ist
+    from app.utils.yahoo_api import yahoo_quote
+
+    await asyncio.sleep(60)
+
+    while True:
+        try:
+            from app.utils.helpers import market_status
+            mkt = market_status()
+            if mkt in ("closed_weekend", "pre_market"):
+                await asyncio.sleep(300)
+                continue
+
+            db = SessionLocal()
+            try:
+                cutoff_start = now_ist().replace(tzinfo=None) - timedelta(minutes=60)
+                cutoff_end = now_ist().replace(tzinfo=None) - timedelta(minutes=35)
+
+                pending_logs = (
+                    db.query(SignalLog)
+                    .filter(
+                        SignalLog.price_after_30min.is_(None),
+                        SignalLog.price_at_signal.isnot(None),
+                        SignalLog.created_at >= cutoff_start,
+                        SignalLog.created_at <= cutoff_end,
+                    )
+                    .limit(20)
+                    .all()
+                )
+
+                if pending_logs:
+                    symbols = list({log.symbol for log in pending_logs})
+
+                    def _fetch_prices(syms):
+                        pm = {}
+                        for sym in syms:
+                            try:
+                                q = yahoo_quote(yfinance_symbol(sym))
+                                if q and q["ltp"]:
+                                    pm[sym] = round(float(q["ltp"]), 2)
+                            except Exception:
+                                pass
+                        return pm
+
+                    price_map = await asyncio.to_thread(_fetch_prices, symbols)
+
+                    for log in pending_logs:
+                        current_price = price_map.get(log.symbol)
+                        if current_price:
+                            log.price_after_30min = current_price
+                            pct_move = (current_price - log.price_at_signal) / log.price_at_signal
+                            if log.direction == "BULLISH":
+                                log.was_correct_30min = pct_move >= 0.003
+                            elif log.direction == "BEARISH":
+                                log.was_correct_30min = pct_move <= -0.003
+                            else:
+                                log.was_correct_30min = abs(pct_move) < 0.015
+
+                    db.commit()
+            finally:
+                db.close()
+        except Exception:
+            pass
+
+        await asyncio.sleep(180)
+
+
+async def signal_accuracy_validator_1hr():
+    """Background task that checks signals from ~65-120 minutes ago
+    and populates price_after_1hr and was_correct_1hr fields."""
+    from datetime import timedelta
+    from app.models import SignalLog
+    from app.utils.helpers import yfinance_symbol, now_ist
+    from app.utils.yahoo_api import yahoo_quote
+
+    await asyncio.sleep(90)
+
+    while True:
+        try:
+            from app.utils.helpers import market_status
+            mkt = market_status()
+            if mkt in ("closed_weekend", "pre_market"):
+                await asyncio.sleep(300)
+                continue
+
+            db = SessionLocal()
+            try:
+                cutoff_start = now_ist().replace(tzinfo=None) - timedelta(minutes=120)
+                cutoff_end = now_ist().replace(tzinfo=None) - timedelta(minutes=65)
+
+                pending_logs = (
+                    db.query(SignalLog)
+                    .filter(
+                        SignalLog.price_after_1hr.is_(None),
+                        SignalLog.price_at_signal.isnot(None),
+                        SignalLog.created_at >= cutoff_start,
+                        SignalLog.created_at <= cutoff_end,
+                    )
+                    .limit(20)
+                    .all()
+                )
+
+                if pending_logs:
+                    symbols = list({log.symbol for log in pending_logs})
+
+                    def _fetch_prices(syms):
+                        pm = {}
+                        for sym in syms:
+                            try:
+                                q = yahoo_quote(yfinance_symbol(sym))
+                                if q and q["ltp"]:
+                                    pm[sym] = round(float(q["ltp"]), 2)
+                            except Exception:
+                                pass
+                        return pm
+
+                    price_map = await asyncio.to_thread(_fetch_prices, symbols)
+
+                    for log in pending_logs:
+                        current_price = price_map.get(log.symbol)
+                        if current_price:
+                            log.price_after_1hr = current_price
+                            pct_move = (current_price - log.price_at_signal) / log.price_at_signal
+                            if log.direction == "BULLISH":
+                                log.was_correct_1hr = pct_move >= 0.003
+                            elif log.direction == "BEARISH":
+                                log.was_correct_1hr = pct_move <= -0.003
+                            else:
+                                log.was_correct_1hr = abs(pct_move) < 0.015
 
                     db.commit()
             finally:
