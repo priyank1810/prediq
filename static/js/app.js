@@ -640,8 +640,8 @@ const App = {
             };
             const color = (v) => v >= 0 ? 'text-green-400' : 'text-red-400';
 
-            const fiiNet = data.fii_net ?? data.fii_buy - data.fii_sell;
-            const diiNet = data.dii_net ?? data.dii_buy - data.dii_sell;
+            const fiiNet = data.fii_net ?? (data.fii && data.fii.net) ?? 0;
+            const diiNet = data.dii_net ?? (data.dii && data.dii.net) ?? 0;
             const total = fiiNet + diiNet;
 
             fiiEl.textContent = fmt(fiiNet);
@@ -660,9 +660,10 @@ const App = {
         try {
             const data = await API.getSectorHeatmap();
             const container = document.getElementById('sectorHeatmap');
-            if (!container || !data || !data.sectors) return;
+            const sectors = Array.isArray(data) ? data : (data.sectors || []);
+            if (!container || !sectors.length) return;
 
-            container.innerHTML = data.sectors.map(s => {
+            container.innerHTML = sectors.map(s => {
                 const pct = s.avg_change || 0;
                 const intensity = Math.min(1, Math.abs(pct) / 3);
                 let bg, text;
