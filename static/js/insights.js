@@ -58,7 +58,7 @@ const Insights = {
                 const glow = isBull ? 'shadow-green-900/20 shadow-lg' : 'shadow-red-900/20 shadow-lg';
                 const color = isBull ? 'text-green-400' : 'text-red-400';
                 const arrow = isBull ? '&#9650;' : '&#9660;';
-                const time = s.created_at ? new Date(s.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
+                const time = s.created_at ? new Date(s.created_at + '+05:30').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
                 return `
                     <div class="bg-dark-700 border ${borderColor} ${glow} rounded-lg p-4 cursor-pointer hover:bg-dark-600 transition"
                          onclick="Search.select('${s.symbol}', '${s.symbol}')">
@@ -117,7 +117,7 @@ const Insights = {
                 const color = s.direction === 'BULLISH' ? 'text-green-400' : (s.direction === 'BEARISH' ? 'text-red-400' : 'text-yellow-400');
                 const isHigh = s.confidence >= 60;
                 const highlight = isHigh ? 'border-l-2 border-accent-blue pl-3' : 'pl-4';
-                const time = s.created_at ? new Date(s.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
+                const time = s.created_at ? new Date(s.created_at + '+05:30').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
                 const arrow = s.direction === 'BULLISH' ? '&#9650;' : (s.direction === 'BEARISH' ? '&#9660;' : '&#9654;');
                 return `
                     <div class="flex items-center gap-3 py-2 ${highlight} cursor-pointer hover:bg-dark-700 rounded transition"
