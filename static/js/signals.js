@@ -95,6 +95,14 @@ const Signals = {
         }
         confEl.textContent = `${data.confidence}% confidence`;
 
+        // Signal price
+        const priceEl = document.getElementById('signalPrice');
+        if (priceEl) {
+            const candles = data.intraday_candles;
+            const price = candles && candles.length > 0 ? candles[candles.length - 1].close : null;
+            priceEl.textContent = price ? `₹${price.toFixed(2)}` : '';
+        }
+
         // Score bars (weights are now dynamic)
         this.renderScoreBar('technicalBar', 'technicalScore', data.technical.score, data.technical.weight);
         this.renderScoreBar('sentimentBar', 'sentimentScore', data.sentiment.score, data.sentiment.weight);
