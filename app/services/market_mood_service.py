@@ -105,13 +105,13 @@ class MarketMoodService:
         Uses yfinance directly — no Angel One calls for background mood."""
         try:
             from app.config import NIFTY_50_SYMBOLS
-            from app.utils.helpers import yfinance_symbol
+            from app.utils.helpers import yfinance_symbol, yf_session
             import yfinance as yf
             import ta
 
             def _check_above_sma(symbol):
                 yf_sym = yfinance_symbol(symbol)
-                df = yf.download(yf_sym, period="3mo", progress=False)
+                df = yf.download(yf_sym, period="3mo", progress=False, session=yf_session)
                 if df is not None and len(df) >= 25:
                     if hasattr(df.columns, 'levels'):
                         df.columns = df.columns.get_level_values(0)
@@ -146,8 +146,9 @@ class MarketMoodService:
         """India VIX inverse mapping -> 0-100 (low VIX = high greed)."""
         try:
             import yfinance as yf
+            from app.utils.helpers import yf_session
 
-            vix = yf.Ticker("^INDIAVIX")
+            vix = yf.Ticker("^INDIAVIX", session=yf_session)
             hist = vix.history(period="5d")
             if len(hist) > 0:
                 current_vix = float(hist["Close"].iloc[-1])

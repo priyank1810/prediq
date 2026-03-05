@@ -7,7 +7,7 @@ import feedparser
 import yfinance as yf
 
 from app.utils.cache import cache
-from app.utils.helpers import now_ist
+from app.utils.helpers import now_ist, yf_session
 from app.config import (
     CACHE_TTL_GLOBAL, GLOBAL_MARKET_SYMBOLS,
     POSITIVE_KEYWORDS, NEGATIVE_KEYWORDS,
@@ -91,7 +91,7 @@ class GlobalMarketService:
         total_weight = 0
 
         def _fetch_one(name, symbol):
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, session=yf_session)
             info = ticker.fast_info
             current_price = info.last_price
             prev_close = info.previous_close

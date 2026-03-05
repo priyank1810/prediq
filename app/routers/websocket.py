@@ -4,7 +4,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.data_fetcher import data_fetcher
 from app.services.alert_service import alert_service
 from app.database import SessionLocal
-from app.utils.helpers import is_market_open
+from app.utils.helpers import is_market_open, yf_session
 from app.config import PRICE_STREAM_INTERVAL, ALERT_CHECK_INTERVAL
 
 router = APIRouter()
@@ -219,7 +219,7 @@ async def signal_accuracy_validator():
                         pm = {}
                         for sym in syms:
                             try:
-                                ticker = yf.Ticker(yfinance_symbol(sym))
+                                ticker = yf.Ticker(yfinance_symbol(sym), session=yf_session)
                                 info = ticker.fast_info
                                 if info.last_price:
                                     pm[sym] = round(float(info.last_price), 2)

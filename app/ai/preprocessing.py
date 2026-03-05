@@ -87,7 +87,8 @@ class StockDataPreprocessor:
         vix_val = 0.0
         try:
             import yfinance as yf
-            vix_ticker = yf.Ticker("^INDIAVIX")
+            from app.utils.helpers import yf_session
+            vix_ticker = yf.Ticker("^INDIAVIX", session=yf_session)
             vix_hist = vix_ticker.history(period="3mo")
             if len(vix_hist) > 0:
                 current_vix = float(vix_hist["Close"].iloc[-1])
@@ -101,7 +102,8 @@ class StockDataPreprocessor:
         sp500_val = 0.0
         try:
             import yfinance as yf
-            sp_ticker = yf.Ticker("^GSPC")
+            from app.utils.helpers import yf_session
+            sp_ticker = yf.Ticker("^GSPC", session=yf_session)
             sp_hist = sp_ticker.history(period="5d")
             if len(sp_hist) >= 2:
                 sp500_val = float(
@@ -116,7 +118,8 @@ class StockDataPreprocessor:
         usdinr_val = 0.0
         try:
             import yfinance as yf
-            usd_ticker = yf.Ticker("USDINR=X")
+            from app.utils.helpers import yf_session
+            usd_ticker = yf.Ticker("USDINR=X", session=yf_session)
             usd_hist = usd_ticker.history(period="5d")
             if len(usd_hist) >= 2:
                 usdinr_val = float(

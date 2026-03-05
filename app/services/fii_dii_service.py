@@ -1,6 +1,6 @@
 import logging
 from app.utils.cache import cache
-from app.utils.helpers import now_ist
+from app.utils.helpers import now_ist, yf_session
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class FIIDIIService:
             import pandas as pd
 
             # Use Nifty 50 as market proxy
-            nifty = yf.Ticker("^NSEI")
+            nifty = yf.Ticker("^NSEI", session=yf_session)
             hist = nifty.history(period="5d")
 
             if len(hist) >= 2:
@@ -86,7 +86,7 @@ class FIIDIIService:
             import yfinance as yf
             import numpy as np
 
-            nifty = yf.Ticker("^NSEI")
+            nifty = yf.Ticker("^NSEI", session=yf_session)
             hist = nifty.history(period=f"{days + 5}d")
 
             if len(hist) < 2:

@@ -8,7 +8,7 @@ from curl_cffi import requests as cffi_requests
 from datetime import datetime, timedelta
 from typing import Optional
 from app.utils.cache import cache
-from app.utils.helpers import yfinance_symbol, now_ist
+from app.utils.helpers import yfinance_symbol, now_ist, yf_session as _yf_session
 from app.config import CACHE_TTL_QUOTE, CACHE_TTL_HISTORY, CACHE_TTL_STOCK_LIST, CACHE_TTL_INTRADAY, POPULAR_STOCKS, INDICES
 
 NSE_EQUITY_CSV_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -120,7 +120,7 @@ class DataFetcher:
         # 2. Fallback to yfinance
         if df is None or df.empty:
             yf_symbol = yfinance_symbol(symbol)
-            df = yf.download(yf_symbol, period=period, interval=interval, progress=False)
+            df = yf.download(yf_symbol, period=period, interval=interval, progress=False, session=_yf_session)
             if df.empty:
                 df = pd.DataFrame()
             else:
@@ -299,7 +299,7 @@ class DataFetcher:
 
     def _fetch_from_yfinance(self, symbol: str) -> dict:
         yf_symbol = yfinance_symbol(symbol)
-        ticker = yf.Ticker(yf_symbol)
+        ticker = yf.Ticker(yf_symbol, session=_yf_session)
 
         try:
             # fast_info can raise KeyError intermittently; fall back to history
@@ -385,7 +385,7 @@ class DataFetcher:
 
     def _historical_from_yfinance(self, symbol: str, period: str = "1y") -> pd.DataFrame:
         yf_symbol = yfinance_symbol(symbol)
-        df = yf.download(yf_symbol, period=period, progress=False)
+        df = yf.download(yf_symbol, period=period, progress=False, session=_yf_session)
         if df.empty:
             return pd.DataFrame()
 
