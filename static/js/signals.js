@@ -538,21 +538,30 @@ const Signals = {
         const el = document.getElementById('signalHistoryTable');
         if (!el) return;
         if (!history || history.length === 0) {
-            el.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 py-4">No signal history yet</td></tr>';
+            el.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4">No signal history yet</td></tr>';
             return;
         }
         el.innerHTML = history.map(h => {
             const c = h.direction === 'BULLISH' ? 'text-green-400' :
                       (h.direction === 'BEARISH' ? 'text-red-400' : 'text-yellow-400');
             const icon = h.was_correct === true ? '<span class="text-green-400">&#10003;</span>' :
-                         (h.was_correct === false ? '<span class="text-red-400">&#10007;</span>' : '-');
-            const time = h.created_at ? new Date(h.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
+                         (h.was_correct === false ? '<span class="text-red-400">&#10007;</span>' :
+                         '<span class="text-gray-500">&#8987;</span>');
+            const time = h.created_at ? new Date(h.created_at + '+05:30').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
+            const signalPrice = h.price_at_signal ? '₹' + h.price_at_signal.toFixed(2) : '-';
+            const actualPrice = h.price_after_15min ? '₹' + h.price_after_15min.toFixed(2) : '-';
+            const priceDiff = (h.price_at_signal && h.price_after_15min)
+                ? ((h.price_after_15min - h.price_at_signal) / h.price_at_signal * 100).toFixed(2)
+                : null;
+            const diffColor = priceDiff > 0 ? 'text-green-400' : (priceDiff < 0 ? 'text-red-400' : 'text-gray-400');
+            const diffStr = priceDiff !== null ? `<span class="${diffColor} text-[10px]">(${priceDiff > 0 ? '+' : ''}${priceDiff}%)</span>` : '';
             return `
                 <tr class="border-b border-gray-800">
                     <td class="py-1.5 px-3 text-xs text-gray-400">${time}</td>
                     <td class="py-1.5 px-3 text-xs ${c} font-medium">${h.direction}</td>
                     <td class="py-1.5 px-3 text-xs text-gray-300 text-right">${h.confidence}%</td>
-                    <td class="py-1.5 px-3 text-xs text-gray-300 text-right">${h.price_at_signal ? '₹' + h.price_at_signal.toFixed(2) : '-'}</td>
+                    <td class="py-1.5 px-3 text-xs text-gray-300 text-right">${signalPrice}</td>
+                    <td class="py-1.5 px-3 text-xs text-gray-300 text-right">${actualPrice} ${diffStr}</td>
                     <td class="py-1.5 px-3 text-xs text-center">${icon}</td>
                 </tr>
             `;
