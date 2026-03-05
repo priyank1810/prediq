@@ -168,6 +168,27 @@ class SignalService:
         sentiment_score = sent_result["score"]
         global_score = global_result["score"]
 
+        # Sector-aware news impact adjustment
+        sector_news_adjustment = None
+        try:
+            from app.services.sector_service import sector_service
+            sector_adj = sector_service.get_sector_adjusted_scores(
+                symbol, sentiment_score, global_score, global_result
+            )
+            sector_news_adjustment = {
+                "original_sentiment": sentiment_score,
+                "original_global": global_score,
+                "adjusted_sentiment": sector_adj["sentiment_score"],
+                "adjusted_global": sector_adj["global_score"],
+                "sector": sector_adj["sector"],
+                "modifier_applied": sector_adj["modifier_applied"],
+                "active_events": sector_adj["active_events"],
+            }
+            sentiment_score = sector_adj["sentiment_score"]
+            global_score = sector_adj["global_score"]
+        except Exception as e:
+            logger.debug(f"Sector news adjustment skipped: {e}")
+
         # 5. Dynamic weights — adaptive or static
         w_tech = SIGNAL_WEIGHT_TECHNICAL
         w_sent = SIGNAL_WEIGHT_SENTIMENT
@@ -324,6 +345,7 @@ class SignalService:
                 "put_oi_change": oi_result.get("put_oi_change"),
             },
             "sector_strength": sector_result,
+            "sector_news_adjustment": sector_news_adjustment,
         }
 
     def _fetch_oi(self, symbol: str) -> dict:

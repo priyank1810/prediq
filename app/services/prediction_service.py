@@ -613,6 +613,18 @@ class PredictionService:
                     global_data = futures["_global"].result(timeout=15)
                 except Exception:
                     pass
+
+                # Sector-aware news impact adjustment (intraday branch)
+                try:
+                    if sentiment and global_data:
+                        from app.services.sector_service import sector_service
+                        sector_adj = sector_service.get_sector_adjusted_scores(
+                            symbol, sentiment["score"], global_data["score"], global_data
+                        )
+                        sentiment = {**sentiment, "score": sector_adj["sentiment_score"]}
+                        global_data = {**global_data, "score": sector_adj["global_score"]}
+                except Exception:
+                    pass
         else:
             df = data_fetcher.get_historical_data(symbol, period="2y")
             if df is None or df.empty:
@@ -649,6 +661,18 @@ class PredictionService:
                     pass
                 try:
                     global_data = futures["_global"].result(timeout=15)
+                except Exception:
+                    pass
+
+                # Sector-aware news impact adjustment (daily branch)
+                try:
+                    if sentiment and global_data:
+                        from app.services.sector_service import sector_service
+                        sector_adj = sector_service.get_sector_adjusted_scores(
+                            symbol, sentiment["score"], global_data["score"], global_data
+                        )
+                        sentiment = {**sentiment, "score": sector_adj["sentiment_score"]}
+                        global_data = {**global_data, "score": sector_adj["global_score"]}
                 except Exception:
                     pass
 

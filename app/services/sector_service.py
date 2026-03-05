@@ -1,6 +1,6 @@
 import logging
 from app.utils.cache import cache
-from app.config import SECTOR_MAP, CACHE_TTL_SECTOR_STRENGTH
+from app.config import SECTOR_MAP, CACHE_TTL_SECTOR_STRENGTH, SECTOR_EVENT_MODIFIERS
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,82 @@ class SectorService:
         except Exception as e:
             logger.warning(f"Sector strength failed for {symbol}: {e}")
             return default
+
+    def get_sector_for_symbol(self, symbol: str):
+        """Return the sector name for a symbol, or None if not mapped."""
+        for sector, symbols in SECTOR_MAP.items():
+            if symbol in symbols:
+                return sector
+        return None
+
+    def get_sector_adjusted_scores(self, symbol: str, sentiment_score: float,
+                                   global_score: float, global_data: dict) -> dict:
+        """Adjust sentiment and global scores based on sector-event interaction.
+
+        Returns dict with adjusted scores, sector, modifier, and active events.
+        """
+        result = {
+            "sentiment_score": sentiment_score,
+            "global_score": global_score,
+            "sector": None,
+            "modifier_applied": 1.0,
+            "active_events": {},
+        }
+
+        try:
+            sector = self.get_sector_for_symbol(symbol)
+            if not sector:
+                return result
+
+            result["sector"] = sector
+
+            active_events = global_data.get("active_events", {})
+            news_magnitude = global_data.get("news_magnitude", 0)
+
+            if not active_events or news_magnitude < 20:
+                return result
+
+            result["active_events"] = active_events
+
+            # Weighted-average modifier across active categories (weight = headline count)
+            total_weight = 0
+            weighted_modifier = 0.0
+            for cat, info in active_events.items():
+                cat_modifiers = SECTOR_EVENT_MODIFIERS.get(cat, {})
+                mod = cat_modifiers.get(sector, 1.0)
+                count = info.get("count", 1)
+                weighted_modifier += mod * count
+                total_weight += count
+
+            if total_weight == 0:
+                return result
+
+            modifier = weighted_modifier / total_weight
+            result["modifier_applied"] = round(modifier, 2)
+
+            # Adjust the news portion of global_score
+            news_score = global_data.get("news_score", 0)
+            price_score = global_data.get("price_score", 0)
+            adjusted_news = news_score * modifier
+
+            # Re-blend using same magnitude-based ratios as global_market_service
+            if news_magnitude >= 60:
+                adjusted_global = price_score * 0.4 + adjusted_news * 0.6
+            elif news_magnitude >= 30:
+                adjusted_global = price_score * 0.5 + adjusted_news * 0.5
+            else:
+                adjusted_global = price_score * 0.7 + adjusted_news * 0.3
+
+            result["global_score"] = max(-100, min(100, round(adjusted_global, 2)))
+
+            # Adjust sentiment with dampened modifier (50% effect)
+            dampened = 1.0 + (modifier - 1.0) * 0.5
+            result["sentiment_score"] = max(-100, min(100, round(sentiment_score * dampened, 2)))
+
+        except Exception as e:
+            logger.warning(f"Sector adjustment failed for {symbol}: {e}")
+
+        return result
 
     def get_heatmap(self) -> list:
         """Get sector performance data with average % change per sector."""

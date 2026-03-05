@@ -188,3 +188,43 @@ SECTOR_MAP = {
     "Realty": ["ADANIENT", "ADANIPORTS", "GRASIM", "ULTRACEMCO"],
     "Finance": ["BAJFINANCE", "BAJAJFINSV", "HDFCLIFE", "SBILIFE", "SHRIRAMFIN"],
 }
+
+# Maps event category names to keywords from BIG_EVENT_SCORE
+EVENT_CATEGORIES = {
+    "war_conflict": [
+        "war", "invasion", "airstrike", "missile", "military", "attack",
+        "conflict", "escalation", "nuclear", "terrorism", "tensions",
+        "sanctions", "embargo", "india pakistan", "india china", "israel",
+        "iran", "russia ukraine", "nato", "border", "geopolitical", "defence",
+    ],
+    "rate_hike": ["rate hike", "fed", "federal reserve", "rbi", "monetary policy", "inflation", "cpi"],
+    "rate_cut": ["rate cut", "easing", "stimulus"],
+    "oil_shock": ["oil shock", "crude surge", "crude crash", "opec"],
+    "trade_war": ["tariff", "trade war"],
+    "recession": [
+        "recession", "crash", "crisis", "collapse", "default",
+        "stagflation", "debt ceiling", "circuit breaker", "capitulation",
+    ],
+    "pandemic": ["pandemic", "lockdown"],
+    "recovery": ["ceasefire", "peace", "deal", "recovery"],
+}
+
+# Build reverse lookup: keyword -> category
+_KEYWORD_TO_CATEGORY = {}
+for _cat, _kws in EVENT_CATEGORIES.items():
+    for _kw in _kws:
+        _KEYWORD_TO_CATEGORY[_kw] = _cat
+
+# Sector-event modifier: multiplier per (event_category, sector).
+# Negative = bad news becomes good for that sector (e.g., war is bullish for metals).
+# Values close to 0 = sector barely affected. Values > 1 = sector extra sensitive.
+SECTOR_EVENT_MODIFIERS = {
+    "war_conflict": {"Metal": -0.6, "Energy": -0.5, "IT": 0.7, "Banking": 0.8, "Pharma": 0.5, "Auto": 0.9, "FMCG": 0.5, "Realty": 1.0, "Finance": 0.8},
+    "rate_hike":    {"Metal": 0.8,  "Energy": 0.7,  "IT": 1.2, "Banking": -0.8, "Pharma": 0.6, "Auto": 1.3, "FMCG": 0.5, "Realty": 1.5, "Finance": -0.6},
+    "rate_cut":     {"Metal": 1.0,  "Energy": 0.8,  "IT": 1.3, "Banking": 0.5,  "Pharma": 0.8, "Auto": 1.4, "FMCG": 0.8, "Realty": 1.5, "Finance": 0.5},
+    "oil_shock":    {"Metal": 0.6,  "Energy": -0.8, "IT": 0.5, "Banking": 0.8,  "Pharma": 0.5, "Auto": 1.3, "FMCG": 0.8, "Realty": 0.7, "Finance": 0.7},
+    "trade_war":    {"Metal": 1.0,  "Energy": 0.5,  "IT": 1.5, "Banking": 0.6,  "Pharma": 1.2, "Auto": 1.3, "FMCG": 0.4, "Realty": 0.3, "Finance": 0.5},
+    "recession":    {"Metal": 1.2,  "Energy": 1.0,  "IT": 1.2, "Banking": 1.3,  "Pharma": 0.4, "Auto": 1.4, "FMCG": 0.3, "Realty": 1.5, "Finance": 1.3},
+    "pandemic":     {"Metal": 0.8,  "Energy": 1.0,  "IT": -0.3, "Banking": 1.0, "Pharma": -1.0, "Auto": 1.3, "FMCG": 0.5, "Realty": 1.3, "Finance": 1.0},
+    "recovery":     {"Metal": 1.4,  "Energy": 1.2,  "IT": 0.8, "Banking": 1.2,  "Pharma": 0.6, "Auto": 1.3, "FMCG": 0.8, "Realty": 1.5, "Finance": 1.3},
+}

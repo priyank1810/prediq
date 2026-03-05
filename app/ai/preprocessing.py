@@ -68,7 +68,6 @@ class StockDataPreprocessor:
             sentiment_val = float(sentiment_data.get("score", 0.0))
         except Exception:
             pass
-        df["sentiment_score"] = sentiment_val
 
         # 2. Global news score + magnitude (war, crisis, geopolitics)
         global_news_score = 0.0
@@ -79,7 +78,20 @@ class StockDataPreprocessor:
             global_news_score = float(global_data.get("news_score", global_data.get("score", 0.0)))
             news_magnitude = float(global_data.get("news_magnitude", 0.0))
         except Exception:
+            global_data = {}
+
+        # Sector-aware news impact adjustment for XGBoost features
+        try:
+            from app.services.sector_service import sector_service
+            sector_adj = sector_service.get_sector_adjusted_scores(
+                symbol, sentiment_val, global_news_score, global_data
+            )
+            sentiment_val = sector_adj["sentiment_score"]
+            global_news_score = sector_adj["global_score"]
+        except Exception:
             pass
+
+        df["sentiment_score"] = sentiment_val
         df["global_news_score"] = global_news_score / 100.0  # Normalize to -1..+1
         df["news_magnitude"] = news_magnitude / 100.0  # Normalize to 0..1
 

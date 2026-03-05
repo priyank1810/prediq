@@ -12,6 +12,7 @@ from app.utils.yahoo_api import yahoo_quote
 from app.config import (
     CACHE_TTL_GLOBAL, GLOBAL_MARKET_SYMBOLS,
     POSITIVE_KEYWORDS, NEGATIVE_KEYWORDS,
+    _KEYWORD_TO_CATEGORY,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,6 +174,7 @@ class GlobalMarketService:
             "news_magnitude": news_magnitude,
             "markets": markets,
             "headlines": headlines,
+            "active_events": news_result.get("active_events", {}),
         }
         cache.set(cache_key, result, CACHE_TTL_GLOBAL)
         return result
@@ -233,6 +235,7 @@ class GlobalMarketService:
         scored = []
         total_score = 0
         big_event_count = 0
+        matched_keywords = []  # Track which BIG_EVENT keywords matched
 
         for h in all_headlines[:25]:
             title_lower = h["title"].lower()
@@ -249,15 +252,19 @@ class GlobalMarketService:
             # 2. Big event score — war/crisis/rate hike carry their OWN sentiment
             is_big = False
             event_score = 0
+            matched_kw = None
             for kw, score in BIG_EVENT_SCORE.items():
                 if kw in title_lower:
                     is_big = True
                     # Take the strongest event match
                     if abs(score) > abs(event_score):
                         event_score = score
+                        matched_kw = kw
 
             if is_big:
                 big_event_count += 1
+                if matched_kw:
+                    matched_keywords.append(matched_kw)
                 # Big events dominate: use event score, but blend if keywords also present
                 if keyword_score != 0:
                     headline_score = event_score * 0.7 + keyword_score * 0.3
@@ -286,10 +293,23 @@ class GlobalMarketService:
         intensity = abs(avg_score)
         magnitude = min(100, round(big_event_count * 20 + intensity * 0.5))
 
+        # Compute active event categories from matched keywords
+        active_events = {}
+        for kw in matched_keywords:
+            cat = _KEYWORD_TO_CATEGORY.get(kw)
+            if cat:
+                if cat not in active_events:
+                    active_events[cat] = {"count": 0, "max_score": 0}
+                active_events[cat]["count"] += 1
+                kw_score = abs(BIG_EVENT_SCORE.get(kw, 0))
+                if kw_score > abs(active_events[cat]["max_score"]):
+                    active_events[cat]["max_score"] = BIG_EVENT_SCORE.get(kw, 0)
+
         result = {
             "score": avg_score,
             "magnitude": magnitude,
             "headlines": scored,
+            "active_events": active_events,
         }
         cache.set(cache_key, result, CACHE_TTL_GLOBAL)
         return result
