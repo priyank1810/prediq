@@ -13,7 +13,6 @@ from app.ai.explainer import prediction_explainer
 from app.services.data_fetcher import data_fetcher
 from app.config import PREDICTION_HORIZONS, MODEL_DIR
 from app.utils.cache import cache
-from app.ai.prophet_model import _patch_prophet
 
 logger = logging.getLogger(__name__)
 
@@ -85,129 +84,13 @@ class PredictionService:
         }
 
     def _estimate_prophet_mape(self, prophet_result: dict, df=None, symbol: str = "") -> float:
-        """Compute Prophet MAPE via walk-forward validation (5-fold anchored).
-        Falls back to CI-based estimate for small datasets.
-        Results are cached per symbol for 1 hour."""
-        if symbol:
-            cache_key = f"prophet_mape:{symbol}"
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return cached
+        """Get MAPE for the seasonal model. Uses the mape returned by the model
+        if available, otherwise estimates from confidence intervals."""
+        # The new Holt-Winters model returns mape directly
+        if prophet_result.get("mape"):
+            return max(prophet_result["mape"], 0.01)
 
-        if df is not None and len(df) >= 200:
-            try:
-                from prophet import Prophet
-                import logging
-                logging.getLogger("prophet").setLevel(logging.WARNING)
-                logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
-
-                from app.ai.preprocessing import StockDataPreprocessor
-                preprocessor = StockDataPreprocessor()
-                prophet_df = preprocessor.prepare_prophet_data(df)
-
-                n = len(prophet_df)
-                n_splits = 5
-                fold_size = n // (n_splits + 1)
-                mapes = []
-
-                for i in range(n_splits):
-                    train_end = fold_size * (i + 1)
-                    test_end = min(train_end + fold_size, n)
-                    if test_end <= train_end or train_end < 60:
-                        continue
-
-                    train_df = prophet_df.iloc[:train_end]
-                    test_df = prophet_df.iloc[train_end:test_end]
-
-                    if len(test_df) < 3:
-                        continue
-
-                    model = Prophet(
-                        daily_seasonality=True,
-                        yearly_seasonality=True,
-                        weekly_seasonality=True,
-                        seasonality_mode='multiplicative',
-                        changepoint_prior_scale=0.05,
-                        n_changepoints=30,
-                    )
-                    _patch_prophet(model)
-                    model.fit(train_df)
-                    _patch_prophet(model)
-
-                    future = model.make_future_dataframe(periods=len(test_df))
-                    forecast = model.predict(future)
-
-                    test_forecast = forecast[forecast["ds"].isin(test_df["ds"])]
-                    if len(test_forecast) >= 3:
-                        actual = test_df.set_index("ds")["y"]
-                        predicted = test_forecast.set_index("ds")["yhat"]
-                        common = actual.index.intersection(predicted.index)
-                        if len(common) >= 3:
-                            a = actual.loc[common].values
-                            p = predicted.loc[common].values
-                            nonzero = a != 0
-                            if nonzero.any():
-                                fold_mape = float(np.mean(np.abs((a[nonzero] - p[nonzero]) / a[nonzero])) * 100)
-                                mapes.append(fold_mape)
-
-                if mapes:
-                    result = max(float(np.mean(mapes)), 0.01)
-                    if symbol:
-                        cache.set(f"prophet_mape:{symbol}", result, 3600)
-                    return result
-            except Exception:
-                pass
-
-        # Single 80/20 split fallback for medium datasets
-        if df is not None and len(df) >= 100:
-            try:
-                from prophet import Prophet
-                import logging
-                logging.getLogger("prophet").setLevel(logging.WARNING)
-                logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
-
-                from app.ai.preprocessing import StockDataPreprocessor
-                preprocessor = StockDataPreprocessor()
-                prophet_df = preprocessor.prepare_prophet_data(df)
-
-                split = int(len(prophet_df) * 0.8)
-                train_df = prophet_df.iloc[:split]
-                test_df = prophet_df.iloc[split:]
-
-                if len(train_df) >= 60 and len(test_df) >= 5:
-                    model = Prophet(
-                        daily_seasonality=True,
-                        yearly_seasonality=True,
-                        weekly_seasonality=True,
-                        seasonality_mode='multiplicative',
-                        changepoint_prior_scale=0.05,
-                        n_changepoints=30,
-                    )
-                    _patch_prophet(model)
-                    model.fit(train_df)
-                    _patch_prophet(model)
-
-                    future = model.make_future_dataframe(periods=len(test_df))
-                    forecast = model.predict(future)
-
-                    test_forecast = forecast[forecast["ds"].isin(test_df["ds"])]
-                    if len(test_forecast) >= 3:
-                        actual = test_df.set_index("ds")["y"]
-                        predicted = test_forecast.set_index("ds")["yhat"]
-                        common = actual.index.intersection(predicted.index)
-                        if len(common) >= 3:
-                            a = actual.loc[common].values
-                            p = predicted.loc[common].values
-                            nonzero = a != 0
-                            if nonzero.any():
-                                result = max(float(np.mean(np.abs((a[nonzero] - p[nonzero]) / a[nonzero])) * 100), 0.01)
-                                if symbol:
-                                    cache.set(f"prophet_mape:{symbol}", result, 3600)
-                                return result
-            except Exception:
-                pass
-
-        # Fallback: CI-based estimate for small datasets
+        # Fallback: CI-based estimate
         if prophet_result.get("confidence_upper") and prophet_result.get("confidence_lower"):
             avg_range = sum(
                 abs(u - l) for u, l in

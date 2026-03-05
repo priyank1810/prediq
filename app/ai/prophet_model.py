@@ -1,4 +1,11 @@
+"""Seasonal forecasting model — replaces Prophet with statsmodels.
+
+Uses Holt-Winters Exponential Smoothing for trend + seasonality decomposition.
+Same interface as the old ProphetPredictor so prediction_service works unchanged.
+No C++ compilation (cmdstan) required.
+"""
 import logging
+import warnings
 import pandas as pd
 import numpy as np
 from app.ai.preprocessing import StockDataPreprocessor
@@ -7,15 +14,14 @@ from app.config import PREDICTION_HORIZONS
 logger = logging.getLogger(__name__)
 
 
+# Keep for backward compatibility — prediction_service imports this
 def _patch_prophet(model):
-    """Ensure stan_backend attribute exists on a Prophet instance."""
-    if not hasattr(model, 'stan_backend'):
-        model.stan_backend = None
-    if not hasattr(model, 'uncertainty_samples'):
-        model.uncertainty_samples = 200
+    pass
 
 
 class ProphetPredictor:
+    """Seasonal predictor using Holt-Winters exponential smoothing."""
+
     def _horizon_to_days(self, horizon: str) -> int:
         cfg = PREDICTION_HORIZONS.get(horizon, {})
         if cfg.get("intraday"):
@@ -23,97 +29,107 @@ class ProphetPredictor:
         return cfg.get("days", 1)
 
     def predict(self, df: pd.DataFrame, horizon: str = "1d", symbol: str = "") -> dict:
-        from prophet import Prophet
-        logging.getLogger("prophet").setLevel(logging.WARNING)
-        logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
-        preprocessor = StockDataPreprocessor()
-        prophet_df = preprocessor.prepare_prophet_data(df)
-
-        # Try adding regressors for better accuracy
-        has_regressors = False
-        try:
-            import ta
-            close = df["close"]
-            rsi = ta.momentum.RSIIndicator(close, window=14).rsi()
-            volume = df["volume"].astype(float)
-            if (volume == 0).all():
-                volume = pd.Series(1.0, index=volume.index)
-            vol_ma = volume.rolling(20).mean().replace(0, np.nan)
-            volume_norm = volume / vol_ma
-
-            prophet_df["rsi"] = rsi.values
-            prophet_df["volume_norm"] = volume_norm.values
-            prophet_df = prophet_df.dropna().reset_index(drop=True)
-
-            if len(prophet_df) >= 60:
-                has_regressors = True
-        except Exception as e:
-            logger.debug(f"Prophet regressor computation failed, using basic model: {e}")
-            prophet_df = preprocessor.prepare_prophet_data(df)
-
-        model = Prophet(
-            daily_seasonality=True,
-            yearly_seasonality=True,
-            weekly_seasonality=True,
-            seasonality_mode='multiplicative',
-            changepoint_prior_scale=0.05,
-            n_changepoints=30,
-        )
-        _patch_prophet(model)
-
-        if has_regressors:
-            model.add_regressor("rsi")
-            model.add_regressor("volume_norm")
-
-        model.fit(prophet_df)
-        _patch_prophet(model)
+        close = df["close"].dropna().values.astype(float)
+        if len(close) < 60:
+            raise ValueError(f"Not enough data for seasonal model. Got {len(close)}, need 60+")
 
         target_bdays = self._horizon_to_days(horizon)
-        calendar_days = max(1, int(target_bdays * 1.5) + 5)
-        future = model.make_future_dataframe(periods=calendar_days)
 
-        if has_regressors:
-            last_rsi = float(prophet_df["rsi"].iloc[-1])
-            last_vol = float(prophet_df["volume_norm"].iloc[-1])
-            hist_len = len(prophet_df)
+        # Determine seasonal period: 5 trading days/week ≈ weekly seasonality
+        seasonal_period = 5
 
-            rsi_decay = 0.5 ** (1.0 / 10.0)
-            vol_decay = 0.5 ** (1.0 / 5.0)
+        # Use multiplicative seasonality (works better for stock prices)
+        # Fall back to additive if data has zeros/negatives
+        seasonal_type = "mul" if (close > 0).all() else "add"
+        trend_type = "add"
 
-            rsi_values = np.empty(len(future))
-            vol_values = np.empty(len(future))
-            rsi_values[:hist_len] = prophet_df["rsi"].values
-            vol_values[:hist_len] = prophet_df["volume_norm"].values
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                model = ExponentialSmoothing(
+                    close,
+                    trend=trend_type,
+                    seasonal=seasonal_type,
+                    seasonal_periods=seasonal_period,
+                    damped_trend=True,
+                    initialization_method="estimated",
+                )
+                fitted = model.fit(optimized=True, remove_bias=True)
+            except Exception:
+                # Fallback: no seasonality
+                model = ExponentialSmoothing(
+                    close,
+                    trend=trend_type,
+                    damped_trend=True,
+                    initialization_method="estimated",
+                )
+                fitted = model.fit(optimized=True)
 
-            for i in range(hist_len, len(future)):
-                days_ahead = i - hist_len + 1
-                rsi_values[i] = 50.0 + (last_rsi - 50.0) * (rsi_decay ** days_ahead)
-                vol_values[i] = 1.0 + (last_vol - 1.0) * (vol_decay ** days_ahead)
+        # Forecast
+        forecast_values = fitted.forecast(target_bdays)
+        predictions = [round(float(v), 2) for v in forecast_values]
 
-            future["rsi"] = rsi_values
-            future["volume_norm"] = vol_values
+        # Generate business day dates
+        last_date = pd.to_datetime(df["date"].iloc[-1])
+        future_dates = pd.bdate_range(start=last_date + pd.Timedelta(days=1), periods=target_bdays)
+        dates = [d.strftime("%Y-%m-%d") for d in future_dates]
 
-        forecast = model.predict(future)
+        # Confidence intervals from residuals
+        residuals = fitted.resid
+        residual_std = float(np.std(residuals)) if len(residuals) > 0 else 0
+        z = 1.28  # ~80% confidence interval
 
-        last_train_date = prophet_df["ds"].max()
-        future_preds = forecast[forecast["ds"] > last_train_date]
-        future_preds = future_preds[future_preds["ds"].dt.dayofweek < 5]
-        future_preds = future_preds.head(target_bdays)
+        lower = []
+        upper = []
+        for i, pred in enumerate(predictions):
+            # Uncertainty grows with forecast horizon
+            horizon_factor = np.sqrt(i + 1)
+            margin = z * residual_std * horizon_factor
+            lower.append(round(pred - margin, 2))
+            upper.append(round(pred + margin, 2))
 
-        predictions = future_preds["yhat"].tolist()
-        dates = future_preds["ds"].dt.strftime("%Y-%m-%d").tolist()
-
-        lower = future_preds["yhat_lower"].tolist() if "yhat_lower" in future_preds.columns else []
-        upper = future_preds["yhat_upper"].tolist() if "yhat_upper" in future_preds.columns else []
-
-        if not lower or not upper or any(np.isnan(v) for v in lower + upper):
-            lower = [round(float(p) * 0.97, 2) for p in predictions]
-            upper = [round(float(p) * 1.03, 2) for p in predictions]
+        # Compute MAPE via simple holdout
+        mape = self._estimate_mape(close, seasonal_period, seasonal_type, trend_type)
 
         return {
-            "predictions": [round(float(p), 2) for p in predictions],
+            "predictions": predictions,
             "dates": dates,
-            "confidence_lower": [round(float(v), 2) for v in lower],
-            "confidence_upper": [round(float(v), 2) for v in upper],
+            "confidence_lower": lower,
+            "confidence_upper": upper,
+            "mape": round(mape, 2),
         }
+
+    def _estimate_mape(self, close: np.ndarray, seasonal_period: int,
+                       seasonal_type: str, trend_type: str) -> float:
+        """Quick holdout MAPE estimate."""
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+        if len(close) < 100:
+            return 5.0
+
+        split = int(len(close) * 0.8)
+        train = close[:split]
+        test = close[split:]
+
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model = ExponentialSmoothing(
+                    train,
+                    trend=trend_type,
+                    seasonal=seasonal_type,
+                    seasonal_periods=seasonal_period,
+                    damped_trend=True,
+                    initialization_method="estimated",
+                )
+                fitted = model.fit(optimized=True)
+
+            preds = fitted.forecast(len(test))
+            nonzero = test != 0
+            if nonzero.any():
+                return float(np.mean(np.abs((test[nonzero] - preds[nonzero]) / test[nonzero])) * 100)
+        except Exception:
+            pass
+        return 5.0
