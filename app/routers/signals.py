@@ -255,6 +255,33 @@ def signal_accuracy_stats():
 async def get_intraday_signal(symbol: str):
     try:
         sym = symbol.upper()
+
+        # Outside market hours — return last known signal from DB
+        from app.utils.helpers import is_market_open
+        if not is_market_open():
+            db = SessionLocal()
+            try:
+                last = (
+                    db.query(SignalLog)
+                    .filter(SignalLog.symbol == sym)
+                    .order_by(SignalLog.created_at.desc())
+                    .first()
+                )
+                if last:
+                    return {
+                        "direction": last.direction,
+                        "confidence": last.confidence,
+                        "composite_score": last.composite_score,
+                        "technical": {"score": last.technical_score},
+                        "sentiment": {"score": last.sentiment_score},
+                        "global_market": {"score": last.global_score},
+                        "market_closed": True,
+                        "message": "Market is closed. Showing last signal from market hours.",
+                    }
+            finally:
+                db.close()
+            raise HTTPException(status_code=404, detail="Market is closed. No signal data available.")
+
         from app.services.job_service import job_service
         job_id = await asyncio.to_thread(job_service.enqueue, "signal", {"symbol": sym}, 10)
 

@@ -61,6 +61,17 @@ const Signals = {
         document.getElementById('signalLoading').classList.add('hidden');
         document.getElementById('signalResults').classList.remove('hidden');
 
+        // Market closed notice
+        const closedNotice = document.getElementById('marketClosedNotice');
+        if (closedNotice) closedNotice.remove();
+        if (data.market_closed) {
+            const notice = document.createElement('div');
+            notice.id = 'marketClosedNotice';
+            notice.className = 'bg-yellow-900/30 border border-yellow-700/50 rounded-lg px-4 py-2 mb-4 text-yellow-400 text-xs text-center';
+            notice.textContent = data.message || 'Market is closed. Showing last signal from market hours.';
+            document.getElementById('signalResults').prepend(notice);
+        }
+
         // Direction arrow
         const arrowEl = document.getElementById('signalArrow');
         const dirEl = document.getElementById('signalDirection');
