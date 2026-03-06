@@ -111,9 +111,9 @@ const Signals = {
         // Update global weight label if it changed
         const gwLabel = document.getElementById('globalWeightLabel');
         if (gwLabel) {
-            const pct = (data.global_market.weight * 100).toFixed(0);
+            const pct = ((data.global_market.weight || 0) * 100).toFixed(0);
             gwLabel.textContent = `Global (${pct}%)`;
-            if (data.global_market.weight > 0.15) {
+            if ((data.global_market.weight || 0) > 0.15) {
                 gwLabel.className = 'text-xs text-yellow-400 font-medium';
             } else {
                 gwLabel.className = 'text-xs text-gray-400';
@@ -203,6 +203,9 @@ const Signals = {
         const bar = document.getElementById(barId);
         const scoreEl = document.getElementById(scoreId);
         if (!bar || !scoreEl) return;
+
+        score = score || 0;
+        weight = weight || 0;
 
         const absScore = Math.min(100, Math.abs(score));
         const color = score > 0 ? '#00c853' : (score < 0 ? '#ff1744' : '#6b7280');
@@ -404,12 +407,12 @@ const Signals = {
         const techLabel = document.querySelector('#signalResults .space-y-3 > div:nth-child(1) .text-xs.text-gray-400');
         const sentLabel = document.querySelector('#signalResults .space-y-3 > div:nth-child(2) .text-xs.text-gray-400');
         if (techLabel) {
-            const pct = (data.technical.weight * 100).toFixed(0);
+            const pct = ((data.technical.weight || 0) * 100).toFixed(0);
             const adaptiveTag = data.adaptive_weights && data.adaptive_weights.adapted ? ' <span class="text-[10px] text-purple-400">[Adaptive]</span>' : '';
             techLabel.innerHTML = `Technical (${pct}%)${adaptiveTag}`;
         }
         if (sentLabel) {
-            const pct = (data.sentiment.weight * 100).toFixed(0);
+            const pct = ((data.sentiment.weight || 0) * 100).toFixed(0);
             sentLabel.textContent = `Sentiment (${pct}%)`;
         }
     },
