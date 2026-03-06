@@ -1,6 +1,6 @@
 const App = {
     currentSymbol: null,
-    currentPeriod: '1mo',
+    currentPeriod: '1d',
     chart: null,
     rsiChart: null,
     macdChart: null,
