@@ -3,7 +3,13 @@ import numpy as np
 import pandas as pd
 import ta
 from app.services.data_fetcher import data_fetcher
-from app.config import SIGNAL_DIRECTION_THRESHOLD
+from app.config import (
+    SIGNAL_DIRECTION_THRESHOLD,
+    ACCURACY_BASE_THRESHOLD,
+    ACCURACY_NEUTRAL_THRESHOLD,
+    LOW_VOLATILITY_SYMBOLS,
+    LOW_VOLATILITY_THRESHOLD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +91,11 @@ class BacktestService:
         if train_end < 40:
             raise ValueError("Not enough training data for signal backtest")
 
+        correctness_threshold = (
+            LOW_VOLATILITY_THRESHOLD if symbol in LOW_VOLATILITY_SYMBOLS
+            else ACCURACY_BASE_THRESHOLD
+        )
+
         def run_system(score_fn, label):
             correct = 0
             directional = 0
@@ -104,6 +115,7 @@ class BacktestService:
                 score = score_fn(window)
                 actual_next = float(df.iloc[idx]["close"])
                 actual_prev = float(df.iloc[idx - 1]["close"])
+                pct_move = (actual_next - actual_prev) / actual_prev
                 actual_dir = "UP" if actual_next > actual_prev else "DOWN"
 
                 if score > SIGNAL_DIRECTION_THRESHOLD:
@@ -117,9 +129,9 @@ class BacktestService:
                     neutral += 1
 
                 was_correct = (
-                    (predicted_dir == "UP" and actual_dir == "UP") or
-                    (predicted_dir == "DOWN" and actual_dir == "DOWN") or
-                    (predicted_dir == "NEUTRAL" and abs(actual_next - actual_prev) / actual_prev < 0.015)
+                    (predicted_dir == "UP" and pct_move >= correctness_threshold) or
+                    (predicted_dir == "DOWN" and pct_move <= -correctness_threshold) or
+                    (predicted_dir == "NEUTRAL" and abs(pct_move) < ACCURACY_NEUTRAL_THRESHOLD)
                 )
                 if was_correct:
                     correct += 1

@@ -10,6 +10,13 @@ from app.config import PRICE_STREAM_INTERVAL, ALERT_CHECK_INTERVAL
 router = APIRouter()
 
 
+def _get_correctness_threshold(symbol: str) -> float:
+    from app.config import LOW_VOLATILITY_SYMBOLS, LOW_VOLATILITY_THRESHOLD, ACCURACY_BASE_THRESHOLD
+    if symbol in LOW_VOLATILITY_SYMBOLS:
+        return LOW_VOLATILITY_THRESHOLD
+    return ACCURACY_BASE_THRESHOLD
+
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -227,17 +234,19 @@ async def signal_accuracy_validator():
 
                     price_map = await asyncio.to_thread(_fetch_prices, symbols)
 
+                    from app.config import ACCURACY_NEUTRAL_THRESHOLD
                     for log in pending_logs:
                         current_price = price_map.get(log.symbol)
                         if current_price:
                             log.price_after_15min = current_price
                             pct_move = (current_price - log.price_at_signal) / log.price_at_signal
+                            threshold = _get_correctness_threshold(log.symbol)
                             if log.direction == "BULLISH":
-                                log.was_correct = pct_move >= 0.003  # +0.3%
+                                log.was_correct = pct_move >= threshold
                             elif log.direction == "BEARISH":
-                                log.was_correct = pct_move <= -0.003  # -0.3%
+                                log.was_correct = pct_move <= -threshold
                             else:
-                                log.was_correct = abs(pct_move) < 0.015  # NEUTRAL correct if <1.5% move
+                                log.was_correct = abs(pct_move) < ACCURACY_NEUTRAL_THRESHOLD
 
                     db.commit()
             finally:
@@ -299,17 +308,19 @@ async def signal_accuracy_validator_30min():
 
                     price_map = await asyncio.to_thread(_fetch_prices, symbols)
 
+                    from app.config import ACCURACY_NEUTRAL_THRESHOLD
                     for log in pending_logs:
                         current_price = price_map.get(log.symbol)
                         if current_price:
                             log.price_after_30min = current_price
                             pct_move = (current_price - log.price_at_signal) / log.price_at_signal
+                            threshold = _get_correctness_threshold(log.symbol) * 1.5
                             if log.direction == "BULLISH":
-                                log.was_correct_30min = pct_move >= 0.003
+                                log.was_correct_30min = pct_move >= threshold
                             elif log.direction == "BEARISH":
-                                log.was_correct_30min = pct_move <= -0.003
+                                log.was_correct_30min = pct_move <= -threshold
                             else:
-                                log.was_correct_30min = abs(pct_move) < 0.015
+                                log.was_correct_30min = abs(pct_move) < ACCURACY_NEUTRAL_THRESHOLD
 
                     db.commit()
             finally:
@@ -371,17 +382,19 @@ async def signal_accuracy_validator_1hr():
 
                     price_map = await asyncio.to_thread(_fetch_prices, symbols)
 
+                    from app.config import ACCURACY_NEUTRAL_THRESHOLD
                     for log in pending_logs:
                         current_price = price_map.get(log.symbol)
                         if current_price:
                             log.price_after_1hr = current_price
                             pct_move = (current_price - log.price_at_signal) / log.price_at_signal
+                            threshold = _get_correctness_threshold(log.symbol) * 2.0
                             if log.direction == "BULLISH":
-                                log.was_correct_1hr = pct_move >= 0.003
+                                log.was_correct_1hr = pct_move >= threshold
                             elif log.direction == "BEARISH":
-                                log.was_correct_1hr = pct_move <= -0.003
+                                log.was_correct_1hr = pct_move <= -threshold
                             else:
-                                log.was_correct_1hr = abs(pct_move) < 0.015
+                                log.was_correct_1hr = abs(pct_move) < ACCURACY_NEUTRAL_THRESHOLD
 
                     db.commit()
             finally:
