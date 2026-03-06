@@ -6,7 +6,7 @@ class StockChart {
         this.lineSeries = null;
         this.volumeSeries = null;
         this.overlayLines = [];
-        this.chartType = 'candlestick';
+        this.chartType = 'line';
         this.lastCandle = null;
         this.lastVolume = null;
         this._resizeHandler = null;
