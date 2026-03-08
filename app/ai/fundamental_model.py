@@ -96,6 +96,36 @@ class FundamentalModel:
             scores.append(dy_score * 0.05)
             details["div_yield"] = {"value": div_yield, "score": round(dy_score, 2)}
 
+        # Earnings surprise from latest quarter (beat = positive signal)
+        earnings_q = fundamentals.get("earnings_quarterly", [])
+        if earnings_q:
+            latest = earnings_q[0]
+            surprise = latest.get("surprise_pct")
+            if surprise is not None:
+                eps_score = np.clip(surprise, -1, 1)
+                scores.append(eps_score * 0.10)
+                details["eps_surprise"] = {"value": round(surprise * 100, 1),
+                                           "score": round(eps_score, 2)}
+
+        # Revenue trend from quarterly data (acceleration = positive)
+        income_q = fundamentals.get("income_quarterly", [])
+        if len(income_q) >= 2:
+            rev0 = income_q[0].get("revenue") or 0
+            rev1 = income_q[1].get("revenue") or 0
+            if rev1 > 0:
+                rev_change = (rev0 - rev1) / rev1
+                rev_trend_score = np.clip(rev_change, -1, 1)
+                scores.append(rev_trend_score * 0.08)
+                details["rev_trend"] = {"value": round(rev_change * 100, 1),
+                                        "score": round(rev_trend_score, 2)}
+
+        # Profit margin quality
+        profit_margin = fundamentals.get("profit_margin")
+        if profit_margin and profit_margin > 0:
+            pm_score = min(profit_margin / 20.0, 1.0)  # 20% margin = max score
+            scores.append(pm_score * 0.05)
+            details["profit_margin"] = {"value": profit_margin, "score": round(pm_score, 2)}
+
         if not scores:
             return {"score": 0.0, "classification": "balanced", "details": details}
 

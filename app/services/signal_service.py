@@ -9,7 +9,7 @@ from app.utils.helpers import now_ist, is_market_open
 from app.utils.cache import cache
 from app.config import (
     SIGNAL_WEIGHT_TECHNICAL, SIGNAL_WEIGHT_SENTIMENT, SIGNAL_WEIGHT_GLOBAL,
-    SIGNAL_DIRECTION_THRESHOLD,
+    SIGNAL_WEIGHT_FUNDAMENTAL, SIGNAL_DIRECTION_THRESHOLD,
     CACHE_TTL_MTF_DAILY, CACHE_TTL_MTF_1H,
 )
 
@@ -113,8 +113,9 @@ class SignalService:
         global_result = {"score": 0, "markets": [], "news_magnitude": 0}
         oi_result = {"score": 0, "available": False}
         sector_result = {"available": False, "score": 0}
+        fund_result = {"score": 0, "classification": "balanced", "details": {}}
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=6) as executor:
             future_intraday = executor.submit(
                 data_fetcher.get_intraday_data, symbol, "5d", "15m"
             )
@@ -128,6 +129,8 @@ class SignalService:
             future_oi = executor.submit(self._fetch_oi, symbol)
             # Sector-relative strength
             future_sector = executor.submit(self._fetch_sector_strength, symbol)
+            # Fundamental analysis
+            future_fund = executor.submit(self._fetch_fundamental_score, symbol)
 
             try:
                 intraday_df = future_intraday.result(timeout=15)
@@ -153,6 +156,11 @@ class SignalService:
                 sector_result = future_sector.result(timeout=15)
             except Exception as e:
                 logger.warning(f"Sector strength failed for {symbol}: {e}")
+
+            try:
+                fund_result = future_fund.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"Fundamental analysis failed for {symbol}: {e}")
 
         # Technical score (depends on intraday data)
         tech_raw = {}
@@ -193,6 +201,7 @@ class SignalService:
         w_tech = SIGNAL_WEIGHT_TECHNICAL
         w_sent = SIGNAL_WEIGHT_SENTIMENT
         w_glob = SIGNAL_WEIGHT_GLOBAL
+        w_fund = SIGNAL_WEIGHT_FUNDAMENTAL
         adaptive_info = {"adapted": False, "sample_size": 0, "component_accuracies": {}}
 
         try:
@@ -202,6 +211,7 @@ class SignalService:
                 w_tech = adaptive["weights"]["technical"]
                 w_sent = adaptive["weights"]["sentiment"]
                 w_glob = adaptive["weights"]["global"]
+                w_fund = adaptive["weights"].get("fundamental", SIGNAL_WEIGHT_FUNDAMENTAL)
                 adaptive_info = {
                     "adapted": True,
                     "sample_size": adaptive["sample_size"],
@@ -210,42 +220,51 @@ class SignalService:
         except Exception as e:
             logger.debug(f"Adaptive weights not available: {e}")
 
-        # News-magnitude crisis override (takes precedence)
+        # Fundamental score: scale from (-1,+1) to (-100,+100) to match other components
+        fundamental_score = fund_result.get("score", 0) * 100
+
+        # News-magnitude crisis override (takes precedence — reduce fundamental in crisis)
         news_magnitude = global_result.get("news_magnitude", 0)
         if news_magnitude >= 80:
-            w_tech = 0.25
-            w_sent = 0.25
+            w_tech = 0.20
+            w_sent = 0.20
             w_glob = 0.50
+            w_fund = 0.05  # Fundamentals matter little in panic
         elif news_magnitude >= 60:
-            w_tech = 0.35
-            w_sent = 0.25
-            w_glob = 0.40
+            w_tech = 0.30
+            w_sent = 0.20
+            w_glob = 0.35
+            w_fund = 0.10
         elif news_magnitude >= 30 and not adaptive_info["adapted"]:
-            boost = (news_magnitude - 30) / 30 * 0.15
+            boost = (news_magnitude - 30) / 30 * 0.10
             w_glob = SIGNAL_WEIGHT_GLOBAL + boost
-            w_tech = SIGNAL_WEIGHT_TECHNICAL - boost
+            w_tech = SIGNAL_WEIGHT_TECHNICAL - boost * 0.6
+            w_fund = SIGNAL_WEIGHT_FUNDAMENTAL - boost * 0.4
 
-        # OI as 4th component
+        # OI as optional component
         w_oi = 0.0
         oi_score = 0
         if oi_result.get("available") and news_magnitude < 80:
             oi_score = oi_result.get("score", 0)
             w_oi = 0.10
-            # Scale other weights down by 0.9 to make room
+            # Scale other weights down to make room
             scale = 0.9
             w_tech *= scale
             w_sent *= scale
             w_glob *= scale
+            w_fund *= scale
             # Renormalize
-            total = w_tech + w_sent + w_glob + w_oi
+            total = w_tech + w_sent + w_glob + w_fund + w_oi
             w_tech /= total
             w_sent /= total
             w_glob /= total
+            w_fund /= total
             w_oi /= total
 
         composite = (
             w_tech * technical_score +
             w_sent * sentiment_score +
+            w_fund * fundamental_score +
             w_glob * global_score +
             w_oi * oi_score
         )
@@ -344,6 +363,13 @@ class SignalService:
                 "call_oi_change": oi_result.get("call_oi_change"),
                 "put_oi_change": oi_result.get("put_oi_change"),
             },
+            "fundamental": {
+                "score": fundamental_score,
+                "weight": round(w_fund, 2),
+                "raw_score": fund_result.get("score", 0),
+                "classification": fund_result.get("classification", "balanced"),
+                "details": fund_result.get("details", {}),
+            },
             "sector_strength": sector_result,
             "sector_news_adjustment": sector_news_adjustment,
         }
@@ -365,6 +391,23 @@ class SignalService:
         except Exception as e:
             logger.debug(f"Sector strength unavailable: {e}")
             return {"available": False, "score": 0}
+
+    def _fetch_fundamental_score(self, symbol: str) -> dict:
+        """Fetch fundamental score for signal component."""
+        try:
+            from app.services.fundamental_service import fundamental_service
+            from app.ai.fundamental_model import fundamental_model
+            from app.utils.helpers import is_index
+
+            if is_index(symbol):
+                return {"score": 0, "classification": "balanced", "details": {}}
+
+            fund_data = fundamental_service.get_fundamentals(symbol)
+            if fund_data and fund_data.get("pe"):
+                return fundamental_model.score(fund_data, symbol)
+        except Exception as e:
+            logger.debug(f"Fundamental score unavailable for {symbol}: {e}")
+        return {"score": 0, "classification": "balanced", "details": {}}
 
 
 signal_service = SignalService()
