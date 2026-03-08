@@ -4,6 +4,9 @@ Bypasses yfinance library which gets blocked on cloud IPs (Lightsail, Render, et
 Uses curl_cffi with Chrome impersonation to avoid Yahoo bot detection.
 """
 import logging
+import re
+import time
+import threading
 import pandas as pd
 from curl_cffi import requests as cffi_requests
 
@@ -12,6 +15,34 @@ logger = logging.getLogger(__name__)
 _CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}"
 _SUMMARY_URL = "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
 _TIMEOUT = 15
+
+# --- Crumb/session management for quoteSummary API ---
+_crumb_lock = threading.Lock()
+_crumb = None
+_crumb_session = None
+_crumb_expires = 0
+_CRUMB_TTL = 1800  # 30 minutes
+
+
+def _get_crumb_session():
+    """Get a session with valid crumb for Yahoo quoteSummary API."""
+    global _crumb, _crumb_session, _crumb_expires
+    with _crumb_lock:
+        if _crumb and _crumb_session and time.time() < _crumb_expires:
+            return _crumb_session, _crumb
+        try:
+            session = cffi_requests.Session(impersonate="chrome")
+            r = session.get("https://finance.yahoo.com/quote/AAPL/", timeout=_TIMEOUT)
+            match = re.search(r'"crumb":"([^"]+)"', r.text)
+            if match:
+                _crumb = match.group(1).replace("\\u002F", "/")
+                _crumb_session = session
+                _crumb_expires = time.time() + _CRUMB_TTL
+                logger.debug(f"Yahoo crumb refreshed")
+                return _crumb_session, _crumb
+        except Exception as e:
+            logger.debug(f"Failed to get Yahoo crumb: {e}")
+        return None, None
 
 
 def yahoo_chart(symbol: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
@@ -122,9 +153,14 @@ def yahoo_fundamentals(symbol: str) -> "dict | None":
         "balanceSheetHistory,balanceSheetHistoryQuarterly,"
         "earningsHistory,earnings"
     )
-    params = {"modules": modules}
     try:
-        r = cffi_requests.get(url, params=params, impersonate="chrome", timeout=_TIMEOUT)
+        session, crumb = _get_crumb_session()
+        if session and crumb:
+            params = {"modules": modules, "crumb": crumb}
+            r = session.get(url, params=params, timeout=_TIMEOUT)
+        else:
+            params = {"modules": modules}
+            r = cffi_requests.get(url, params=params, impersonate="chrome", timeout=_TIMEOUT)
         data = r.json()
         result = data["quoteSummary"]["result"][0]
 
