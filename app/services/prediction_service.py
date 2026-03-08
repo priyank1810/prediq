@@ -193,10 +193,15 @@ class PredictionService:
         return result
 
     def _neural_meta_learner(self, symbol: str, model_results: dict, daily_df=None,
-                            regime: dict = None, horizon: str = "1d") -> dict:
+                            regime: dict = None, horizon: str = "1d",
+                            fundamental: dict = None) -> dict:
         """Neural network meta-learner (2-layer feedforward) to combine model predictions.
-        Falls back to Ridge when < 100 data points, then to inverse-MAPE."""
+        Falls back to Ridge when < 100 data points, then to inverse-MAPE.
+        Incorporates fundamental score + quarterly signals when available."""
         meta_path = self._meta_learner_path(symbol)
+
+        # Build fundamental features vector
+        fund_feats = self._build_fund_features(fundamental)
 
         # Check if we have a trained meta-learner
         if os.path.exists(meta_path):
@@ -205,6 +210,7 @@ class PredictionService:
                 meta_model = meta_data["model"]
                 model_order = meta_data["model_order"]
                 meta_type = meta_data.get("type", "ridge")
+                has_fund = meta_data.get("has_fund_features", False)
 
                 min_len = min(len(r["predictions"]) for r in model_results.values())
                 available = [m for m in model_order if m in model_results]
@@ -225,6 +231,11 @@ class PredictionService:
                         ]])
                         regime_tiled = np.tile(regime_feats, (min_len, 1))
                         X_meta = np.hstack([X_base, regime_tiled])
+
+                        # Add fundamental features if model was trained with them
+                        if has_fund:
+                            fund_tiled = np.tile(fund_feats.reshape(1, -1), (min_len, 1))
+                            X_meta = np.hstack([X_meta, fund_tiled])
                     else:
                         X_meta = X_base
 
@@ -249,14 +260,32 @@ class PredictionService:
 
         # Try to train and save meta-learner for future use
         try:
-            self._train_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime)
+            self._train_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime,
+                                     fundamental=fundamental)
         except Exception:
             pass
 
         return result
 
-    def _train_meta_learner(self, symbol: str, model_results: dict, daily_df=None, regime: dict = None):
-        """Train meta-learner: Neural network when enough data, Ridge otherwise."""
+    @staticmethod
+    def _build_fund_features(fundamental):
+        """Extract a fixed-size feature vector from fundamental bias data."""
+        if not fundamental or not fundamental.get("score"):
+            return np.zeros(3)
+        score = fundamental.get("score", 0)
+        # Classification as numeric: value=-1, balanced=0, growth=1
+        cls = fundamental.get("classification", "balanced")
+        cls_num = -1.0 if cls == "value" else (1.0 if cls == "growth" else 0.0)
+        # Average of detail scores
+        details = fundamental.get("details", {})
+        detail_scores = [d.get("score", 0) for d in details.values() if isinstance(d, dict)]
+        avg_detail = float(np.mean(detail_scores)) if detail_scores else 0.0
+        return np.array([score, cls_num, avg_detail])
+
+    def _train_meta_learner(self, symbol: str, model_results: dict, daily_df=None,
+                           regime: dict = None, fundamental: dict = None):
+        """Train meta-learner: Neural network when enough data, Ridge otherwise.
+        Includes fundamental features when available."""
         if len(model_results) < 2:
             return
 
@@ -280,6 +309,8 @@ class PredictionService:
         best_model = min(mapes, key=mapes.get)
         y = np.array(model_results[best_model]["predictions"][:min_len])
 
+        fund_feats = self._build_fund_features(fundamental)
+        has_fund = bool(fundamental and fundamental.get("score"))
         meta_type = "ridge"
 
         # Try neural meta-learner when enough data
@@ -298,6 +329,11 @@ class PredictionService:
                 regime_tiled = np.tile(regime_feats, (min_len, 1))
                 X_full = np.hstack([X, regime_tiled])
 
+                # Add fundamental features
+                if has_fund:
+                    fund_tiled = np.tile(fund_feats.reshape(1, -1), (min_len, 1))
+                    X_full = np.hstack([X_full, fund_tiled])
+
                 input_dim = X_full.shape[1]
                 nn_model = tf.keras.Sequential([
                     tf.keras.layers.Dense(16, activation='relu', input_shape=(input_dim,)),
@@ -307,7 +343,8 @@ class PredictionService:
                 nn_model.fit(X_full, y, epochs=50, batch_size=min(32, min_len), verbose=0)
 
                 meta_path = self._meta_learner_path(symbol)
-                joblib.dump({"model": nn_model, "model_order": model_order, "type": "neural"}, meta_path)
+                joblib.dump({"model": nn_model, "model_order": model_order, "type": "neural",
+                             "has_fund_features": has_fund}, meta_path)
                 return
             except Exception as e:
                 logger.debug(f"Neural meta-learner training failed, using Ridge: {e}")
@@ -318,7 +355,8 @@ class PredictionService:
         meta_model.fit(X, y)
 
         meta_path = self._meta_learner_path(symbol)
-        joblib.dump({"model": meta_model, "model_order": model_order, "type": "ridge"}, meta_path)
+        joblib.dump({"model": meta_model, "model_order": model_order, "type": "ridge",
+                     "has_fund_features": False}, meta_path)
 
     def _compute_volume_analysis(self, df: pd.DataFrame, ensemble_result: dict | None = None) -> dict:
         """Compute volume analysis: ratio, trend, conviction relative to prediction direction."""
@@ -509,11 +547,13 @@ class PredictionService:
             "model_weight": round(model_w, 2),
         }
 
-    def _compute_contribution_breakdown(self, ensemble_result: dict, adj_info: dict = None) -> dict:
+    def _compute_contribution_breakdown(self, ensemble_result: dict, adj_info: dict = None,
+                                        fund_adj_info: dict = None) -> dict:
         """Compute contribution breakdown using actual ensemble weights.
 
         Uses the weights from the ensemble (already reflecting MAPE + regime adjustments)
         rather than recomputing from raw MAPEs which misses Prophet.
+        Includes fundamental contribution when fundamentals are used.
         """
         # Extract actual weights from ensemble result
         xgb_w = ensemble_result.get("xgboost_weight", 0)
@@ -530,7 +570,13 @@ class PredictionService:
         # Sentiment contribution based on context weight
         context_w = adj_info.get("context_weight", 0) if adj_info else 0
         sentiment_share = min(45.0, round(context_w * 55, 1))
-        model_share = 100.0 - sentiment_share
+
+        # Fundamental contribution based on adjustment magnitude
+        fund_share = 0.0
+        if fund_adj_info and fund_adj_info.get("fund_score"):
+            fund_share = min(15.0, round(abs(fund_adj_info["fund_score"]) * 15, 1))
+
+        model_share = 100.0 - sentiment_share - fund_share
 
         # XGBoost → Technical, Prophet → Seasonal
         technical = xgb_w * model_share
@@ -539,7 +585,7 @@ class PredictionService:
         return {
             "technical": round(technical, 1),
             "seasonal": round(seasonal, 1),
-            "fundamental": 0.0,
+            "fundamental": round(fund_share, 1),
             "sentiment": round(sentiment_share, 1),
         }
 
@@ -630,8 +676,8 @@ class PredictionService:
             if df is None or df.empty:
                 raise ValueError(f"No historical data available for {symbol}")
 
-            # Run models + sentiment/global fetches in parallel
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            # Run models + sentiment/global/fundamentals fetches in parallel
+            with ThreadPoolExecutor(max_workers=6) as executor:
                 futures = {}
                 if "prophet" in models:
                     futures["prophet"] = executor.submit(self.prophet.predict, df, horizon, symbol)
@@ -642,6 +688,7 @@ class PredictionService:
                 from app.services.global_market_service import global_market_service
                 futures["_sentiment"] = executor.submit(sentiment_service.get_sentiment, symbol)
                 futures["_global"] = executor.submit(global_market_service.get_global_signal)
+                futures["_fundamentals"] = executor.submit(self._get_fundamental_bias, symbol)
 
                 for name, future in futures.items():
                     if name.startswith("_"):
@@ -695,9 +742,20 @@ class PredictionService:
             except Exception:
                 pass
 
+        # Get fundamental bias (already fetched in parallel for daily branch)
+        fundamental = None
+        try:
+            if "_fundamentals" in futures:
+                fundamental = futures["_fundamentals"].result(timeout=10)
+            elif not is_intraday:
+                fundamental = self._get_fundamental_bias(symbol)
+        except Exception:
+            pass
+
         if len(model_results) >= 2:
             result["ensemble"] = self._neural_meta_learner(symbol, model_results, daily_df=daily_df,
-                                                            regime=regime, horizon=horizon)
+                                                            regime=regime, horizon=horizon,
+                                                            fundamental=fundamental)
         elif len(model_results) == 1:
             single = next(iter(model_results.values()))
             result["ensemble"] = {
@@ -722,6 +780,40 @@ class PredictionService:
                 result["ensemble"]["predictions_raw"] = result["ensemble"]["predictions"]
                 result["ensemble"]["predictions"] = adjusted_preds
                 result["ensemble"]["market_adjustment"] = adj_info
+
+        # Apply fundamental bias adjustment to ensemble predictions
+        fund_adj_info = {}
+        if result.get("ensemble") and result["ensemble"].get("predictions") and fundamental:
+            fund_score = fundamental.get("score", 0)
+            if abs(fund_score) > 0.1:  # Only adjust if meaningful signal
+                cfg = PREDICTION_HORIZONS.get(horizon, {})
+                is_intra = cfg.get("intraday", False)
+                horizon_days = cfg.get("days", 1) if not is_intra else 0
+
+                # Fundamental bias matters more for longer horizons
+                if is_intra:
+                    fund_weight = 0.0  # No fundamental adjustment for intraday
+                elif horizon_days <= 1:
+                    fund_weight = 0.01  # Minimal for 1-day
+                elif horizon_days <= 7:
+                    fund_weight = 0.02
+                elif horizon_days <= 30:
+                    fund_weight = 0.04
+                else:
+                    fund_weight = 0.06  # Strongest for 3mo+
+
+                if fund_weight > 0:
+                    # Nudge predictions by fundamental score * weight
+                    fund_adj_pct = fund_score * fund_weight
+                    adjusted = [round(p * (1 + fund_adj_pct), 2)
+                                for p in result["ensemble"]["predictions"]]
+                    result["ensemble"]["predictions"] = adjusted
+                    fund_adj_info = {
+                        "fund_score": round(fund_score, 3),
+                        "fund_adjustment_pct": round(fund_adj_pct * 100, 3),
+                        "classification": fundamental.get("classification", "balanced"),
+                    }
+                    result["ensemble"]["fundamental_adjustment"] = fund_adj_info
 
         # Final sanity cap — max allowed change per horizon
         # Prevents any model from producing unrealistic predictions
@@ -811,7 +903,7 @@ class PredictionService:
         # Contribution breakdown — uses actual ensemble weights, not recomputed MAPEs
         if result.get("ensemble"):
             result["contribution_breakdown"] = self._compute_contribution_breakdown(
-                result["ensemble"], adj_info
+                result["ensemble"], adj_info, fund_adj_info
             )
 
         # Volume analysis
@@ -823,13 +915,9 @@ class PredictionService:
         except Exception as e:
             logger.debug(f"Volume analysis failed: {e}")
 
-        # Fundamental bias
-        try:
-            fundamental = self._get_fundamental_bias(symbol)
-            if fundamental:
-                result["fundamental"] = fundamental
-        except Exception:
-            pass
+        # Fundamental bias (already fetched earlier in parallel)
+        if fundamental:
+            result["fundamental"] = fundamental
 
         # Generate explanation — pass MERGED sentiment (stock + global combined)
         # so the explainer shows correct headline counts

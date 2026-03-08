@@ -152,6 +152,65 @@ class XGBoostPredictor:
 
         return df
 
+    def _add_fundamental_features(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """Add fundamental and quarterly result features as slow-changing inputs.
+        These change quarterly but provide valuation/quality context to the model."""
+        try:
+            from app.services.fundamental_service import fundamental_service
+            from app.ai.fundamental_model import fundamental_model
+
+            fund = fundamental_service.get_fundamentals(symbol)
+            if not fund or not fund.get("pe"):
+                return df
+
+            # Fundamental score (-1 to +1)
+            score_data = fundamental_model.score(fund, symbol)
+            df["fund_score"] = score_data.get("score", 0)
+
+            # Key valuation ratios (normalized)
+            df["fund_pe_norm"] = min((fund.get("pe") or 0) / 50.0, 2.0)  # cap at 2x
+            df["fund_pb_norm"] = min((fund.get("pb") or 0) / 10.0, 2.0)
+            df["fund_roe"] = (fund.get("roe") or 0) / 100.0  # already in pct
+            df["fund_de"] = min((fund.get("de") or 0), 3.0)  # cap leverage
+
+            # Growth signals
+            df["fund_rev_growth"] = np.clip((fund.get("rev_growth") or 0) / 100.0, -1, 1)
+            df["fund_earn_growth"] = np.clip((fund.get("earn_growth") or 0) / 100.0, -1, 1)
+
+            # Margins
+            df["fund_profit_margin"] = (fund.get("profit_margin") or 0) / 100.0
+            df["fund_operating_margin"] = (fund.get("operating_margin") or 0) / 100.0
+
+            # Earnings surprise from latest quarter
+            earnings_q = fund.get("earnings_quarterly", [])
+            if earnings_q:
+                latest_q = earnings_q[0]
+                surprise = latest_q.get("surprise_pct")
+                df["fund_eps_surprise"] = np.clip((surprise or 0), -1, 1)
+            else:
+                df["fund_eps_surprise"] = 0.0
+
+            # Revenue acceleration: Q0 growth vs Q1 growth (if 2+ quarters available)
+            income_q = fund.get("income_quarterly", [])
+            if len(income_q) >= 2:
+                rev0 = income_q[0].get("revenue") or 0
+                rev1 = income_q[1].get("revenue") or 0
+                if rev1 > 0:
+                    df["fund_rev_accel"] = np.clip((rev0 - rev1) / rev1, -1, 1)
+                else:
+                    df["fund_rev_accel"] = 0.0
+            else:
+                df["fund_rev_accel"] = 0.0
+
+        except Exception:
+            # If fundamentals unavailable, add zero columns so feature shape stays consistent
+            for col in ["fund_score", "fund_pe_norm", "fund_pb_norm", "fund_roe", "fund_de",
+                         "fund_rev_growth", "fund_earn_growth", "fund_profit_margin",
+                         "fund_operating_margin", "fund_eps_surprise", "fund_rev_accel"]:
+                if col not in df.columns:
+                    df[col] = 0.0
+        return df
+
     def _build_tabular_features(self, df: pd.DataFrame, symbol: str = "") -> pd.DataFrame:
         """Build tabular feature matrix from OHLCV data (no sequences needed)."""
         from app.ai.preprocessing import StockDataPreprocessor
@@ -266,6 +325,9 @@ class XGBoostPredictor:
 
         # Candlestick pattern one-hot features
         feat_df = self._add_candlestick_features(feat_df)
+
+        # Fundamental features (slow-changing, forward-filled across all rows)
+        feat_df = self._add_fundamental_features(feat_df, symbol)
 
         feat_df = feat_df.dropna().reset_index(drop=True)
 
