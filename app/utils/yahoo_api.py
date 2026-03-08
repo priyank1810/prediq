@@ -47,7 +47,7 @@ def yahoo_chart(symbol: str, period: str = "1y", interval: str = "1d") -> pd.Dat
         return pd.DataFrame()
 
 
-def yahoo_quote(symbol: str) -> dict | None:
+def yahoo_quote(symbol: str):
     """Fetch latest quote from Yahoo chart API meta + last candle.
 
     Returns dict with: ltp, open, high, low, close (prev), volume, change, pct_change.
@@ -106,16 +106,23 @@ def yahoo_history(symbol: str, period: str = "5d") -> pd.DataFrame:
     return df
 
 
-def yahoo_fundamentals(symbol: str) -> dict | None:
+def yahoo_fundamentals(symbol: str) -> "dict | None":
     """Fetch fundamental data from Yahoo quoteSummary API.
 
     Returns dict with: pe, pb, roe, de, rev_growth, earn_growth, div_yield,
-                       market_cap, promoter_holding, sector, industry.
+                       market_cap, promoter_holding, sector, industry,
+                       plus income_statement, balance_sheet for financials.
     Values that are ratios (roe, rev_growth, etc.) are returned as raw decimals.
     Returns None on failure.
     """
     url = _SUMMARY_URL.format(symbol=symbol)
-    params = {"modules": "defaultKeyStatistics,financialData,summaryProfile,summaryDetail"}
+    modules = (
+        "defaultKeyStatistics,financialData,summaryProfile,summaryDetail,"
+        "incomeStatementHistory,incomeStatementHistoryQuarterly,"
+        "balanceSheetHistory,balanceSheetHistoryQuarterly,"
+        "earningsHistory,earnings"
+    )
+    params = {"modules": modules}
     try:
         r = cffi_requests.get(url, params=params, impersonate="chrome", timeout=_TIMEOUT)
         data = r.json()
@@ -130,10 +137,72 @@ def yahoo_fundamentals(symbol: str) -> dict | None:
             v = d.get(key, {})
             return v.get("raw") if isinstance(v, dict) else v
 
+        def _fmt(d, key):
+            v = d.get(key, {})
+            return v.get("fmt") if isinstance(v, dict) else None
+
+        # Parse income statements (annual)
+        income_annual = []
+        for stmt in result.get("incomeStatementHistory", {}).get("incomeStatementHistory", []):
+            income_annual.append({
+                "date": _fmt(stmt, "endDate") or "",
+                "revenue": _raw(stmt, "totalRevenue"),
+                "net_income": _raw(stmt, "netIncome"),
+                "operating_income": _raw(stmt, "operatingIncome"),
+                "gross_profit": _raw(stmt, "grossProfit"),
+                "ebit": _raw(stmt, "ebit"),
+            })
+
+        # Parse income statements (quarterly)
+        income_quarterly = []
+        for stmt in result.get("incomeStatementHistoryQuarterly", {}).get("incomeStatementHistory", []):
+            income_quarterly.append({
+                "date": _fmt(stmt, "endDate") or "",
+                "revenue": _raw(stmt, "totalRevenue"),
+                "net_income": _raw(stmt, "netIncome"),
+                "operating_income": _raw(stmt, "operatingIncome"),
+                "gross_profit": _raw(stmt, "grossProfit"),
+                "ebit": _raw(stmt, "ebit"),
+            })
+
+        # Parse balance sheet (annual)
+        balance_annual = []
+        for stmt in result.get("balanceSheetHistory", {}).get("balanceSheetStatements", []):
+            balance_annual.append({
+                "date": _fmt(stmt, "endDate") or "",
+                "total_assets": _raw(stmt, "totalAssets"),
+                "total_liabilities": _raw(stmt, "totalLiab"),
+                "total_equity": _raw(stmt, "totalStockholderEquity"),
+                "cash": _raw(stmt, "cash"),
+                "total_debt": _raw(stmt, "longTermDebt"),
+            })
+
+        # Parse quarterly earnings
+        earnings_quarterly = []
+        for e in result.get("earningsHistory", {}).get("history", []):
+            earnings_quarterly.append({
+                "date": _fmt(e, "quarter") or "",
+                "actual_eps": _raw(e, "epsActual"),
+                "estimate_eps": _raw(e, "epsEstimate"),
+                "surprise_pct": _raw(e, "surprisePercent"),
+            })
+
+        # Revenue/earnings chart data from earnings module
+        earnings_chart = result.get("earnings", {})
+        yearly_financials = []
+        for item in earnings_chart.get("financialsChart", {}).get("yearly", []):
+            yearly_financials.append({
+                "year": item.get("date"),
+                "revenue": _raw(item, "revenue"),
+                "earnings": _raw(item, "earnings"),
+            })
+
         return {
             "pe": _raw(detail, "trailingPE") or _raw(key_stats, "forwardPE"),
+            "forward_pe": _raw(key_stats, "forwardPE"),
             "pb": _raw(key_stats, "priceToBook"),
             "roe": _raw(financial, "returnOnEquity"),
+            "roa": _raw(financial, "returnOnAssets"),
             "de": _raw(key_stats, "debtToEquity"),
             "rev_growth": _raw(financial, "revenueGrowth"),
             "earn_growth": _raw(financial, "earningsGrowth"),
@@ -143,6 +212,32 @@ def yahoo_fundamentals(symbol: str) -> dict | None:
             "regularMarketPrice": _raw(detail, "regularMarketPrice"),
             "sector": profile.get("sector", ""),
             "industry": profile.get("industry", ""),
+            "total_revenue": _raw(financial, "totalRevenue"),
+            "revenue_per_share": _raw(financial, "revenuePerShare"),
+            "profit_margins": _raw(financial, "profitMargins"),
+            "operating_margins": _raw(financial, "operatingMargins"),
+            "gross_margins": _raw(financial, "grossMargins"),
+            "ebitda": _raw(financial, "ebitda"),
+            "total_cash": _raw(financial, "totalCash"),
+            "total_debt": _raw(financial, "totalDebt"),
+            "current_ratio": _raw(financial, "currentRatio"),
+            "free_cashflow": _raw(financial, "freeCashflow"),
+            "operating_cashflow": _raw(financial, "operatingCashflow"),
+            "earnings_growth": _raw(financial, "earningsGrowth"),
+            "book_value": _raw(key_stats, "bookValue"),
+            "eps_trailing": _raw(key_stats, "trailingEps"),
+            "eps_forward": _raw(key_stats, "forwardEps"),
+            "peg_ratio": _raw(key_stats, "pegRatio"),
+            "beta": _raw(key_stats, "beta"),
+            "52_week_high": _raw(detail, "fiftyTwoWeekHigh"),
+            "52_week_low": _raw(detail, "fiftyTwoWeekLow"),
+            "50_day_avg": _raw(detail, "fiftyDayAverage"),
+            "200_day_avg": _raw(detail, "twoHundredDayAverage"),
+            "income_annual": income_annual,
+            "income_quarterly": income_quarterly,
+            "balance_annual": balance_annual,
+            "earnings_quarterly": earnings_quarterly,
+            "yearly_financials": yearly_financials,
         }
     except Exception as e:
         logger.debug(f"Yahoo fundamentals API failed for {symbol}: {e}")

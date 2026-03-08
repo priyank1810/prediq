@@ -47,6 +47,32 @@ def get_bulk_quotes(req: BulkQuoteRequest):
     return data_fetcher.get_bulk_quotes(symbols)
 
 
+@router.get("/{symbol}/fundamentals")
+def get_fundamentals(symbol: str):
+    """Get fundamental data, financials, and quarterly results for a stock."""
+    try:
+        from app.services.fundamental_service import fundamental_service
+        data = fundamental_service.get_fundamentals(symbol.upper())
+        if not data or not data.get("symbol"):
+            raise HTTPException(status_code=404, detail=f"No fundamental data for {symbol}")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch fundamentals: {str(e)}")
+
+
+@router.get("/{symbol}/news")
+def get_stock_news(symbol: str):
+    """Get latest news headlines with sentiment for a stock."""
+    try:
+        from app.services.sentiment_service import sentiment_service
+        data = sentiment_service.get_sentiment(symbol.upper())
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch news: {str(e)}")
+
+
 @router.get("/{symbol}/quote")
 def get_quote(symbol: str):
     try:

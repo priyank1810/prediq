@@ -175,6 +175,58 @@ def backtest_signal(symbol: str = Query(...), test_days: int = Query(60, ge=10, 
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
 
 
+@router.get("/stats/backtest-trades")
+def backtest_trades(
+    symbol: str = Query(...),
+    test_days: int = Query(120, ge=20, le=500),
+    capital: float = Query(100000, gt=0),
+    min_confidence: int = Query(0, ge=0, le=100),
+):
+    """Full trade simulation with P&L, Sharpe ratio, max drawdown, win rate."""
+    try:
+        from app.services.backtest_service import backtest_service
+        return backtest_service.backtest_trades(
+            symbol.upper(), test_days=test_days,
+            initial_capital=capital, min_confidence=min_confidence,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Trade backtest failed: {str(e)}")
+
+
+@router.get("/stats/backtest-predictions")
+def backtest_predictions(
+    symbol: str = Query(...),
+    horizon: str = Query("1d"),
+    test_days: int = Query(60, ge=10, le=252),
+):
+    """Walk-forward backtest of XGBoost, Prophet, and Ensemble prediction models."""
+    try:
+        from app.services.backtest_service import backtest_service
+        return backtest_service.backtest_predictions(symbol.upper(), horizon=horizon, test_days=test_days)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction backtest failed: {str(e)}")
+
+
+@router.get("/stats/backtest-portfolio")
+def backtest_portfolio(
+    symbols: str = Query("", description="Comma-separated symbols (empty = top 10 Nifty)"),
+    test_days: int = Query(60, ge=10, le=252),
+):
+    """Multi-symbol portfolio backtest with aggregate metrics."""
+    try:
+        from app.services.backtest_service import backtest_service
+        sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] or None
+        return backtest_service.backtest_portfolio(symbols=sym_list, test_days=test_days)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Portfolio backtest failed: {str(e)}")
+
+
 @router.get("/scan/high-confidence")
 def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
     """Get the most recent high-confidence signal for each symbol."""

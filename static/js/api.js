@@ -103,6 +103,10 @@ const API = {
     // Market Movers (public)
     getMarketMovers(count = 10) { return this.request(`/api/stocks/market-movers?count=${count}`); },
 
+    // Fundamentals & News
+    getFundamentals(symbol) { return this.request(`/api/stocks/${encodeURIComponent(symbol)}/fundamentals`); },
+    getStockNews(symbol) { return this.request(`/api/stocks/${encodeURIComponent(symbol)}/news`); },
+
     // Predictions
     getPredictions(symbol, horizon = '1d', signal = null) {
         const opts = {

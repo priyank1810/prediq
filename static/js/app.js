@@ -341,6 +341,7 @@ const App = {
         document.getElementById('chartContainer').classList.add('hidden');
         document.getElementById('signalPanel').classList.add('hidden');
         document.getElementById('predictionPanel').classList.add('hidden');
+        document.getElementById('fundamentalsPanel').classList.add('hidden');
         document.getElementById('indicatorPanels').classList.add('hidden');
         document.getElementById('marketOverview').classList.remove('hidden');
         const liveBadge = document.getElementById('liveBadge');
@@ -398,7 +399,8 @@ const App = {
             }
             this.loadIndicators(symbol);
 
-            // Auto-load 15-min signal
+            // Auto-load fundamentals, news & 15-min signal
+            Fundamentals.load(symbol);
             Signals.loadSignal(symbol);
 
         } catch (e) {
