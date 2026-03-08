@@ -7,7 +7,6 @@ Setup:
     1. Sign up at https://smartapi.angelone.in
     2. Fill in .env with ANGEL_API_KEY, ANGEL_CLIENT_ID, ANGEL_PASSWORD, ANGEL_TOTP_SECRET
 """
-
 from __future__ import annotations
 
 import os

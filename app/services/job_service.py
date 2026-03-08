@@ -1,4 +1,5 @@
 """Job queue service — shared interface for server and worker processes."""
+from __future__ import annotations
 
 import json
 from datetime import timedelta
