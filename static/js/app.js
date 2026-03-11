@@ -477,39 +477,42 @@ const App = {
             const data = await API.getIndicators(symbol, this.currentPeriod);
             this._lastIndicatorData = data;
 
-            this.chart.clearOverlays();
+            // Only draw overlays on the main chart if indicators toggle is on
+            if (this.showIndicators) {
+                this.chart.clearOverlays();
 
-            if (data.bollinger_upper && data.bollinger_lower) {
-                const upper = data.bollinger_upper.dates.map((d, i) => ({ time: d, value: data.bollinger_upper.values[i] }));
-                const lower = data.bollinger_lower.dates.map((d, i) => ({ time: d, value: data.bollinger_lower.values[i] }));
-                const mid = data.bollinger_middle.dates.map((d, i) => ({ time: d, value: data.bollinger_middle.values[i] }));
-                this.chart.addLineOverlay(upper, 'rgba(156,163,175,0.4)', 'BB Upper');
-                this.chart.addLineOverlay(mid, 'rgba(156,163,175,0.3)', 'BB Mid');
-                this.chart.addLineOverlay(lower, 'rgba(156,163,175,0.4)', 'BB Lower');
-            }
+                if (data.bollinger_upper && data.bollinger_lower) {
+                    const upper = data.bollinger_upper.dates.map((d, i) => ({ time: d, value: data.bollinger_upper.values[i] }));
+                    const lower = data.bollinger_lower.dates.map((d, i) => ({ time: d, value: data.bollinger_lower.values[i] }));
+                    const mid = data.bollinger_middle.dates.map((d, i) => ({ time: d, value: data.bollinger_middle.values[i] }));
+                    this.chart.addLineOverlay(upper, 'rgba(156,163,175,0.4)', 'BB Upper');
+                    this.chart.addLineOverlay(mid, 'rgba(156,163,175,0.3)', 'BB Mid');
+                    this.chart.addLineOverlay(lower, 'rgba(156,163,175,0.4)', 'BB Lower');
+                }
 
-            if (data.sma_20) {
-                const sma = data.sma_20.dates.map((d, i) => ({ time: d, value: data.sma_20.values[i] }));
-                this.chart.addLineOverlay(sma, '#ff9800', 'SMA 20');
-            }
-            if (data.sma_50) {
-                const sma = data.sma_50.dates.map((d, i) => ({ time: d, value: data.sma_50.values[i] }));
-                this.chart.addLineOverlay(sma, '#e91e63', 'SMA 50');
-            }
+                if (data.sma_20) {
+                    const sma = data.sma_20.dates.map((d, i) => ({ time: d, value: data.sma_20.values[i] }));
+                    this.chart.addLineOverlay(sma, '#ff9800', 'SMA 20');
+                }
+                if (data.sma_50) {
+                    const sma = data.sma_50.dates.map((d, i) => ({ time: d, value: data.sma_50.values[i] }));
+                    this.chart.addLineOverlay(sma, '#e91e63', 'SMA 50');
+                }
 
-            // Overview tab RSI/MACD
-            if (data.rsi) {
-                this.rsiChart.init();
-                const rsiData = data.rsi.dates.map((d, i) => ({ time: d, value: data.rsi.values[i] }));
-                this.rsiChart.setRSIData(rsiData);
-            }
+                // Overview tab RSI/MACD
+                if (data.rsi) {
+                    this.rsiChart.init();
+                    const rsiData = data.rsi.dates.map((d, i) => ({ time: d, value: data.rsi.values[i] }));
+                    this.rsiChart.setRSIData(rsiData);
+                }
 
-            if (data.macd_line) {
-                this.macdChart.init();
-                const macdLine = data.macd_line.dates.map((d, i) => ({ time: d, value: data.macd_line.values[i] }));
-                const signalLine = data.macd_signal.dates.map((d, i) => ({ time: d, value: data.macd_signal.values[i] }));
-                const histogram = data.macd_histogram.dates.map((d, i) => ({ time: d, value: data.macd_histogram.values[i] }));
-                this.macdChart.setMACDData(macdLine, signalLine, histogram);
+                if (data.macd_line) {
+                    this.macdChart.init();
+                    const macdLine = data.macd_line.dates.map((d, i) => ({ time: d, value: data.macd_line.values[i] }));
+                    const signalLine = data.macd_signal.dates.map((d, i) => ({ time: d, value: data.macd_signal.values[i] }));
+                    const histogram = data.macd_histogram.dates.map((d, i) => ({ time: d, value: data.macd_histogram.values[i] }));
+                    this.macdChart.setMACDData(macdLine, signalLine, histogram);
+                }
             }
 
             // Technical tab RSI/MACD (render only if tab is visible)
