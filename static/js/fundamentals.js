@@ -5,7 +5,9 @@ const Fundamentals = {
         this._currentSymbol = symbol;
         const panel = document.getElementById('fundamentalsPanel');
         if (!panel) return;
-        panel.innerHTML = '<div class="text-center py-6"><div class="animate-spin w-6 h-6 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div><p class="text-gray-500 text-xs mt-2">Loading fundamentals...</p></div>';
+        Shimmer.show('fundamentalsPanel', 'fundamentals');
+        Shimmer.show('newsTabFundNews', 'news', 4);
+        Shimmer.show('overviewKeyMetrics', 'keyMetrics');
 
         try {
             const [data, news] = await Promise.all([

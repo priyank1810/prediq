@@ -33,6 +33,9 @@ const Signals = {
         loading.classList.remove('hidden');
         results.classList.add('hidden');
 
+        // Show shimmer for MTF signals while loading
+        Shimmer.show('mtfSignalsGrid', 'mtfSignals', 3);
+
         try {
             const [signal, history] = await Promise.all([
                 API.getIntradaySignal(symbol),

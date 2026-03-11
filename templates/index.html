@@ -6,7 +6,7 @@
     <title>StockAI - Indian Stock Tracker & AI Predictor</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=2">
     <script>
         tailwind.config = {
             theme: {
@@ -61,7 +61,7 @@
                 <!-- Market Status -->
                 <div id="marketStatus" class="flex items-center gap-1 sm:gap-2">
                     <div id="marketDot" class="w-2 h-2 rounded-full bg-gray-500"></div>
-                    <span id="marketText" class="text-xs text-gray-400 hidden sm:inline">Loading...</span>
+                    <span id="marketText" class="text-xs text-gray-400 hidden sm:inline"><span class="shimmer inline-block h-3 w-20 rounded align-middle"></span></span>
                 </div>
             </div>
         </div>
@@ -429,8 +429,8 @@
                     <!-- Market Mood Score -->
                     <div id="moodPanel" class="bg-dark-800 rounded-lg p-4 text-center">
                         <h3 class="text-xs text-gray-400 font-medium mb-2">Market Mood</h3>
-                        <div id="moodScore" class="text-4xl font-bold text-yellow-400">--</div>
-                        <div id="moodLabel" class="text-sm text-gray-400 mt-1">Loading...</div>
+                        <div id="moodScore" class="text-4xl font-bold text-yellow-400"><div class="shimmer h-10 w-16 rounded mx-auto"></div></div>
+                        <div id="moodLabel" class="text-sm text-gray-400 mt-1"><div class="shimmer h-3 w-20 rounded mx-auto"></div></div>
                         <div class="mt-2 h-2 bg-dark-600 rounded-full overflow-hidden">
                             <div id="moodBar" class="h-full rounded-full transition-all duration-500" style="width:50%;background:linear-gradient(to right,#ff1744,#ffd600,#00c853)"></div>
                         </div>
@@ -444,15 +444,15 @@
                         <div id="fiiDiiData" class="space-y-2">
                             <div class="flex justify-between items-center">
                                 <span class="text-xs text-gray-400">FII Net</span>
-                                <span id="fiiNet" class="text-sm font-bold text-gray-300">--</span>
+                                <span id="fiiNet" class="text-sm font-bold text-gray-300"><span class="shimmer inline-block h-3.5 w-16 rounded"></span></span>
                             </div>
                             <div class="flex justify-between items-center">
                                 <span class="text-xs text-gray-400">DII Net</span>
-                                <span id="diiNet" class="text-sm font-bold text-gray-300">--</span>
+                                <span id="diiNet" class="text-sm font-bold text-gray-300"><span class="shimmer inline-block h-3.5 w-16 rounded"></span></span>
                             </div>
                             <div class="flex justify-between items-center border-t border-gray-700 pt-1">
                                 <span class="text-xs text-gray-400">Total Net</span>
-                                <span id="totalNet" class="text-sm font-bold text-gray-300">--</span>
+                                <span id="totalNet" class="text-sm font-bold text-gray-300"><span class="shimmer inline-block h-3.5 w-16 rounded"></span></span>
                             </div>
                         </div>
                     </div>
@@ -460,7 +460,6 @@
                     <div id="sectorPanel" class="bg-dark-800 rounded-lg p-4">
                         <h3 class="text-xs text-gray-400 font-medium mb-2">Sector Heat Map</h3>
                         <div id="sectorHeatmap" class="grid grid-cols-3 gap-1">
-                            <div class="col-span-3 text-center py-4 text-gray-600 text-[10px]">Loading...</div>
                         </div>
                     </div>
                 </div>
@@ -729,6 +728,8 @@
     <!-- Toast Container -->
     <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 space-y-2"></div>
 
+    <script src="/static/js/shimmer.js?v=1"></script>
+    <script>Shimmer.showMarketOverview();</script>
     <script defer src="/static/js/api.js?v=11"></script>
     <script defer src="/static/js/chart.js?v=11"></script>
     <script defer src="/static/js/search.js?v=11"></script>

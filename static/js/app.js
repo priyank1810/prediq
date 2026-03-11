@@ -390,6 +390,11 @@ const App = {
         document.getElementById('stockSymbol').textContent = symbol;
         document.getElementById('stockName').textContent = name;
 
+        // Show shimmer placeholders while data loads
+        Shimmer.showStockDetail();
+        Shimmer.show('fundamentalsPanel', 'fundamentals');
+        Shimmer.show('newsTabFundNews', 'news', 4);
+
         try {
             const [quote, history] = await Promise.all([
                 API.getQuote(symbol),
