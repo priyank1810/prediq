@@ -25,9 +25,8 @@ const Predictions = {
         const loading = document.getElementById('predictionLoading');
         const results = document.getElementById('predictionResults');
 
-        loading.classList.add('hidden');
-        results.classList.remove('hidden');
-        Shimmer.show('predictionResults', 'prediction');
+        loading.classList.remove('hidden');
+        results.classList.add('hidden');
 
         try {
             const data = await API.getPredictions(symbol, this.currentHorizon, this._abortController.signal);
