@@ -12,8 +12,12 @@ const App = {
 
     async init() {
         this.chart = new StockChart('priceChart');
-        this.rsiChart = new IndicatorChart('rsiChart');
-        this.macdChart = new IndicatorChart('macdChart');
+        // Overview tab indicator charts
+        this.rsiChart = new IndicatorChart('rsiChartOverview');
+        this.macdChart = new IndicatorChart('macdChartOverview');
+        // Technical tab indicator charts
+        this.rsiChartTech = new IndicatorChart('rsiChart');
+        this.macdChartTech = new IndicatorChart('macdChart');
 
         Search.init();
         Predictions.init();
@@ -100,6 +104,25 @@ const App = {
             this.chart.setChartType('line');
             if (this.currentSymbol) this.loadHistory(this.currentSymbol, this.currentPeriod);
         });
+
+        // Indicators toggle
+        document.getElementById('btnIndicators').addEventListener('click', () => {
+            this.showIndicators = !this.showIndicators;
+            const btn = document.getElementById('btnIndicators');
+            const panels = document.getElementById('indicatorPanelsOverview');
+
+            if (this.showIndicators) {
+                btn.classList.add('bg-accent-blue', 'text-white');
+                btn.classList.remove('bg-dark-600', 'text-gray-300');
+                panels.classList.remove('hidden');
+                if (this.currentSymbol) this.loadIndicators(this.currentSymbol);
+            } else {
+                btn.classList.remove('bg-accent-blue', 'text-white');
+                btn.classList.add('bg-dark-600', 'text-gray-300');
+                panels.classList.add('hidden');
+                this.chart.clearOverlays();
+            }
+        });
     },
 
     // --- Stock Detail Sub-Tab Navigation ---
@@ -115,6 +138,10 @@ const App = {
                 // Lazy-load content on tab switch
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
                     Predictions.loadPredictions(this.currentSymbol);
+                }
+                // Re-render Technical tab charts (LightweightCharts needs visible container)
+                if (tab.dataset.stockTab === 'technical' && this.currentSymbol) {
+                    this._renderTechnicalTabCharts();
                 }
             });
         });
@@ -383,8 +410,13 @@ const App = {
             // Subscribe to live updates
             API.subscribeTo([symbol]);
 
-            // Auto-load indicators (always enabled in tabbed view)
-            this.showIndicators = true;
+            // Load indicators data (for Technical tab), but keep Overview toggle off by default
+            this.showIndicators = false;
+            const indBtn = document.getElementById('btnIndicators');
+            const indPanels = document.getElementById('indicatorPanelsOverview');
+            indBtn.classList.remove('bg-accent-blue', 'text-white');
+            indBtn.classList.add('bg-dark-600', 'text-gray-300');
+            indPanels.classList.add('hidden');
             this.loadIndicators(symbol);
 
             // Auto-load fundamentals, news & 15-min signal
@@ -443,6 +475,7 @@ const App = {
     async loadIndicators(symbol) {
         try {
             const data = await API.getIndicators(symbol, this.currentPeriod);
+            this._lastIndicatorData = data;
 
             this.chart.clearOverlays();
 
@@ -464,6 +497,7 @@ const App = {
                 this.chart.addLineOverlay(sma, '#e91e63', 'SMA 50');
             }
 
+            // Overview tab RSI/MACD
             if (data.rsi) {
                 this.rsiChart.init();
                 const rsiData = data.rsi.dates.map((d, i) => ({ time: d, value: data.rsi.values[i] }));
@@ -478,12 +512,37 @@ const App = {
                 this.macdChart.setMACDData(macdLine, signalLine, histogram);
             }
 
+            // Technical tab RSI/MACD (render only if tab is visible)
+            const techTab = document.getElementById('stockTab-technical');
+            if (techTab && techTab.classList.contains('active')) {
+                this._renderTechnicalTabCharts();
+            }
+
             // Re-fit chart to selected period after overlays are added
             if (this.chart && this.chart.chart) {
                 this.chart.chart.timeScale().fitContent();
             }
         } catch (e) {
             console.error('Failed to load indicators:', e);
+        }
+    },
+
+    _renderTechnicalTabCharts() {
+        const data = this._lastIndicatorData;
+        if (!data) return;
+
+        if (data.rsi) {
+            this.rsiChartTech.init();
+            const rsiData = data.rsi.dates.map((d, i) => ({ time: d, value: data.rsi.values[i] }));
+            this.rsiChartTech.setRSIData(rsiData);
+        }
+
+        if (data.macd_line) {
+            this.macdChartTech.init();
+            const macdLine = data.macd_line.dates.map((d, i) => ({ time: d, value: data.macd_line.values[i] }));
+            const signalLine = data.macd_signal.dates.map((d, i) => ({ time: d, value: data.macd_signal.values[i] }));
+            const histogram = data.macd_histogram.dates.map((d, i) => ({ time: d, value: data.macd_histogram.values[i] }));
+            this.macdChartTech.setMACDData(macdLine, signalLine, histogram);
         }
     },
 
