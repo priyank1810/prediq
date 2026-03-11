@@ -420,11 +420,20 @@ class SignalService:
 
     def _run_prediction_for_horizon(self, symbol: str, horizon: str,
                                      intraday_df=None, daily_df=None):
-        """Run XGBoost + Prophet prediction for a given horizon. Returns prediction score (-100 to +100)
-        and predicted price, or (0, None) on failure."""
+        """Run full XGBoost + Prophet prediction for a given horizon.
+        Returns a rich dict with score, predicted_price, confidence,
+        regime, volume conviction, confidence intervals, and contribution breakdown."""
+        empty = {
+            "score": 0, "predicted_price": None, "confidence": None,
+            "regime": None, "volume_conviction": None,
+            "confidence_lower": None, "confidence_upper": None,
+            "contribution": None, "ensemble_method": None,
+            "xgboost_weight": None, "prophet_weight": None,
+        }
         try:
             from app.services.prediction_service import prediction_service
             from app.config import PREDICTION_HORIZONS
+            import math
 
             cfg = PREDICTION_HORIZONS.get(horizon, {})
             is_intraday = cfg.get("intraday", False)
@@ -432,7 +441,7 @@ class SignalService:
             result = prediction_service.predict(symbol, horizon=horizon)
             ensemble = result.get("ensemble")
             if not ensemble or not ensemble.get("predictions"):
-                return 0, None, None
+                return empty
 
             predicted_price = ensemble["predictions"][-1]
 
@@ -444,25 +453,53 @@ class SignalService:
                 current_price = float(daily_df["close"].iloc[-1])
 
             if current_price <= 0:
-                return 0, predicted_price, None
+                return {**empty, "predicted_price": predicted_price}
 
             change_pct = ((predicted_price - current_price) / current_price) * 100
 
-            # Scale change_pct to a -100 to +100 score
-            # Normalize based on horizon: 1% move on 1d is big, 5% on 3mo is moderate
             horizon_days = cfg.get("days", 1) if not is_intraday else 1
-            # Expected daily vol ~1.5%, scale by sqrt(days) for horizon normalization
-            import math
             expected_move = 1.5 * math.sqrt(max(1, horizon_days))
-            pred_score = (change_pct / expected_move) * 50  # 1 expected_move = ±50 score
+            pred_score = (change_pct / expected_move) * 50
             pred_score = max(-100, min(100, round(pred_score, 2)))
 
             confidence_score = ensemble.get("confidence_score") or result.get("xgboost", {}).get("confidence_score")
 
-            return pred_score, predicted_price, confidence_score
+            # Extract regime info
+            regime_info = result.get("regime")
+            regime_label = regime_info.get("label") if regime_info else None
+
+            # Extract volume conviction
+            vol_analysis = result.get("volume_analysis", {})
+            volume_conviction = vol_analysis.get("conviction")  # "high", "moderate", "low"
+            supports_prediction = vol_analysis.get("supports_prediction", False)
+
+            # Extract Prophet confidence intervals (if available)
+            prophet_data = result.get("prophet", {})
+            conf_lower = prophet_data.get("confidence_lower", [None])
+            conf_upper = prophet_data.get("confidence_upper", [None])
+            confidence_lower = conf_lower[-1] if conf_lower else None
+            confidence_upper = conf_upper[-1] if conf_upper else None
+
+            # Contribution breakdown
+            contribution = result.get("contribution_breakdown")
+
+            return {
+                "score": pred_score,
+                "predicted_price": predicted_price,
+                "confidence": confidence_score,
+                "regime": regime_label,
+                "volume_conviction": volume_conviction,
+                "volume_supports": supports_prediction,
+                "confidence_lower": confidence_lower,
+                "confidence_upper": confidence_upper,
+                "contribution": contribution,
+                "ensemble_method": ensemble.get("method"),
+                "xgboost_weight": ensemble.get("xgboost_weight"),
+                "prophet_weight": ensemble.get("prophet_weight"),
+            }
         except Exception as e:
             logger.warning(f"Prediction for {symbol} horizon={horizon} failed: {e}")
-            return 0, None, None
+            return empty
 
     def get_multi_timeframe_signals(self, symbol: str) -> dict:
         """Compute separate buy/sell signals for Intraday, Short-term (2 weeks),
@@ -521,11 +558,16 @@ class SignalService:
                 )
             for tf, future in pred_futures.items():
                 try:
-                    score, price, conf = future.result(timeout=90)
-                    pred_results[tf] = {"score": score, "predicted_price": price, "confidence": conf}
+                    pred_results[tf] = future.result(timeout=90)
                 except Exception as e:
                     logger.warning(f"MTF prediction for {tf} failed: {e}")
-                    pred_results[tf] = {"score": 0, "predicted_price": None, "confidence": None}
+                    pred_results[tf] = {
+                        "score": 0, "predicted_price": None, "confidence": None,
+                        "regime": None, "volume_conviction": None,
+                        "confidence_lower": None, "confidence_upper": None,
+                        "contribution": None, "ensemble_method": None,
+                        "xgboost_weight": None, "prophet_weight": None,
+                    }
 
         sentiment_score = sent_result.get("score", 0)
         global_score = global_result.get("score", 0)
@@ -593,7 +635,7 @@ class SignalService:
     def _compute_timeframe_signal(self, label, df, current_price, sentiment_score,
                                    global_score, fundamental_score, news_magnitude,
                                    timeframe, symbol, prediction=None):
-        """Compute signal + entry/exit for one timeframe using ML predictions + technical analysis."""
+        """Compute signal + entry/exit for one timeframe using full ML prediction output."""
         if prediction is None:
             prediction = {}
 
@@ -615,11 +657,17 @@ class SignalService:
         tech_score = tech_result["score"]
         details = tech_result.get("details", {})
 
-        # ML prediction score (-100 to +100)
+        # Full ML prediction output
         pred_score = prediction.get("score", 0)
         predicted_price = prediction.get("predicted_price")
+        pred_confidence = prediction.get("confidence")  # 0-100 model confidence
+        regime = prediction.get("regime")  # "bull", "bear", "sideways", "volatile"
+        volume_conviction = prediction.get("volume_conviction")  # "high", "moderate", "low"
+        volume_supports = prediction.get("volume_supports", False)
+        confidence_lower = prediction.get("confidence_lower")
+        confidence_upper = prediction.get("confidence_upper")
 
-        # Timeframe-specific weights — ML model gets major weight
+        # ── Base weights by timeframe ──
         if timeframe == "intraday":
             w_pred, w_tech, w_sent, w_glob, w_fund = 0.35, 0.30, 0.15, 0.10, 0.10
         elif timeframe == "short_term":
@@ -631,6 +679,59 @@ class SignalService:
         if pred_score == 0 and predicted_price is None:
             w_tech += w_pred
             w_pred = 0
+
+        # ── Confidence-based weight adjustment ──
+        # High confidence prediction → boost prediction weight
+        # Low confidence → reduce prediction weight, boost technical
+        if pred_confidence is not None and w_pred > 0:
+            if pred_confidence >= 70:
+                boost = 0.10
+                w_pred += boost
+                w_tech -= boost * 0.5
+                w_sent -= boost * 0.25
+                w_glob -= boost * 0.25
+            elif pred_confidence < 40:
+                penalty = 0.10
+                w_pred -= penalty
+                w_tech += penalty
+
+        # ── Regime-aware adjustment ──
+        if regime and w_pred > 0:
+            if regime == "sideways":
+                # In sideways/choppy markets, models are less reliable
+                shift = 0.08
+                w_pred -= shift
+                w_tech += shift * 0.5
+                w_fund += shift * 0.5
+            elif regime == "volatile":
+                # In volatile markets, widen the blend — no single source dominates
+                shift = 0.05
+                w_pred -= shift
+                w_tech -= shift
+                w_sent += shift
+                w_glob += shift
+            elif regime in ("bull", "bear"):
+                # In trending markets, trust the model more
+                shift = 0.05
+                w_pred += shift
+                w_tech -= shift * 0.5
+                w_fund -= shift * 0.5
+
+        # Clamp all weights to [0, 1]
+        w_pred = max(0, w_pred)
+        w_tech = max(0, w_tech)
+        w_sent = max(0, w_sent)
+        w_glob = max(0, w_glob)
+        w_fund = max(0, w_fund)
+
+        # Re-normalize to sum to 1.0
+        w_total = w_pred + w_tech + w_sent + w_glob + w_fund
+        if w_total > 0:
+            w_pred /= w_total
+            w_tech /= w_total
+            w_sent /= w_total
+            w_glob /= w_total
+            w_fund /= w_total
 
         # Crisis override — global news dominates
         if news_magnitude >= 80:
@@ -649,6 +750,13 @@ class SignalService:
             w_glob * global_score +
             w_fund * fundamental_score
         )
+
+        # ── Volume conviction modifier ──
+        # If volume strongly supports the prediction direction, boost composite
+        if volume_supports and volume_conviction == "high" and pred_score != 0:
+            direction_sign = 1 if pred_score > 0 else -1
+            composite += direction_sign * 5  # +/- 5 pts for strong volume confirmation
+
         composite = max(-100, min(100, round(composite, 2)))
 
         if composite > SIGNAL_DIRECTION_THRESHOLD:
@@ -657,13 +765,24 @@ class SignalService:
             direction = "BEARISH"
         else:
             direction = "NEUTRAL"
-        confidence = min(100, round(abs(composite), 2))
+
+        # Confidence: blend composite magnitude with model confidence
+        base_confidence = abs(composite)
+        if pred_confidence is not None and w_pred > 0:
+            # Weight model confidence into overall confidence
+            confidence = min(100, round(base_confidence * 0.6 + pred_confidence * 0.4, 2))
+        else:
+            confidence = min(100, round(base_confidence, 2))
 
         # ── Compute Entry / Target / Stop Loss ──
-        # If we have a predicted price, use it to refine the target
         entry, target, stop_loss, risk_reward, reasoning = self._compute_entry_exit(
             df, current_price, direction, timeframe, details,
             predicted_price=predicted_price,
+            pred_confidence=pred_confidence,
+            confidence_lower=confidence_lower,
+            confidence_upper=confidence_upper,
+            volume_conviction=volume_conviction,
+            regime=regime,
         )
 
         return {
@@ -677,11 +796,11 @@ class SignalService:
             "risk_reward": risk_reward,
             "reasoning": reasoning,
             "weights": {
-                "prediction": round(w_pred, 2),
-                "technical": round(w_tech, 2),
-                "sentiment": round(w_sent, 2),
-                "global": round(w_glob, 2),
-                "fundamental": round(w_fund, 2),
+                "prediction": round(w_pred, 3),
+                "technical": round(w_tech, 3),
+                "sentiment": round(w_sent, 3),
+                "global": round(w_glob, 3),
+                "fundamental": round(w_fund, 3),
             },
             "components": {
                 "prediction": round(pred_score, 2),
@@ -691,12 +810,17 @@ class SignalService:
                 "fundamental": round(fundamental_score, 2),
             },
             "predicted_price": round(predicted_price, 2) if predicted_price else None,
+            "regime": regime,
+            "volume_conviction": volume_conviction,
+            "model_confidence": round(pred_confidence, 1) if pred_confidence else None,
         }
 
     def _compute_entry_exit(self, df, current_price, direction, timeframe, details,
-                            predicted_price=None):
+                            predicted_price=None, pred_confidence=None,
+                            confidence_lower=None, confidence_upper=None,
+                            volume_conviction=None, regime=None):
         """Compute entry, target, stop-loss using S/R, ATR, Fibonacci levels,
-        and ML predicted price when available."""
+        ML predicted price, confidence intervals, and regime context."""
         import ta as ta_lib
 
         if current_price <= 0:
@@ -715,17 +839,29 @@ class SignalService:
 
         # Swing high/low for the timeframe
         if timeframe == "intraday":
-            lookback = min(26, len(df))  # ~1 day of 15m bars
+            lookback = min(26, len(df))
             atr_multiplier_sl = 1.0
             atr_multiplier_target = 1.5
         elif timeframe == "short_term":
-            lookback = min(10, len(df))  # ~2 weeks of daily bars
+            lookback = min(10, len(df))
             atr_multiplier_sl = 1.5
             atr_multiplier_target = 2.5
         else:  # long_term
-            lookback = min(60, len(df))  # ~3 months
+            lookback = min(60, len(df))
             atr_multiplier_sl = 2.0
             atr_multiplier_target = 4.0
+
+        # ── Regime & volume-based ATR adjustments ──
+        # Volatile regime → widen stop-loss for breathing room
+        if regime == "volatile":
+            atr_multiplier_sl *= 1.3
+        # Low volume conviction → widen stop-loss (uncertain move)
+        if volume_conviction == "low":
+            atr_multiplier_sl *= 1.2
+        # High volume conviction → tighter stop (strong directional move)
+        elif volume_conviction == "high":
+            atr_multiplier_sl *= 0.85
+            atr_multiplier_target *= 1.15  # extend target with conviction
 
         swing_high = float(high.tail(lookback).max())
         swing_low = float(low.tail(lookback).min())
@@ -741,41 +877,54 @@ class SignalService:
         ema21 = details.get("ema21", current_price)
         vwap = details.get("vwap", current_price)
 
+        # ── Determine AI/technical blend ratio from model confidence ──
+        # High confidence → trust AI more; low confidence → trust technicals
+        if pred_confidence is not None and pred_confidence >= 60:
+            ai_weight = 0.70
+        elif pred_confidence is not None and pred_confidence >= 40:
+            ai_weight = 0.55
+        else:
+            ai_weight = 0.40  # low confidence or no prediction
+        tech_weight = 1.0 - ai_weight
+
         reasoning_parts = []
 
         if direction == "BULLISH":
-            # Entry: nearest support below current price (Fib 38.2%, 50%, or VWAP)
+            # Entry: nearest support below current price
             support_candidates = sorted([
                 lvl for lvl in [fib_382, fib_500, fib_618, swing_low, ema21, vwap]
                 if lvl < current_price
             ], reverse=True)
             entry = support_candidates[0] if support_candidates else current_price * 0.995
-            # Don't set entry too far from current price
             if entry < current_price * 0.97:
                 entry = current_price * 0.995
 
-            # Stop loss below entry
-            stop_loss = entry - (atr * atr_multiplier_sl)
+            # Stop loss: use confidence_lower from Prophet if available
+            atr_stop = entry - (atr * atr_multiplier_sl)
+            if confidence_lower is not None and confidence_lower < entry:
+                # Blend Prophet lower bound with ATR-based stop
+                stop_loss = confidence_lower * 0.4 + atr_stop * 0.6
+            else:
+                stop_loss = atr_stop
             stop_loss = max(stop_loss, swing_low - atr * 0.5)
 
-            # Target: use ML predicted price if available and bullish, else Fib/swing
+            # Target: blend AI predicted price with technical target
+            resistance_candidates = sorted([
+                lvl for lvl in [fib_236, swing_high]
+                if lvl > current_price
+            ])
+            tech_target = resistance_candidates[0] if resistance_candidates else current_price + atr * atr_multiplier_target
+
             if predicted_price and predicted_price > current_price * 1.005:
-                # Blend predicted price with technical target
-                resistance_candidates = sorted([
-                    lvl for lvl in [fib_236, swing_high]
-                    if lvl > current_price
-                ])
-                tech_target = resistance_candidates[0] if resistance_candidates else current_price + atr * atr_multiplier_target
-                # Weighted average: 60% model, 40% technical
-                target = predicted_price * 0.6 + tech_target * 0.4
-                reasoning_parts.append(f"AI target ₹{predicted_price:.2f}")
+                target = predicted_price * ai_weight + tech_target * tech_weight
+                # If we have upper confidence bound, cap target conservatively
+                if confidence_upper is not None and confidence_upper > current_price:
+                    # Don't exceed the upper confidence interval
+                    target = min(target, confidence_upper)
+                reasoning_parts.append(f"AI ₹{predicted_price:.2f}")
             else:
-                resistance_candidates = sorted([
-                    lvl for lvl in [fib_236, swing_high]
-                    if lvl > current_price
-                ])
-                target = resistance_candidates[0] if resistance_candidates else current_price + atr * atr_multiplier_target
-            # Ensure minimum target distance
+                target = tech_target
+
             if target < current_price * 1.005:
                 target = current_price + atr * atr_multiplier_target
 
@@ -793,25 +942,30 @@ class SignalService:
             if entry > current_price * 1.03:
                 entry = current_price * 1.005
 
-            # Stop loss above entry
-            stop_loss = entry + (atr * atr_multiplier_sl)
+            # Stop loss: use confidence_upper from Prophet if available
+            atr_stop = entry + (atr * atr_multiplier_sl)
+            if confidence_upper is not None and confidence_upper > entry:
+                stop_loss = confidence_upper * 0.4 + atr_stop * 0.6
+            else:
+                stop_loss = atr_stop
             stop_loss = min(stop_loss, swing_high + atr * 0.5)
 
-            # Target: use ML predicted price if available and bearish, else Fib/swing
+            # Target: blend AI predicted price with technical target
+            support_candidates = sorted([
+                lvl for lvl in [fib_618, fib_500, swing_low]
+                if lvl < current_price
+            ], reverse=True)
+            tech_target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
+
             if predicted_price and predicted_price < current_price * 0.995:
-                support_candidates = sorted([
-                    lvl for lvl in [fib_618, fib_500, swing_low]
-                    if lvl < current_price
-                ], reverse=True)
-                tech_target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
-                target = predicted_price * 0.6 + tech_target * 0.4
-                reasoning_parts.append(f"AI target ₹{predicted_price:.2f}")
+                target = predicted_price * ai_weight + tech_target * tech_weight
+                # Don't go below the lower confidence interval
+                if confidence_lower is not None and confidence_lower < current_price:
+                    target = max(target, confidence_lower)
+                reasoning_parts.append(f"AI ₹{predicted_price:.2f}")
             else:
-                support_candidates = sorted([
-                    lvl for lvl in [fib_618, fib_500, swing_low]
-                    if lvl < current_price
-                ], reverse=True)
-                target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
+                target = tech_target
+
             if target > current_price * 0.995:
                 target = current_price - atr * atr_multiplier_target
 
@@ -834,6 +988,11 @@ class SignalService:
         target = round(target, 2)
         stop_loss = round(stop_loss, 2)
 
+        # Add context badges to reasoning
+        if regime:
+            reasoning_parts.append(regime.capitalize())
+        if volume_conviction and volume_conviction != "moderate":
+            reasoning_parts.append(f"Vol:{volume_conviction}")
         reasoning_parts.append(f"R:R 1:{risk_reward:.1f}")
         reasoning = " | ".join(reasoning_parts)
 

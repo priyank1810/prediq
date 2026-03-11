@@ -600,6 +600,28 @@ const Signals = {
                 ? '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/50 text-purple-300 ml-1">AI+Tech</span>'
                 : '<span class="text-[9px] px-1 py-0.5 rounded bg-gray-800 text-gray-500 ml-1">Tech</span>';
 
+            // Regime badge
+            const regimeColors = {
+                bull: 'bg-green-900/50 text-green-400',
+                bear: 'bg-red-900/50 text-red-400',
+                sideways: 'bg-yellow-900/50 text-yellow-400',
+                volatile: 'bg-orange-900/50 text-orange-400',
+            };
+            const regimeBadge = sig.regime
+                ? `<span class="text-[9px] px-1 py-0.5 rounded ${regimeColors[sig.regime] || 'bg-gray-800 text-gray-500'}">${sig.regime}</span>`
+                : '';
+
+            // Volume conviction badge
+            const volColors = { high: 'text-green-400', moderate: 'text-gray-400', low: 'text-red-400' };
+            const volBadge = sig.volume_conviction
+                ? `<span class="text-[9px] px-1 py-0.5 rounded bg-gray-800 ${volColors[sig.volume_conviction] || 'text-gray-500'}">Vol:${sig.volume_conviction}</span>`
+                : '';
+
+            // Model confidence badge
+            const modelConfBadge = sig.model_confidence != null
+                ? `<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/30 text-purple-300">AI conf:${sig.model_confidence}%</span>`
+                : '';
+
             return `<div class="border ${c.border} ${c.bg} rounded-lg p-3">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-xs text-gray-400 font-medium">${sig.label}${modelBadge}</span>
@@ -615,8 +637,11 @@ const Signals = {
                     ${levelRow('Target', sig.target, 'text-green-400')}
                     ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}
                 </div>
-                <div class="flex items-center justify-between mt-2">
+                <div class="flex flex-wrap items-center gap-1 mt-2">
                     ${rrBadge}
+                    ${regimeBadge}
+                    ${volBadge}
+                    ${modelConfBadge}
                 </div>
                 ${sig.reasoning ? `<div class="text-[10px] text-gray-500 mt-2 leading-relaxed">${sig.reasoning}</div>` : ''}
             </div>`;
