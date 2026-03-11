@@ -410,4 +410,319 @@ class SignalService:
         return {"score": 0, "classification": "balanced", "details": {}}
 
 
+    # ── Multi-Timeframe Signals with Entry/Exit Levels ──
+
+    def get_multi_timeframe_signals(self, symbol: str) -> dict:
+        """Compute separate buy/sell signals for Intraday, Short-term (2 weeks),
+        and Long-term horizons with entry, target, and stop-loss levels."""
+        from app.services.data_fetcher import data_fetcher
+
+        intraday_df = None
+        daily_df = None
+        weekly_df = None
+        sent_result = {"score": 0, "headline_count": 0}
+        global_result = {"score": 0, "news_magnitude": 0}
+        fund_result = {"score": 0, "classification": "balanced", "details": {}}
+
+        with ThreadPoolExecutor(max_workers=7) as executor:
+            f_intraday = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "15m")
+            f_daily = executor.submit(data_fetcher.get_historical_data, symbol, period="6mo")
+            f_weekly = executor.submit(data_fetcher.get_historical_data, symbol, period="2y")
+            f_sent = executor.submit(sentiment_service.get_sentiment, symbol)
+            f_global = executor.submit(global_market_service.get_global_signal)
+            f_fund = executor.submit(self._fetch_fundamental_score, symbol)
+
+            try:
+                intraday_df = f_intraday.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"MTF intraday failed for {symbol}: {e}")
+            try:
+                daily_df = f_daily.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"MTF daily failed for {symbol}: {e}")
+            try:
+                weekly_df = f_weekly.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"MTF weekly failed for {symbol}: {e}")
+            try:
+                sent_result = f_sent.result(timeout=15)
+            except Exception:
+                pass
+            try:
+                global_result = f_global.result(timeout=15)
+            except Exception:
+                pass
+            try:
+                fund_result = f_fund.result(timeout=15)
+            except Exception:
+                pass
+
+        sentiment_score = sent_result.get("score", 0)
+        global_score = global_result.get("score", 0)
+        news_magnitude = global_result.get("news_magnitude", 0)
+        fundamental_score = fund_result.get("score", 0) * 100
+
+        current_price = 0
+        if intraday_df is not None and not intraday_df.empty:
+            current_price = float(intraday_df["close"].iloc[-1])
+        elif daily_df is not None and not daily_df.empty:
+            current_price = float(daily_df["close"].iloc[-1])
+
+        # ── 1. INTRADAY SIGNAL ──
+        intraday_signal = self._compute_timeframe_signal(
+            label="Intraday",
+            df=intraday_df,
+            current_price=current_price,
+            sentiment_score=sentiment_score,
+            global_score=global_score,
+            fundamental_score=fundamental_score,
+            news_magnitude=news_magnitude,
+            timeframe="intraday",
+            symbol=symbol,
+        )
+
+        # ── 2. SHORT-TERM (2 WEEKS) SIGNAL ──
+        short_term_signal = self._compute_timeframe_signal(
+            label="Short Term (2 Weeks)",
+            df=daily_df,
+            current_price=current_price,
+            sentiment_score=sentiment_score,
+            global_score=global_score,
+            fundamental_score=fundamental_score,
+            news_magnitude=news_magnitude,
+            timeframe="short_term",
+            symbol=symbol,
+        )
+
+        # ── 3. LONG-TERM SIGNAL ──
+        long_term_signal = self._compute_timeframe_signal(
+            label="Long Term",
+            df=weekly_df,
+            current_price=current_price,
+            sentiment_score=sentiment_score,
+            global_score=global_score,
+            fundamental_score=fundamental_score,
+            news_magnitude=news_magnitude,
+            timeframe="long_term",
+            symbol=symbol,
+        )
+
+        return {
+            "symbol": symbol,
+            "current_price": round(current_price, 2),
+            "timestamp": now_ist().isoformat(),
+            "market_open": is_market_open(),
+            "intraday": intraday_signal,
+            "short_term": short_term_signal,
+            "long_term": long_term_signal,
+        }
+
+    def _compute_timeframe_signal(self, label, df, current_price, sentiment_score,
+                                   global_score, fundamental_score, news_magnitude,
+                                   timeframe, symbol):
+        """Compute signal + entry/exit for one timeframe."""
+        import ta as ta_lib
+
+        if df is None or df.empty or len(df) < 20:
+            return {
+                "label": label,
+                "direction": "NEUTRAL",
+                "confidence": 0,
+                "score": 0,
+                "entry": None,
+                "target": None,
+                "stop_loss": None,
+                "risk_reward": None,
+                "reasoning": "Insufficient data",
+            }
+
+        # Compute technical indicators for this timeframe
+        tech_result = indicator_service.compute_intraday_indicators(df)
+        tech_score = tech_result["score"]
+        details = tech_result.get("details", {})
+
+        # Timeframe-specific weights
+        if timeframe == "intraday":
+            w_tech, w_sent, w_glob, w_fund = 0.60, 0.15, 0.15, 0.10
+        elif timeframe == "short_term":
+            w_tech, w_sent, w_glob, w_fund = 0.45, 0.20, 0.15, 0.20
+        else:  # long_term
+            w_tech, w_sent, w_glob, w_fund = 0.30, 0.15, 0.15, 0.40
+
+        # Crisis override
+        if news_magnitude >= 80:
+            w_tech, w_sent, w_glob, w_fund = 0.20, 0.20, 0.50, 0.10
+        elif news_magnitude >= 60:
+            w_tech, w_sent, w_glob, w_fund = 0.30, 0.20, 0.35, 0.15
+
+        composite = (
+            w_tech * tech_score +
+            w_sent * sentiment_score +
+            w_glob * global_score +
+            w_fund * fundamental_score
+        )
+        composite = max(-100, min(100, round(composite, 2)))
+
+        if composite > SIGNAL_DIRECTION_THRESHOLD:
+            direction = "BULLISH"
+        elif composite < -SIGNAL_DIRECTION_THRESHOLD:
+            direction = "BEARISH"
+        else:
+            direction = "NEUTRAL"
+        confidence = min(100, round(abs(composite), 2))
+
+        # ── Compute Entry / Target / Stop Loss ──
+        entry, target, stop_loss, risk_reward, reasoning = self._compute_entry_exit(
+            df, current_price, direction, timeframe, details
+        )
+
+        return {
+            "label": label,
+            "direction": direction,
+            "confidence": confidence,
+            "score": composite,
+            "entry": entry,
+            "target": target,
+            "stop_loss": stop_loss,
+            "risk_reward": risk_reward,
+            "reasoning": reasoning,
+            "weights": {
+                "technical": round(w_tech, 2),
+                "sentiment": round(w_sent, 2),
+                "global": round(w_glob, 2),
+                "fundamental": round(w_fund, 2),
+            },
+            "components": {
+                "technical": round(tech_score, 2),
+                "sentiment": round(sentiment_score, 2),
+                "global": round(global_score, 2),
+                "fundamental": round(fundamental_score, 2),
+            },
+        }
+
+    def _compute_entry_exit(self, df, current_price, direction, timeframe, details):
+        """Compute entry, target, stop-loss using S/R, ATR, and Fibonacci levels."""
+        import ta as ta_lib
+
+        if current_price <= 0:
+            return None, None, None, None, "No price data"
+
+        close = df["close"]
+        high = df["high"]
+        low = df["low"]
+
+        # ATR for volatility-based levels
+        try:
+            atr_series = ta_lib.volatility.AverageTrueRange(high, low, close, window=14).average_true_range()
+            atr = float(atr_series.iloc[-1]) if not pd.isna(atr_series.iloc[-1]) else current_price * 0.015
+        except Exception:
+            atr = current_price * 0.015
+
+        # Swing high/low for the timeframe
+        if timeframe == "intraday":
+            lookback = min(26, len(df))  # ~1 day of 15m bars
+            atr_multiplier_sl = 1.0
+            atr_multiplier_target = 1.5
+        elif timeframe == "short_term":
+            lookback = min(10, len(df))  # ~2 weeks of daily bars
+            atr_multiplier_sl = 1.5
+            atr_multiplier_target = 2.5
+        else:  # long_term
+            lookback = min(60, len(df))  # ~3 months
+            atr_multiplier_sl = 2.0
+            atr_multiplier_target = 4.0
+
+        swing_high = float(high.tail(lookback).max())
+        swing_low = float(low.tail(lookback).min())
+        fib_range = swing_high - swing_low
+
+        # Fibonacci levels
+        fib_382 = swing_high - 0.382 * fib_range
+        fib_500 = swing_high - 0.500 * fib_range
+        fib_618 = swing_high - 0.618 * fib_range
+        fib_236 = swing_high - 0.236 * fib_range
+
+        # EMAs for context
+        ema21 = details.get("ema21", current_price)
+        vwap = details.get("vwap", current_price)
+
+        reasoning_parts = []
+
+        if direction == "BULLISH":
+            # Entry: nearest support below current price (Fib 38.2%, 50%, or VWAP)
+            support_candidates = sorted([
+                lvl for lvl in [fib_382, fib_500, fib_618, swing_low, ema21, vwap]
+                if lvl < current_price
+            ], reverse=True)
+            entry = support_candidates[0] if support_candidates else current_price * 0.995
+            # Don't set entry too far from current price
+            if entry < current_price * 0.97:
+                entry = current_price * 0.995
+
+            # Stop loss below entry
+            stop_loss = entry - (atr * atr_multiplier_sl)
+            stop_loss = max(stop_loss, swing_low - atr * 0.5)
+
+            # Target: nearest resistance above current price
+            resistance_candidates = sorted([
+                lvl for lvl in [fib_236, swing_high]
+                if lvl > current_price
+            ])
+            target = resistance_candidates[0] if resistance_candidates else current_price + atr * atr_multiplier_target
+            # Ensure minimum target distance
+            if target < current_price * 1.005:
+                target = current_price + atr * atr_multiplier_target
+
+            reasoning_parts.append(f"Buy near support ₹{entry:.2f}")
+            reasoning_parts.append(f"Target swing high/Fib ₹{target:.2f}")
+            reasoning_parts.append(f"Stop below ₹{stop_loss:.2f} (ATR-based)")
+
+        elif direction == "BEARISH":
+            # Entry: nearest resistance above current price
+            resistance_candidates = sorted([
+                lvl for lvl in [fib_382, fib_236, swing_high, ema21, vwap]
+                if lvl > current_price
+            ])
+            entry = resistance_candidates[0] if resistance_candidates else current_price * 1.005
+            if entry > current_price * 1.03:
+                entry = current_price * 1.005
+
+            # Stop loss above entry
+            stop_loss = entry + (atr * atr_multiplier_sl)
+            stop_loss = min(stop_loss, swing_high + atr * 0.5)
+
+            # Target: nearest support below current price
+            support_candidates = sorted([
+                lvl for lvl in [fib_618, fib_500, swing_low]
+                if lvl < current_price
+            ], reverse=True)
+            target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
+            if target > current_price * 0.995:
+                target = current_price - atr * atr_multiplier_target
+
+            reasoning_parts.append(f"Sell near resistance ₹{entry:.2f}")
+            reasoning_parts.append(f"Target support/Fib ₹{target:.2f}")
+            reasoning_parts.append(f"Stop above ₹{stop_loss:.2f} (ATR-based)")
+
+        else:  # NEUTRAL
+            entry = round(current_price, 2)
+            target = None
+            stop_loss = None
+            return entry, target, stop_loss, None, "No clear directional bias — wait for confirmation"
+
+        # Risk/Reward ratio
+        risk = abs(entry - stop_loss)
+        reward = abs(target - entry)
+        risk_reward = round(reward / risk, 2) if risk > 0 else 0
+
+        entry = round(entry, 2)
+        target = round(target, 2)
+        stop_loss = round(stop_loss, 2)
+
+        reasoning_parts.append(f"Risk:Reward = 1:{risk_reward:.1f}")
+        reasoning = " | ".join(reasoning_parts)
+
+        return entry, target, stop_loss, risk_reward, reasoning
+
+
 signal_service = SignalService()

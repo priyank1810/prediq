@@ -131,6 +131,7 @@ const API = {
     getSignalHistory(symbol, limit = 20) { return this.request(`/api/signals/${encodeURIComponent(symbol)}/history?limit=${limit}`); },
     scanHighConfidence(threshold = 60) { return this.request(`/api/signals/scan/high-confidence?threshold=${threshold}`); },
     getSignalAccuracy() { return this.request('/api/signals/stats/accuracy'); },
+    getMultiTimeframeSignals(symbol) { return this.request(`/api/signals/multi-timeframe/${encodeURIComponent(symbol)}`); },
     onSignalUpdate: null,
     setSignalUpdateHandler(handler) { this.onSignalUpdate = handler; },
 

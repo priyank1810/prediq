@@ -301,6 +301,22 @@ def signal_accuracy_stats():
         db.close()
 
 
+@router.get("/multi-timeframe/{symbol}")
+async def get_multi_timeframe_signals(symbol: str):
+    """Get separate Intraday, Short-term (2 weeks), and Long-term signals with entry/exit levels."""
+    try:
+        sym = symbol.upper()
+        from app.services.signal_service import signal_service
+        result = await asyncio.to_thread(signal_service.get_multi_timeframe_signals, sym)
+        if not result:
+            raise ValueError(f"No data for {sym}")
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Multi-timeframe signal failed: {str(e)}")
+
+
 # --- Existing endpoints (must come AFTER scan/ and stats/ routes) ---
 
 @router.get("/{symbol}")

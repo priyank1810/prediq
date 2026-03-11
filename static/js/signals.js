@@ -49,6 +49,11 @@ const Signals = {
             this.displaySignal(signal);
             App.displaySignalBadge(signal);
             this.displaySignalHistory(history);
+
+            // Load multi-timeframe signals in background (non-blocking)
+            API.getMultiTimeframeSignals(symbol).then(mtfData => {
+                this.displayMultiTimeframeSignals(mtfData);
+            }).catch(() => {});
         } catch (e) {
             App.showToast('Failed to load signal: ' + e.message, 'error');
             loading.classList.add('hidden');
@@ -554,6 +559,67 @@ const Signals = {
                 }
             }
         }, 30000);
+    },
+
+    displayMultiTimeframeSignals(data) {
+        const panel = document.getElementById('mtfSignalsPanel');
+        const grid = document.getElementById('mtfSignalsGrid');
+        if (!panel || !grid || !data) return;
+
+        panel.classList.remove('hidden');
+
+        const tsEl = document.getElementById('mtfSignalsTimestamp');
+        if (tsEl && data.timestamp) {
+            const ts = new Date(data.timestamp);
+            tsEl.textContent = ts.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) + ' IST';
+        }
+
+        const timeframes = ['intraday', 'short_term', 'long_term'];
+        const icons = { BULLISH: '&#9650;', BEARISH: '&#9660;', NEUTRAL: '&#9654;' };
+        const colors = {
+            BULLISH: { text: 'text-green-400', bg: 'bg-green-900/30', border: 'border-green-700/50' },
+            BEARISH: { text: 'text-red-400', bg: 'bg-red-900/30', border: 'border-red-700/50' },
+            NEUTRAL: { text: 'text-yellow-400', bg: 'bg-yellow-900/30', border: 'border-yellow-700/50' },
+        };
+
+        grid.innerHTML = timeframes.map(tf => {
+            const sig = data[tf];
+            if (!sig) return '';
+            const c = colors[sig.direction] || colors.NEUTRAL;
+            const icon = icons[sig.direction] || icons.NEUTRAL;
+
+            const levelRow = (label, value, cls) => {
+                if (value == null) return '';
+                return `<div class="flex justify-between items-center py-0.5">
+                    <span class="text-[10px] text-gray-500">${label}</span>
+                    <span class="text-xs font-mono ${cls}">₹${value.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                </div>`;
+            };
+
+            const rrBadge = sig.risk_reward != null
+                ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-800 text-gray-400">R:R 1:${sig.risk_reward.toFixed(1)}</span>`
+                : '';
+
+            return `<div class="border ${c.border} ${c.bg} rounded-lg p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs text-gray-400 font-medium">${sig.label}</span>
+                    <span class="text-xs font-bold ${c.text}">${icon} ${sig.direction}</span>
+                </div>
+                <div class="text-center mb-2">
+                    <div class="text-lg font-bold ${c.text}">${sig.confidence}%</div>
+                    <div class="text-[10px] text-gray-500">confidence</div>
+                </div>
+                <div class="border-t border-gray-700/50 pt-2 space-y-0.5">
+                    ${levelRow('Entry', sig.entry, 'text-white')}
+                    ${levelRow('Target', sig.target, 'text-green-400')}
+                    ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}
+                </div>
+                <div class="flex items-center justify-between mt-2">
+                    ${rrBadge}
+                </div>
+                ${sig.reasoning ? `<div class="text-[10px] text-gray-500 mt-2 leading-relaxed">${sig.reasoning}</div>` : ''}
+            </div>`;
+        }).join('');
     },
 
     displaySignalHistory(history) {
