@@ -6,12 +6,6 @@ const Signals = {
     _ageTimer: null,
 
     init() {
-        const btn = document.getElementById('btnSignal');
-        if (btn) {
-            btn.addEventListener('click', () => {
-                if (App.currentSymbol) this.loadSignal(App.currentSymbol);
-            });
-        }
         API.setSignalUpdateHandler((data) => {
             if (data.symbol === App.currentSymbol) {
                 this.displaySignal(data);
@@ -33,11 +27,9 @@ const Signals = {
         if (this.isLoading) return;
         this.isLoading = true;
 
-        const panel = document.getElementById('signalPanel');
         const loading = document.getElementById('signalLoading');
         const results = document.getElementById('signalResults');
 
-        panel.classList.remove('hidden');
         loading.classList.remove('hidden');
         results.classList.add('hidden');
 

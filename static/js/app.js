@@ -23,6 +23,7 @@ const App = {
         Notifications.init();
         this.setupNavigation();
         this.setupChartControls();
+        this.setupStockTabs();
 
         this.loadMarketStatus();
         this.loadDataSource();
@@ -99,29 +100,23 @@ const App = {
             this.chart.setChartType('line');
             if (this.currentSymbol) this.loadHistory(this.currentSymbol, this.currentPeriod);
         });
+    },
 
-        // Predict button
-        document.getElementById('btnPredict').addEventListener('click', () => {
-            if (this.currentSymbol) Predictions.loadPredictions(this.currentSymbol);
-        });
+    // --- Stock Detail Sub-Tab Navigation ---
+    setupStockTabs() {
+        document.querySelectorAll('.stock-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.stock-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.stock-tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                const target = document.getElementById('stockTab-' + tab.dataset.stockTab);
+                if (target) target.classList.add('active');
 
-        // Indicators toggle
-        document.getElementById('btnIndicators').addEventListener('click', () => {
-            this.showIndicators = !this.showIndicators;
-            const btn = document.getElementById('btnIndicators');
-            const panels = document.getElementById('indicatorPanels');
-
-            if (this.showIndicators) {
-                btn.classList.add('bg-accent-blue', 'text-white');
-                btn.classList.remove('bg-dark-600', 'text-gray-300');
-                panels.classList.remove('hidden');
-                if (this.currentSymbol) this.loadIndicators(this.currentSymbol);
-            } else {
-                btn.classList.remove('bg-accent-blue', 'text-white');
-                btn.classList.add('bg-dark-600', 'text-gray-300');
-                panels.classList.add('hidden');
-                this.chart.clearOverlays();
-            }
+                // Lazy-load content on tab switch
+                if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
+                    Predictions.loadPredictions(this.currentSymbol);
+                }
+            });
         });
     },
 
@@ -337,12 +332,7 @@ const App = {
     showMarketOverview() {
         this.currentSymbol = null;
         document.getElementById('stockInfoBar').classList.add('hidden');
-        document.getElementById('chartControls').classList.add('hidden');
-        document.getElementById('chartContainer').classList.add('hidden');
-        document.getElementById('signalPanel').classList.add('hidden');
-        document.getElementById('predictionPanel').classList.add('hidden');
-        document.getElementById('fundamentalsPanel').classList.add('hidden');
-        document.getElementById('indicatorPanels').classList.add('hidden');
+        document.getElementById('stockDetailTabs').classList.add('hidden');
         document.getElementById('marketOverview').classList.remove('hidden');
         const liveBadge = document.getElementById('liveBadge');
         if (liveBadge) liveBadge.classList.add('hidden');
@@ -366,11 +356,16 @@ const App = {
         // Always switch to dashboard tab first
         this._switchToDashboardTab();
 
-        // Hide overview, show stock view
+        // Hide overview, show stock view with sub-tabs
         document.getElementById('marketOverview').classList.add('hidden');
         document.getElementById('stockInfoBar').classList.remove('hidden');
-        document.getElementById('chartControls').classList.remove('hidden');
-        document.getElementById('chartContainer').classList.remove('hidden');
+        document.getElementById('stockDetailTabs').classList.remove('hidden');
+
+        // Reset to Overview sub-tab
+        document.querySelectorAll('.stock-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.stock-tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector('.stock-tab[data-stock-tab="overview"]').classList.add('active');
+        document.getElementById('stockTab-overview').classList.add('active');
 
         document.getElementById('stockSymbol').textContent = symbol;
         document.getElementById('stockName').textContent = name;
@@ -388,15 +383,8 @@ const App = {
             // Subscribe to live updates
             API.subscribeTo([symbol]);
 
-            // Auto-enable and load indicators for full dashboard view
-            if (!this.showIndicators) {
-                this.showIndicators = true;
-                const btn = document.getElementById('btnIndicators');
-                const panels = document.getElementById('indicatorPanels');
-                btn.classList.add('bg-accent-blue', 'text-white');
-                btn.classList.remove('bg-dark-600', 'text-gray-300');
-                panels.classList.remove('hidden');
-            }
+            // Auto-load indicators (always enabled in tabbed view)
+            this.showIndicators = true;
             this.loadIndicators(symbol);
 
             // Auto-load fundamentals, news & 15-min signal

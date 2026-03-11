@@ -22,11 +22,9 @@ const Predictions = {
         this._abortController = new AbortController();
         const requestId = ++this._requestId;
 
-        const panel = document.getElementById('predictionPanel');
         const loading = document.getElementById('predictionLoading');
         const results = document.getElementById('predictionResults');
 
-        panel.classList.remove('hidden');
         loading.classList.remove('hidden');
         results.classList.add('hidden');
 

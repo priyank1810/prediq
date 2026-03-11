@@ -5,7 +5,6 @@ const Fundamentals = {
         this._currentSymbol = symbol;
         const panel = document.getElementById('fundamentalsPanel');
         if (!panel) return;
-        panel.classList.remove('hidden');
         panel.innerHTML = '<div class="text-center py-6"><div class="animate-spin w-6 h-6 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div><p class="text-gray-500 text-xs mt-2">Loading fundamentals...</p></div>';
 
         try {
@@ -33,8 +32,19 @@ const Fundamentals = {
             ${this._renderFinancials(data)}
             ${this._renderQuarterlyResults(data)}
             ${this._renderBalanceSheet(data)}
-            ${this._renderNews(news)}
         `;
+
+        // Overview tab: key metrics summary
+        const overviewMetrics = document.getElementById('overviewKeyMetrics');
+        if (overviewMetrics) {
+            overviewMetrics.innerHTML = this._renderKeyMetrics(data);
+        }
+
+        // News tab: fundamental-sourced news
+        const newsTab = document.getElementById('newsTabFundNews');
+        if (newsTab) {
+            newsTab.innerHTML = this._renderNews(news);
+        }
     },
 
     _renderKeyMetrics(d) {

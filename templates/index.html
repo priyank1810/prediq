@@ -112,32 +112,317 @@
                 </div>
             </div>
 
-            <!-- Chart Controls (hidden until stock selected) -->
-            <div id="chartControls" class="hidden flex flex-wrap items-center gap-2 mb-2">
-                <div class="flex gap-1 overflow-x-auto">
-                    <button class="period-btn active" data-period="1d">1D</button>
-                    <button class="period-btn" data-period="5d">1W</button>
-                    <button class="period-btn" data-period="1mo">1M</button>
-                    <button class="period-btn" data-period="3mo">3M</button>
-                    <button class="period-btn" data-period="6mo">6M</button>
-                    <button class="period-btn" data-period="1y">1Y</button>
-                    <button class="period-btn" data-period="2y">2Y</button>
-                    <button class="period-btn" data-period="5y">5Y</button>
+            <!-- Stock Detail Sub-Tabs (hidden until stock selected) -->
+            <div id="stockDetailTabs" class="hidden">
+                <!-- Sub-tab navigation -->
+                <nav class="flex gap-0 overflow-x-auto border-b border-gray-700 mb-3 scrollbar-thin">
+                    <button class="stock-tab active" data-stock-tab="overview">Overview</button>
+                    <button class="stock-tab" data-stock-tab="technical">Technical</button>
+                    <button class="stock-tab" data-stock-tab="fundamentals">Fundamentals</button>
+                    <button class="stock-tab" data-stock-tab="news">News & Events</button>
+                    <button class="stock-tab" data-stock-tab="predictions">Predictions</button>
+                </nav>
+
+                <!-- ═══════ OVERVIEW TAB ═══════ -->
+                <div id="stockTab-overview" class="stock-tab-content active">
+                    <!-- Chart Controls -->
+                    <div id="chartControls" class="flex flex-wrap items-center gap-2 mb-2">
+                        <div class="flex gap-1 overflow-x-auto">
+                            <button class="period-btn active" data-period="1d">1D</button>
+                            <button class="period-btn" data-period="5d">1W</button>
+                            <button class="period-btn" data-period="1mo">1M</button>
+                            <button class="period-btn" data-period="3mo">3M</button>
+                            <button class="period-btn" data-period="6mo">6M</button>
+                            <button class="period-btn" data-period="1y">1Y</button>
+                            <button class="period-btn" data-period="2y">2Y</button>
+                            <button class="period-btn" data-period="5y">5Y</button>
+                        </div>
+                        <div class="flex gap-1">
+                            <button id="btnCandlestick" class="chart-type-btn">Candle</button>
+                            <button id="btnLine" class="chart-type-btn active">Line</button>
+                        </div>
+                    </div>
+                    <!-- Chart -->
+                    <div id="chartContainer" class="bg-dark-800 rounded-lg overflow-hidden relative h-[300px] sm:h-[450px]">
+                        <div id="liveBadge" class="hidden absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-dark-900/80 rounded-full px-2.5 py-1">
+                            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                            <span class="text-[10px] text-green-400 font-medium">LIVE</span>
+                            <span id="liveTimestamp" class="text-[10px] text-gray-500"></span>
+                        </div>
+                        <div id="priceChart" class="h-full"></div>
+                    </div>
+                    <!-- Multi-Timeframe Buy/Sell Signals with Entry/Exit -->
+                    <div id="mtfSignalsPanel" class="hidden bg-dark-800 rounded-lg p-4 mt-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-semibold text-white">Timeframe Signals & Levels</h4>
+                            <span id="mtfSignalsTimestamp" class="text-[10px] text-gray-500"></span>
+                        </div>
+                        <div id="mtfSignalsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+                    </div>
+                    <!-- Key Metrics Summary (populated by fundamentals.js) -->
+                    <div id="overviewKeyMetrics" class="mt-3"></div>
                 </div>
-                <div class="flex gap-1">
-                    <button id="btnCandlestick" class="chart-type-btn">Candle</button>
-                    <button id="btnLine" class="chart-type-btn active">Line</button>
+
+                <!-- ═══════ TECHNICAL TAB ═══════ -->
+                <div id="stockTab-technical" class="stock-tab-content">
+                    <!-- Signal Panel -->
+                    <div id="signalPanel">
+                        <div id="signalLoading" class="hidden bg-dark-800 rounded-lg p-6 sm:p-8 text-center">
+                            <div class="animate-spin w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full mx-auto"></div>
+                            <p class="text-gray-400 text-sm mt-2">Analyzing trends, news & global markets...</p>
+                        </div>
+                        <div id="signalResults" class="hidden">
+                            <div class="bg-dark-800 rounded-lg p-4 sm:p-6 mb-4">
+                                <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                                    <h3 class="text-base sm:text-lg font-semibold text-white">15-Min Directional Signal</h3>
+                                    <div class="flex items-center gap-2">
+                                        <span id="marketBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">-</span>
+                                        <span id="signalTimestamp" class="text-xs text-gray-500"></span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
+                                    <div class="text-center min-w-[100px] sm:min-w-[120px]">
+                                        <div id="signalArrow" class="text-5xl sm:text-6xl text-gray-500">&#9654;</div>
+                                        <div id="signalDirection" class="text-xl sm:text-2xl font-bold text-gray-400">-</div>
+                                        <div id="signalConfidence" class="text-sm text-gray-500 mt-1">-</div>
+                                        <div id="signalPrice" class="text-sm text-gray-300 font-medium mt-1"></div>
+                                    </div>
+                                    <div class="flex-1 w-full space-y-3">
+                                        <div>
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span class="text-xs text-gray-400">Technical (65%)</span>
+                                                <span id="technicalScore" class="text-sm font-mono text-gray-400">-</span>
+                                            </div>
+                                            <div id="technicalBar" class="h-2 bg-dark-600 rounded-full"></div>
+                                            <div id="technicalDetails" class="mt-1"></div>
+                                            <div id="sectorStrengthBadge" class="mt-1 hidden"></div>
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span class="text-xs text-gray-400">Sentiment (25%)</span>
+                                                <span id="sentimentScore" class="text-sm font-mono text-gray-400">-</span>
+                                            </div>
+                                            <div id="sentimentBar" class="h-2 bg-dark-600 rounded-full"></div>
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span id="globalWeightLabel" class="text-xs text-gray-400">Global (10%)</span>
+                                                <span id="globalScore" class="text-sm font-mono text-gray-400">-</span>
+                                            </div>
+                                            <div id="globalBar" class="h-2 bg-dark-600 rounded-full"></div>
+                                        </div>
+                                        <div id="oiScoreSection" class="hidden">
+                                            <div class="flex justify-between items-center mb-1">
+                                                <span id="oiWeightLabel" class="text-xs text-gray-400">OI (10%)</span>
+                                                <span id="oiScore" class="text-sm font-mono text-gray-400">-</span>
+                                            </div>
+                                            <div id="oiBar" class="h-2 bg-dark-600 rounded-full"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 15m Intraday Chart -->
+                            <div class="bg-dark-800 rounded-lg overflow-hidden mb-4">
+                                <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">15-Min Candles (Intraday)</div>
+                                <div id="intradayChart" class="h-[200px] sm:h-[250px]"></div>
+                            </div>
+                            <!-- Support/Resistance Levels Panel -->
+                            <div id="srLevelsPanel" class="hidden bg-dark-800 rounded-lg p-3 mb-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-gray-400 font-medium">Support / Resistance Levels</span>
+                                    <span id="srProximityBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-500"></span>
+                                </div>
+                                <div id="srLevelsGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center"></div>
+                            </div>
+                            <!-- Multi-Timeframe Confluence -->
+                            <div id="mtfPanel" class="hidden bg-dark-800 rounded-lg p-3 mb-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-gray-400 font-medium">Multi-Timeframe Confluence</span>
+                                    <span id="confluenceBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">-</span>
+                                </div>
+                                <div id="mtfGrid" class="grid grid-cols-3 gap-2 text-center"></div>
+                            </div>
+                            <!-- OI Analysis Panel -->
+                            <div id="oiPanel" class="hidden bg-dark-800 rounded-lg p-3 mb-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-gray-400 font-medium">Options Chain / Open Interest</span>
+                                </div>
+                                <div id="oiMetrics" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center"></div>
+                            </div>
+                            <!-- Indicator panels (RSI, MACD) -->
+                            <div id="indicatorPanels" class="space-y-2 mb-4">
+                                <div class="bg-dark-800 rounded-lg overflow-hidden">
+                                    <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">RSI (14)</div>
+                                    <div id="rsiChart" class="h-[100px] sm:h-[120px]"></div>
+                                </div>
+                                <div class="bg-dark-800 rounded-lg overflow-hidden">
+                                    <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">MACD</div>
+                                    <div id="macdChart" class="h-[100px] sm:h-[120px]"></div>
+                                </div>
+                            </div>
+                            <!-- Signal History -->
+                            <div class="bg-dark-800 rounded-lg overflow-x-auto">
+                                <div class="px-3 py-2 text-xs text-gray-400 border-b border-gray-700">Signal History</div>
+                                <table class="w-full text-sm min-w-[500px]">
+                                    <thead>
+                                        <tr class="text-gray-400 border-b border-gray-700">
+                                            <th class="text-left px-3 py-2 text-xs">Time</th>
+                                            <th class="text-left px-3 py-2 text-xs">Direction</th>
+                                            <th class="text-right px-3 py-2 text-xs">Conf</th>
+                                            <th class="text-right px-3 py-2 text-xs">Signal Price</th>
+                                            <th class="text-center px-3 py-2 text-xs">15m</th>
+                                            <th class="text-center px-3 py-2 text-xs">30m</th>
+                                            <th class="text-center px-3 py-2 text-xs">1hr</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="signalHistoryTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="flex gap-2 sm:ml-auto">
-                    <button id="btnSignal" class="px-2 sm:px-3 py-1 bg-green-700 text-white text-xs sm:text-sm rounded hover:bg-green-600 transition font-medium">
-                        Signal
-                    </button>
-                    <button id="btnPredict" class="px-2 sm:px-3 py-1 bg-accent-blue text-white text-xs sm:text-sm rounded hover:bg-blue-600 transition">
-                        Predict
-                    </button>
-                    <button id="btnIndicators" class="px-2 sm:px-3 py-1 bg-dark-600 text-gray-300 text-xs sm:text-sm rounded hover:bg-dark-700 transition">
-                        Indicators
-                    </button>
+
+                <!-- ═══════ FUNDAMENTALS TAB ═══════ -->
+                <div id="stockTab-fundamentals" class="stock-tab-content">
+                    <div id="fundamentalsPanel"></div>
+                </div>
+
+                <!-- ═══════ NEWS & EVENTS TAB ═══════ -->
+                <div id="stockTab-news" class="stock-tab-content">
+                    <!-- Signal-sourced news headlines -->
+                    <div class="bg-dark-800 rounded-lg overflow-hidden mb-4">
+                        <div class="px-3 py-2 text-xs text-gray-400 border-b border-gray-700">Stock News & Sentiment</div>
+                        <div id="newsHeadlines" class="p-3 max-h-72 overflow-y-auto"></div>
+                    </div>
+                    <!-- Global Markets -->
+                    <div class="bg-dark-800 rounded-lg p-3 mb-4">
+                        <div class="text-xs text-gray-400 mb-2">Global Markets</div>
+                        <div id="globalTicker" class="flex flex-wrap gap-2"></div>
+                        <div class="mt-3 border-t border-gray-700 pt-2">
+                            <div class="text-xs text-gray-400 mb-2">Global News</div>
+                            <div id="globalNewsHeadlines" class="max-h-40 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                    <!-- Fundamentals-sourced news (populated by fundamentals.js) -->
+                    <div id="newsTabFundNews"></div>
+                </div>
+
+                <!-- ═══════ PREDICTIONS TAB ═══════ -->
+                <div id="stockTab-predictions" class="stock-tab-content">
+                    <div id="predictionPanel" class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                        <h3 class="text-base sm:text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
+                        <div class="flex flex-wrap gap-2 mb-2">
+                            <button class="horizon-btn" data-horizon="15m">15 Min</button>
+                            <button class="horizon-btn" data-horizon="1h">1 Hour</button>
+                            <button class="horizon-btn active" data-horizon="1d">1 Day</button>
+                            <button class="horizon-btn" data-horizon="1w">1 Week</button>
+                            <button class="horizon-btn" data-horizon="1mo">1 Month</button>
+                            <button class="horizon-btn" data-horizon="3mo">3 Months</button>
+                            <button class="horizon-btn" data-horizon="6mo">6 Months</button>
+                            <button class="horizon-btn" data-horizon="1y">1 Year</button>
+                        </div>
+                        <div class="mb-2"></div>
+                        <div id="predictionLoading" class="hidden text-center py-8">
+                            <div class="animate-spin w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div>
+                            <p class="text-gray-400 text-sm mt-2">Generating AI prediction...</p>
+                        </div>
+                        <div id="predictionResults" class="hidden">
+                            <div class="bg-dark-700 rounded-lg p-4 mb-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-sm font-medium text-accent-yellow">AI Prediction</span>
+                                    <span id="predModelLabel" class="text-[10px] text-gray-500"></span>
+                                </div>
+                                <div id="ensemblePrediction" class="text-2xl sm:text-3xl font-bold text-white"></div>
+                                <div id="ensembleChange" class="text-sm mt-1"></div>
+                            </div>
+                            <div id="predConfidenceInfo" class="hidden text-xs text-gray-500 mt-1 mb-3"></div>
+                            <!-- Explanation Panel -->
+                            <div id="predictionExplanation" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
+                                <h4 class="text-white font-semibold mb-3">Why <span id="explDirection" class="font-bold">-</span>?</h4>
+                                <p id="explSummary" class="text-gray-300 text-sm mb-3"></p>
+                                <div id="explDrivers" class="space-y-2 mb-3"></div>
+                                <div id="explRisks" class="mt-3"></div>
+                                <div id="explSupportResistance" class="mt-3 text-xs text-gray-500"></div>
+                            </div>
+                            <!-- Contribution Breakdown -->
+                            <div id="contributionPanel" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
+                                <h4 class="text-white font-semibold mb-3 text-sm">Prediction Breakdown</h4>
+                                <div class="grid grid-cols-4 gap-2 text-center">
+                                    <div>
+                                        <div class="text-xs text-gray-400">Technical</div>
+                                        <div id="contribTechnical" class="text-lg font-bold text-blue-400">-</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-gray-400">Seasonal</div>
+                                        <div id="contribSeasonal" class="text-lg font-bold text-green-400">-</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-gray-400">Fundamental</div>
+                                        <div id="contribFundamental" class="text-lg font-bold text-yellow-400">-</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-gray-400">Sentiment</div>
+                                        <div id="contribSentiment" class="text-lg font-bold text-purple-400">-</div>
+                                    </div>
+                                </div>
+                                <div class="mt-2 h-3 bg-dark-600 rounded-full overflow-hidden flex">
+                                    <div id="contribBarTech" class="h-full bg-blue-500 transition-all"></div>
+                                    <div id="contribBarSeasonal" class="h-full bg-green-500 transition-all"></div>
+                                    <div id="contribBarFund" class="h-full bg-yellow-500 transition-all"></div>
+                                    <div id="contribBarSent" class="h-full bg-purple-500 transition-all"></div>
+                                </div>
+                            </div>
+                            <!-- Regime Badge -->
+                            <div id="regimePanel" class="hidden mt-3">
+                                <span class="text-xs text-gray-500">Market Regime: </span>
+                                <span id="regimeBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium">-</span>
+                            </div>
+                            <!-- Volume Analysis Panel -->
+                            <div id="volumeAnalysisPanel" class="hidden mt-3 bg-dark-700 rounded-lg p-3">
+                                <h4 class="text-white text-sm font-semibold mb-2">Volume Analysis</h4>
+                                <div class="grid grid-cols-3 gap-3 text-center">
+                                    <div>
+                                        <div class="text-xs text-gray-400">Volume</div>
+                                        <div id="volCurrent" class="text-sm font-bold text-white">-</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-gray-400">vs 20d Avg</div>
+                                        <div id="volRatio" class="text-sm font-bold">-</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-gray-400">Trend</div>
+                                        <div id="volTrend" class="text-sm font-bold">-</div>
+                                    </div>
+                                </div>
+                                <div id="volConviction" class="mt-2 text-xs text-center"></div>
+                            </div>
+                            <!-- Market Context: Sentiment + Global -->
+                            <div id="predMarketContext" class="hidden mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div class="bg-dark-700 rounded-lg p-3">
+                                    <h4 class="text-white text-sm font-semibold mb-2">News Sentiment</h4>
+                                    <div id="predSentimentSummary" class="text-xs text-gray-400 mb-2"></div>
+                                    <div id="predSentimentHeadlines" class="max-h-40 overflow-y-auto"></div>
+                                </div>
+                                <div class="bg-dark-700 rounded-lg p-3">
+                                    <h4 class="text-white text-sm font-semibold mb-2">Global Markets</h4>
+                                    <div id="predGlobalTicker" class="flex flex-wrap gap-1.5 mb-2"></div>
+                                    <div id="predGlobalNews" class="max-h-40 overflow-y-auto"></div>
+                                </div>
+                            </div>
+                            <div id="predAdjustmentBadge" class="hidden mt-2 text-xs text-gray-500"></div>
+                            <div id="predictionTable" class="hidden mt-4 overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead id="predictionTableHead">
+                                        <tr class="text-gray-400 border-b border-gray-700">
+                                            <th class="text-left py-2">Date</th>
+                                            <th class="text-right py-2">Prediction</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="predictionTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -242,278 +527,6 @@
                 </div>
             </div>
 
-            <!-- Chart (hidden until stock selected) -->
-            <div id="chartContainer" class="hidden bg-dark-800 rounded-lg overflow-hidden relative h-[300px] sm:h-[450px]">
-                <div id="liveBadge" class="hidden absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-dark-900/80 rounded-full px-2.5 py-1">
-                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="text-[10px] text-green-400 font-medium">LIVE</span>
-                    <span id="liveTimestamp" class="text-[10px] text-gray-500"></span>
-                </div>
-                <div id="priceChart" class="h-full"></div>
-            </div>
-
-            <!-- Indicators Panel (RSI, MACD) -->
-            <div id="indicatorPanels" class="hidden mt-2 space-y-2">
-                <div class="bg-dark-800 rounded-lg overflow-hidden">
-                    <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">RSI (14)</div>
-                    <div id="rsiChart" class="h-[100px] sm:h-[120px]"></div>
-                </div>
-                <div class="bg-dark-800 rounded-lg overflow-hidden">
-                    <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">MACD</div>
-                    <div id="macdChart" class="h-[100px] sm:h-[120px]"></div>
-                </div>
-            </div>
-
-            <!-- Prediction Panel -->
-            <div id="predictionPanel" class="hidden mt-4 bg-dark-800 rounded-lg p-3 sm:p-4">
-                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
-                <div class="flex flex-wrap gap-2 mb-2">
-                    <button class="horizon-btn" data-horizon="15m">15 Min</button>
-                    <button class="horizon-btn" data-horizon="1h">1 Hour</button>
-                    <button class="horizon-btn active" data-horizon="1d">1 Day</button>
-                    <button class="horizon-btn" data-horizon="1w">1 Week</button>
-                    <button class="horizon-btn" data-horizon="1mo">1 Month</button>
-                    <button class="horizon-btn" data-horizon="3mo">3 Months</button>
-                    <button class="horizon-btn" data-horizon="6mo">6 Months</button>
-                    <button class="horizon-btn" data-horizon="1y">1 Year</button>
-                </div>
-                <div class="mb-2"></div>
-                <div id="predictionLoading" class="hidden text-center py-8">
-                    <div class="animate-spin w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div>
-                    <p class="text-gray-400 text-sm mt-2">Generating AI prediction...</p>
-                </div>
-                <div id="predictionResults" class="hidden">
-                    <!-- Primary prediction (single clear answer) -->
-                    <div class="bg-dark-700 rounded-lg p-4 mb-3">
-                        <div class="flex items-center justify-between mb-1">
-                            <span class="text-sm font-medium text-accent-yellow">AI Prediction</span>
-                            <span id="predModelLabel" class="text-[10px] text-gray-500"></span>
-                        </div>
-                        <div id="ensemblePrediction" class="text-2xl sm:text-3xl font-bold text-white"></div>
-                        <div id="ensembleChange" class="text-sm mt-1"></div>
-                    </div>
-                    <!-- Confidence info below primary prediction -->
-                    <div id="predConfidenceInfo" class="hidden text-xs text-gray-500 mt-1 mb-3"></div>
-                    <!-- Explanation Panel -->
-                    <div id="predictionExplanation" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
-                        <h4 class="text-white font-semibold mb-3">Why <span id="explDirection" class="font-bold">-</span>?</h4>
-                        <p id="explSummary" class="text-gray-300 text-sm mb-3"></p>
-                        <div id="explDrivers" class="space-y-2 mb-3"></div>
-                        <div id="explRisks" class="mt-3"></div>
-                        <div id="explSupportResistance" class="mt-3 text-xs text-gray-500"></div>
-                    </div>
-                    <!-- Contribution Breakdown (Step 15) -->
-                    <div id="contributionPanel" class="hidden mt-4 bg-dark-700 rounded-lg p-3 sm:p-4">
-                        <h4 class="text-white font-semibold mb-3 text-sm">Prediction Breakdown</h4>
-                        <div class="grid grid-cols-4 gap-2 text-center">
-                            <div>
-                                <div class="text-xs text-gray-400">Technical</div>
-                                <div id="contribTechnical" class="text-lg font-bold text-blue-400">-</div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-400">Seasonal</div>
-                                <div id="contribSeasonal" class="text-lg font-bold text-green-400">-</div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-400">Fundamental</div>
-                                <div id="contribFundamental" class="text-lg font-bold text-yellow-400">-</div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-400">Sentiment</div>
-                                <div id="contribSentiment" class="text-lg font-bold text-purple-400">-</div>
-                            </div>
-                        </div>
-                        <div class="mt-2 h-3 bg-dark-600 rounded-full overflow-hidden flex">
-                            <div id="contribBarTech" class="h-full bg-blue-500 transition-all"></div>
-                            <div id="contribBarSeasonal" class="h-full bg-green-500 transition-all"></div>
-                            <div id="contribBarFund" class="h-full bg-yellow-500 transition-all"></div>
-                            <div id="contribBarSent" class="h-full bg-purple-500 transition-all"></div>
-                        </div>
-                    </div>
-                    <!-- Regime Badge -->
-                    <div id="regimePanel" class="hidden mt-3">
-                        <span class="text-xs text-gray-500">Market Regime: </span>
-                        <span id="regimeBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium">-</span>
-                    </div>
-                    <!-- Volume Analysis Panel -->
-                    <div id="volumeAnalysisPanel" class="hidden mt-3 bg-dark-700 rounded-lg p-3">
-                        <h4 class="text-white text-sm font-semibold mb-2">Volume Analysis</h4>
-                        <div class="grid grid-cols-3 gap-3 text-center">
-                            <div>
-                                <div class="text-xs text-gray-400">Volume</div>
-                                <div id="volCurrent" class="text-sm font-bold text-white">-</div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-400">vs 20d Avg</div>
-                                <div id="volRatio" class="text-sm font-bold">-</div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-400">Trend</div>
-                                <div id="volTrend" class="text-sm font-bold">-</div>
-                            </div>
-                        </div>
-                        <div id="volConviction" class="mt-2 text-xs text-center"></div>
-                    </div>
-                    <!-- Market Context: Sentiment + Global (same data as signal panel) -->
-                    <div id="predMarketContext" class="hidden mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <!-- Sentiment -->
-                        <div class="bg-dark-700 rounded-lg p-3">
-                            <h4 class="text-white text-sm font-semibold mb-2">News Sentiment</h4>
-                            <div id="predSentimentSummary" class="text-xs text-gray-400 mb-2"></div>
-                            <div id="predSentimentHeadlines" class="max-h-40 overflow-y-auto"></div>
-                        </div>
-                        <!-- Global Markets -->
-                        <div class="bg-dark-700 rounded-lg p-3">
-                            <h4 class="text-white text-sm font-semibold mb-2">Global Markets</h4>
-                            <div id="predGlobalTicker" class="flex flex-wrap gap-1.5 mb-2"></div>
-                            <div id="predGlobalNews" class="max-h-40 overflow-y-auto"></div>
-                        </div>
-                    </div>
-                    <!-- Market Adjustment Badge -->
-                    <div id="predAdjustmentBadge" class="hidden mt-2 text-xs text-gray-500"></div>
-                    <div id="predictionTable" class="hidden mt-4 overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead id="predictionTableHead">
-                                <tr class="text-gray-400 border-b border-gray-700">
-                                    <th class="text-left py-2">Date</th>
-                                    <th class="text-right py-2">Prediction</th>
-                                </tr>
-                            </thead>
-                            <tbody id="predictionTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Fundamentals, Financials & News Panel -->
-            <div id="fundamentalsPanel" class="hidden mt-4"></div>
-
-            <!-- Intraday Signal Panel -->
-            <div id="signalPanel" class="hidden mt-4">
-                <div id="signalLoading" class="hidden bg-dark-800 rounded-lg p-6 sm:p-8 text-center">
-                    <div class="animate-spin w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full mx-auto"></div>
-                    <p class="text-gray-400 text-sm mt-2">Analyzing trends, news & global markets...</p>
-                </div>
-
-                <div id="signalResults" class="hidden">
-                    <div class="bg-dark-800 rounded-lg p-4 sm:p-6 mb-4">
-                        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-                            <h3 class="text-base sm:text-lg font-semibold text-white">15-Min Directional Signal</h3>
-                            <div class="flex items-center gap-2">
-                                <span id="marketBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">-</span>
-                                <span id="signalTimestamp" class="text-xs text-gray-500"></span>
-                            </div>
-                        </div>
-                        <div class="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
-                            <div class="text-center min-w-[100px] sm:min-w-[120px]">
-                                <div id="signalArrow" class="text-5xl sm:text-6xl text-gray-500">&#9654;</div>
-                                <div id="signalDirection" class="text-xl sm:text-2xl font-bold text-gray-400">-</div>
-                                <div id="signalConfidence" class="text-sm text-gray-500 mt-1">-</div>
-                                <div id="signalPrice" class="text-sm text-gray-300 font-medium mt-1"></div>
-                            </div>
-                            <div class="flex-1 w-full space-y-3">
-                                <div>
-                                    <div class="flex justify-between items-center mb-1">
-                                        <span class="text-xs text-gray-400">Technical (65%)</span>
-                                        <span id="technicalScore" class="text-sm font-mono text-gray-400">-</span>
-                                    </div>
-                                    <div id="technicalBar" class="h-2 bg-dark-600 rounded-full"></div>
-                                    <div id="technicalDetails" class="mt-1"></div>
-                                    <div id="sectorStrengthBadge" class="mt-1 hidden"></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between items-center mb-1">
-                                        <span class="text-xs text-gray-400">Sentiment (25%)</span>
-                                        <span id="sentimentScore" class="text-sm font-mono text-gray-400">-</span>
-                                    </div>
-                                    <div id="sentimentBar" class="h-2 bg-dark-600 rounded-full"></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between items-center mb-1">
-                                        <span id="globalWeightLabel" class="text-xs text-gray-400">Global (10%)</span>
-                                        <span id="globalScore" class="text-sm font-mono text-gray-400">-</span>
-                                    </div>
-                                    <div id="globalBar" class="h-2 bg-dark-600 rounded-full"></div>
-                                </div>
-                                <div id="oiScoreSection" class="hidden">
-                                    <div class="flex justify-between items-center mb-1">
-                                        <span id="oiWeightLabel" class="text-xs text-gray-400">OI (10%)</span>
-                                        <span id="oiScore" class="text-sm font-mono text-gray-400">-</span>
-                                    </div>
-                                    <div id="oiBar" class="h-2 bg-dark-600 rounded-full"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Multi-Timeframe Buy/Sell Signals with Entry/Exit -->
-                    <div id="mtfSignalsPanel" class="hidden bg-dark-800 rounded-lg p-4 mb-4">
-                        <div class="flex items-center justify-between mb-3">
-                            <h4 class="text-sm font-semibold text-white">Timeframe Signals & Levels</h4>
-                            <span id="mtfSignalsTimestamp" class="text-[10px] text-gray-500"></span>
-                        </div>
-                        <div id="mtfSignalsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                        <div class="bg-dark-800 rounded-lg overflow-hidden">
-                            <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">15-Min Candles (Intraday)</div>
-                            <div id="intradayChart" class="h-[200px] sm:h-[250px]"></div>
-                        </div>
-                        <div class="bg-dark-800 rounded-lg overflow-hidden">
-                            <div class="px-3 py-1 text-xs text-gray-400 border-b border-gray-700">News Headlines</div>
-                            <div id="newsHeadlines" class="p-3 max-h-48 sm:max-h-64 overflow-y-auto"></div>
-                        </div>
-                    </div>
-                    <!-- Support/Resistance Levels Panel -->
-                    <div id="srLevelsPanel" class="hidden bg-dark-800 rounded-lg p-3 mb-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs text-gray-400 font-medium">Support / Resistance Levels</span>
-                            <span id="srProximityBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-500"></span>
-                        </div>
-                        <div id="srLevelsGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center"></div>
-                    </div>
-                    <!-- Multi-Timeframe Confluence -->
-                    <div id="mtfPanel" class="hidden bg-dark-800 rounded-lg p-3 mb-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs text-gray-400 font-medium">Multi-Timeframe Confluence</span>
-                            <span id="confluenceBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">-</span>
-                        </div>
-                        <div id="mtfGrid" class="grid grid-cols-3 gap-2 text-center"></div>
-                    </div>
-                    <!-- OI Analysis Panel -->
-                    <div id="oiPanel" class="hidden bg-dark-800 rounded-lg p-3 mb-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs text-gray-400 font-medium">Options Chain / Open Interest</span>
-                        </div>
-                        <div id="oiMetrics" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center"></div>
-                    </div>
-                    <div class="bg-dark-800 rounded-lg p-3 mb-4">
-                        <div class="text-xs text-gray-400 mb-2">Global Markets</div>
-                        <div id="globalTicker" class="flex flex-wrap gap-2"></div>
-                        <div class="mt-3 border-t border-gray-700 pt-2">
-                            <div class="text-xs text-gray-400 mb-2">Global News</div>
-                            <div id="globalNewsHeadlines" class="max-h-40 overflow-y-auto"></div>
-                        </div>
-                    </div>
-                    <div class="bg-dark-800 rounded-lg overflow-x-auto">
-                        <div class="px-3 py-2 text-xs text-gray-400 border-b border-gray-700">Signal History</div>
-                        <table class="w-full text-sm min-w-[500px]">
-                            <thead>
-                                <tr class="text-gray-400 border-b border-gray-700">
-                                    <th class="text-left px-3 py-2 text-xs">Time</th>
-                                    <th class="text-left px-3 py-2 text-xs">Direction</th>
-                                    <th class="text-right px-3 py-2 text-xs">Conf</th>
-                                    <th class="text-right px-3 py-2 text-xs">Signal Price</th>
-                                    <th class="text-center px-3 py-2 text-xs">15m</th>
-                                    <th class="text-center px-3 py-2 text-xs">30m</th>
-                                    <th class="text-center px-3 py-2 text-xs">1hr</th>
-                                </tr>
-                            </thead>
-                            <tbody id="signalHistoryTable"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- Watchlist Tab -->
@@ -720,15 +733,15 @@
     <!-- Toast Container -->
     <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 space-y-2"></div>
 
-    <script defer src="/static/js/api.js?v=10"></script>
-    <script defer src="/static/js/chart.js?v=10"></script>
-    <script defer src="/static/js/search.js?v=10"></script>
-    <script defer src="/static/js/predictions.js?v=10"></script>
-    <script defer src="/static/js/watchlist.js?v=10"></script>
-    <script defer src="/static/js/insights.js?v=10"></script>
-    <script defer src="/static/js/fundamentals.js?v=10"></script>
-    <script defer src="/static/js/signals.js?v=10"></script>
-    <script defer src="/static/js/notifications.js?v=10"></script>
-    <script defer src="/static/js/app.js?v=10"></script>
+    <script defer src="/static/js/api.js?v=11"></script>
+    <script defer src="/static/js/chart.js?v=11"></script>
+    <script defer src="/static/js/search.js?v=11"></script>
+    <script defer src="/static/js/predictions.js?v=11"></script>
+    <script defer src="/static/js/watchlist.js?v=11"></script>
+    <script defer src="/static/js/insights.js?v=11"></script>
+    <script defer src="/static/js/fundamentals.js?v=11"></script>
+    <script defer src="/static/js/signals.js?v=11"></script>
+    <script defer src="/static/js/notifications.js?v=11"></script>
+    <script defer src="/static/js/app.js?v=11"></script>
 </body>
 </html>

@@ -88,6 +88,28 @@
     overflow: hidden;
 }
 
+/* Stock detail sub-tabs (Groww-style) */
+.stock-tab {
+    padding: 0.5rem 0.85rem;
+    font-size: 0.8rem;
+    color: #9ca3af;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    cursor: pointer;
+    background: none;
+    white-space: nowrap;
+    border: none;
+    outline: none;
+}
+.stock-tab:hover { color: #e5e7eb; }
+.stock-tab.active {
+    color: #fff;
+    border-bottom-color: #2979ff;
+    font-weight: 600;
+}
+.stock-tab-content { display: none; }
+.stock-tab-content.active { display: block; }
+
 /* ---- Mobile Responsive ---- */
 
 /* Nav tabs: horizontal scroll on small screens */
