@@ -592,14 +592,23 @@ const Signals = {
                 ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-800 text-gray-400">R:R 1:${sig.risk_reward.toFixed(1)}</span>`
                 : '';
 
+            const predPrice = sig.predicted_price != null
+                ? `<div class="text-[10px] text-purple-400 mt-1">AI Price: ₹${sig.predicted_price.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>`
+                : '';
+
+            const modelBadge = sig.weights && sig.weights.prediction > 0
+                ? '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/50 text-purple-300 ml-1">AI+Tech</span>'
+                : '<span class="text-[9px] px-1 py-0.5 rounded bg-gray-800 text-gray-500 ml-1">Tech</span>';
+
             return `<div class="border ${c.border} ${c.bg} rounded-lg p-3">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs text-gray-400 font-medium">${sig.label}</span>
+                    <span class="text-xs text-gray-400 font-medium">${sig.label}${modelBadge}</span>
                     <span class="text-xs font-bold ${c.text}">${icon} ${sig.direction}</span>
                 </div>
                 <div class="text-center mb-2">
                     <div class="text-lg font-bold ${c.text}">${sig.confidence}%</div>
                     <div class="text-[10px] text-gray-500">confidence</div>
+                    ${predPrice}
                 </div>
                 <div class="border-t border-gray-700/50 pt-2 space-y-0.5">
                     ${levelRow('Entry', sig.entry, 'text-white')}

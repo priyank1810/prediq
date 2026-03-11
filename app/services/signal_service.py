@@ -412,10 +412,61 @@ class SignalService:
 
     # ── Multi-Timeframe Signals with Entry/Exit Levels ──
 
+    _TIMEFRAME_HORIZON_MAP = {
+        "intraday": "1d",
+        "short_term": "1w",
+        "long_term": "3mo",
+    }
+
+    def _run_prediction_for_horizon(self, symbol: str, horizon: str,
+                                     intraday_df=None, daily_df=None):
+        """Run XGBoost + Prophet prediction for a given horizon. Returns prediction score (-100 to +100)
+        and predicted price, or (0, None) on failure."""
+        try:
+            from app.services.prediction_service import prediction_service
+            from app.config import PREDICTION_HORIZONS
+
+            cfg = PREDICTION_HORIZONS.get(horizon, {})
+            is_intraday = cfg.get("intraday", False)
+
+            result = prediction_service.predict(symbol, horizon=horizon)
+            ensemble = result.get("ensemble")
+            if not ensemble or not ensemble.get("predictions"):
+                return 0, None, None
+
+            predicted_price = ensemble["predictions"][-1]
+
+            # Determine current price from the data used
+            current_price = 0
+            if is_intraday and intraday_df is not None and not intraday_df.empty:
+                current_price = float(intraday_df["close"].iloc[-1])
+            elif daily_df is not None and not daily_df.empty:
+                current_price = float(daily_df["close"].iloc[-1])
+
+            if current_price <= 0:
+                return 0, predicted_price, None
+
+            change_pct = ((predicted_price - current_price) / current_price) * 100
+
+            # Scale change_pct to a -100 to +100 score
+            # Normalize based on horizon: 1% move on 1d is big, 5% on 3mo is moderate
+            horizon_days = cfg.get("days", 1) if not is_intraday else 1
+            # Expected daily vol ~1.5%, scale by sqrt(days) for horizon normalization
+            import math
+            expected_move = 1.5 * math.sqrt(max(1, horizon_days))
+            pred_score = (change_pct / expected_move) * 50  # 1 expected_move = ±50 score
+            pred_score = max(-100, min(100, round(pred_score, 2)))
+
+            confidence_score = ensemble.get("confidence_score") or result.get("xgboost", {}).get("confidence_score")
+
+            return pred_score, predicted_price, confidence_score
+        except Exception as e:
+            logger.warning(f"Prediction for {symbol} horizon={horizon} failed: {e}")
+            return 0, None, None
+
     def get_multi_timeframe_signals(self, symbol: str) -> dict:
         """Compute separate buy/sell signals for Intraday, Short-term (2 weeks),
-        and Long-term horizons with entry, target, and stop-loss levels."""
-        from app.services.data_fetcher import data_fetcher
+        and Long-term horizons using ML prediction models + technical analysis."""
 
         intraday_df = None
         daily_df = None
@@ -423,8 +474,10 @@ class SignalService:
         sent_result = {"score": 0, "headline_count": 0}
         global_result = {"score": 0, "news_magnitude": 0}
         fund_result = {"score": 0, "classification": "balanced", "details": {}}
+        pred_results = {}  # horizon -> (score, predicted_price, confidence)
 
-        with ThreadPoolExecutor(max_workers=7) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Data fetches
             f_intraday = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "15m")
             f_daily = executor.submit(data_fetcher.get_historical_data, symbol, period="6mo")
             f_weekly = executor.submit(data_fetcher.get_historical_data, symbol, period="2y")
@@ -432,6 +485,7 @@ class SignalService:
             f_global = executor.submit(global_market_service.get_global_signal)
             f_fund = executor.submit(self._fetch_fundamental_score, symbol)
 
+            # Wait for data first (predictions need it)
             try:
                 intraday_df = f_intraday.result(timeout=15)
             except Exception as e:
@@ -457,6 +511,22 @@ class SignalService:
             except Exception:
                 pass
 
+        # Run ML predictions for each horizon (in parallel)
+        with ThreadPoolExecutor(max_workers=3) as pred_executor:
+            pred_futures = {}
+            for tf, horizon in self._TIMEFRAME_HORIZON_MAP.items():
+                pred_futures[tf] = pred_executor.submit(
+                    self._run_prediction_for_horizon, symbol, horizon,
+                    intraday_df=intraday_df, daily_df=daily_df,
+                )
+            for tf, future in pred_futures.items():
+                try:
+                    score, price, conf = future.result(timeout=90)
+                    pred_results[tf] = {"score": score, "predicted_price": price, "confidence": conf}
+                except Exception as e:
+                    logger.warning(f"MTF prediction for {tf} failed: {e}")
+                    pred_results[tf] = {"score": 0, "predicted_price": None, "confidence": None}
+
         sentiment_score = sent_result.get("score", 0)
         global_score = global_result.get("score", 0)
         news_magnitude = global_result.get("news_magnitude", 0)
@@ -479,6 +549,7 @@ class SignalService:
             news_magnitude=news_magnitude,
             timeframe="intraday",
             symbol=symbol,
+            prediction=pred_results.get("intraday", {}),
         )
 
         # ── 2. SHORT-TERM (2 WEEKS) SIGNAL ──
@@ -492,6 +563,7 @@ class SignalService:
             news_magnitude=news_magnitude,
             timeframe="short_term",
             symbol=symbol,
+            prediction=pred_results.get("short_term", {}),
         )
 
         # ── 3. LONG-TERM SIGNAL ──
@@ -505,6 +577,7 @@ class SignalService:
             news_magnitude=news_magnitude,
             timeframe="long_term",
             symbol=symbol,
+            prediction=pred_results.get("long_term", {}),
         )
 
         return {
@@ -519,9 +592,10 @@ class SignalService:
 
     def _compute_timeframe_signal(self, label, df, current_price, sentiment_score,
                                    global_score, fundamental_score, news_magnitude,
-                                   timeframe, symbol):
-        """Compute signal + entry/exit for one timeframe."""
-        import ta as ta_lib
+                                   timeframe, symbol, prediction=None):
+        """Compute signal + entry/exit for one timeframe using ML predictions + technical analysis."""
+        if prediction is None:
+            prediction = {}
 
         if df is None or df.empty or len(df) < 20:
             return {
@@ -541,21 +615,35 @@ class SignalService:
         tech_score = tech_result["score"]
         details = tech_result.get("details", {})
 
-        # Timeframe-specific weights
-        if timeframe == "intraday":
-            w_tech, w_sent, w_glob, w_fund = 0.60, 0.15, 0.15, 0.10
-        elif timeframe == "short_term":
-            w_tech, w_sent, w_glob, w_fund = 0.45, 0.20, 0.15, 0.20
-        else:  # long_term
-            w_tech, w_sent, w_glob, w_fund = 0.30, 0.15, 0.15, 0.40
+        # ML prediction score (-100 to +100)
+        pred_score = prediction.get("score", 0)
+        predicted_price = prediction.get("predicted_price")
 
-        # Crisis override
+        # Timeframe-specific weights — ML model gets major weight
+        if timeframe == "intraday":
+            w_pred, w_tech, w_sent, w_glob, w_fund = 0.35, 0.30, 0.15, 0.10, 0.10
+        elif timeframe == "short_term":
+            w_pred, w_tech, w_sent, w_glob, w_fund = 0.35, 0.20, 0.15, 0.10, 0.20
+        else:  # long_term
+            w_pred, w_tech, w_sent, w_glob, w_fund = 0.30, 0.15, 0.10, 0.10, 0.35
+
+        # If prediction failed, redistribute its weight to technical
+        if pred_score == 0 and predicted_price is None:
+            w_tech += w_pred
+            w_pred = 0
+
+        # Crisis override — global news dominates
         if news_magnitude >= 80:
-            w_tech, w_sent, w_glob, w_fund = 0.20, 0.20, 0.50, 0.10
+            w_pred, w_tech, w_sent, w_glob, w_fund = (w_pred * 0.4), 0.10, 0.15, 0.50, 0.05
+            remaining = 1.0 - (w_pred + 0.10 + 0.15 + 0.50 + 0.05)
+            w_tech += remaining
         elif news_magnitude >= 60:
-            w_tech, w_sent, w_glob, w_fund = 0.30, 0.20, 0.35, 0.15
+            w_pred, w_tech, w_sent, w_glob, w_fund = (w_pred * 0.6), 0.15, 0.15, 0.35, 0.10
+            remaining = 1.0 - (w_pred + 0.15 + 0.15 + 0.35 + 0.10)
+            w_tech += remaining
 
         composite = (
+            w_pred * pred_score +
             w_tech * tech_score +
             w_sent * sentiment_score +
             w_glob * global_score +
@@ -572,8 +660,10 @@ class SignalService:
         confidence = min(100, round(abs(composite), 2))
 
         # ── Compute Entry / Target / Stop Loss ──
+        # If we have a predicted price, use it to refine the target
         entry, target, stop_loss, risk_reward, reasoning = self._compute_entry_exit(
-            df, current_price, direction, timeframe, details
+            df, current_price, direction, timeframe, details,
+            predicted_price=predicted_price,
         )
 
         return {
@@ -587,21 +677,26 @@ class SignalService:
             "risk_reward": risk_reward,
             "reasoning": reasoning,
             "weights": {
+                "prediction": round(w_pred, 2),
                 "technical": round(w_tech, 2),
                 "sentiment": round(w_sent, 2),
                 "global": round(w_glob, 2),
                 "fundamental": round(w_fund, 2),
             },
             "components": {
+                "prediction": round(pred_score, 2),
                 "technical": round(tech_score, 2),
                 "sentiment": round(sentiment_score, 2),
                 "global": round(global_score, 2),
                 "fundamental": round(fundamental_score, 2),
             },
+            "predicted_price": round(predicted_price, 2) if predicted_price else None,
         }
 
-    def _compute_entry_exit(self, df, current_price, direction, timeframe, details):
-        """Compute entry, target, stop-loss using S/R, ATR, and Fibonacci levels."""
+    def _compute_entry_exit(self, df, current_price, direction, timeframe, details,
+                            predicted_price=None):
+        """Compute entry, target, stop-loss using S/R, ATR, Fibonacci levels,
+        and ML predicted price when available."""
         import ta as ta_lib
 
         if current_price <= 0:
@@ -663,19 +758,30 @@ class SignalService:
             stop_loss = entry - (atr * atr_multiplier_sl)
             stop_loss = max(stop_loss, swing_low - atr * 0.5)
 
-            # Target: nearest resistance above current price
-            resistance_candidates = sorted([
-                lvl for lvl in [fib_236, swing_high]
-                if lvl > current_price
-            ])
-            target = resistance_candidates[0] if resistance_candidates else current_price + atr * atr_multiplier_target
+            # Target: use ML predicted price if available and bullish, else Fib/swing
+            if predicted_price and predicted_price > current_price * 1.005:
+                # Blend predicted price with technical target
+                resistance_candidates = sorted([
+                    lvl for lvl in [fib_236, swing_high]
+                    if lvl > current_price
+                ])
+                tech_target = resistance_candidates[0] if resistance_candidates else current_price + atr * atr_multiplier_target
+                # Weighted average: 60% model, 40% technical
+                target = predicted_price * 0.6 + tech_target * 0.4
+                reasoning_parts.append(f"AI target ₹{predicted_price:.2f}")
+            else:
+                resistance_candidates = sorted([
+                    lvl for lvl in [fib_236, swing_high]
+                    if lvl > current_price
+                ])
+                target = resistance_candidates[0] if resistance_candidates else current_price + atr * atr_multiplier_target
             # Ensure minimum target distance
             if target < current_price * 1.005:
                 target = current_price + atr * atr_multiplier_target
 
-            reasoning_parts.append(f"Buy near support ₹{entry:.2f}")
-            reasoning_parts.append(f"Target swing high/Fib ₹{target:.2f}")
-            reasoning_parts.append(f"Stop below ₹{stop_loss:.2f} (ATR-based)")
+            reasoning_parts.append(f"Buy near ₹{entry:.2f}")
+            reasoning_parts.append(f"Target ₹{target:.2f}")
+            reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
 
         elif direction == "BEARISH":
             # Entry: nearest resistance above current price
@@ -691,18 +797,27 @@ class SignalService:
             stop_loss = entry + (atr * atr_multiplier_sl)
             stop_loss = min(stop_loss, swing_high + atr * 0.5)
 
-            # Target: nearest support below current price
-            support_candidates = sorted([
-                lvl for lvl in [fib_618, fib_500, swing_low]
-                if lvl < current_price
-            ], reverse=True)
-            target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
+            # Target: use ML predicted price if available and bearish, else Fib/swing
+            if predicted_price and predicted_price < current_price * 0.995:
+                support_candidates = sorted([
+                    lvl for lvl in [fib_618, fib_500, swing_low]
+                    if lvl < current_price
+                ], reverse=True)
+                tech_target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
+                target = predicted_price * 0.6 + tech_target * 0.4
+                reasoning_parts.append(f"AI target ₹{predicted_price:.2f}")
+            else:
+                support_candidates = sorted([
+                    lvl for lvl in [fib_618, fib_500, swing_low]
+                    if lvl < current_price
+                ], reverse=True)
+                target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
             if target > current_price * 0.995:
                 target = current_price - atr * atr_multiplier_target
 
-            reasoning_parts.append(f"Sell near resistance ₹{entry:.2f}")
-            reasoning_parts.append(f"Target support/Fib ₹{target:.2f}")
-            reasoning_parts.append(f"Stop above ₹{stop_loss:.2f} (ATR-based)")
+            reasoning_parts.append(f"Sell near ₹{entry:.2f}")
+            reasoning_parts.append(f"Target ₹{target:.2f}")
+            reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
 
         else:  # NEUTRAL
             entry = round(current_price, 2)
@@ -719,7 +834,7 @@ class SignalService:
         target = round(target, 2)
         stop_loss = round(stop_loss, 2)
 
-        reasoning_parts.append(f"Risk:Reward = 1:{risk_reward:.1f}")
+        reasoning_parts.append(f"R:R 1:{risk_reward:.1f}")
         reasoning = " | ".join(reasoning_parts)
 
         return entry, target, stop_loss, risk_reward, reasoning
