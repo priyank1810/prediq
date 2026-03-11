@@ -82,6 +82,10 @@ const Watchlist = {
         if (!force && this._items.length > 0 && Date.now() - this._lastLoadTime < 15000) {
             return;
         }
+        // Show shimmer while loading
+        if (this._items.length === 0) {
+            Shimmer.show('watchlistCards', 'grid', 8);
+        }
         try {
             const [items, alerts] = await Promise.all([
                 API.getWatchlistOverview(),

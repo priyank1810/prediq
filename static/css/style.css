@@ -143,18 +143,59 @@
 
 /* ---- Mobile Responsive ---- */
 
-/* Nav tabs: horizontal scroll on small screens */
+/* Ensure minimum touch target size (44px) for interactive elements */
 @media (max-width: 639px) {
     .nav-tab {
-        padding: 0.5rem 0.65rem;
+        padding: 0.6rem 0.5rem;
         font-size: 0.75rem;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
     }
     .period-btn, .chart-type-btn, .horizon-btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.65rem;
+        padding: 0.35rem 0.6rem;
+        font-size: 0.7rem;
+        min-height: 32px;
+    }
+    .stock-tab {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.7rem;
+        min-height: 36px;
     }
     .toast {
         max-width: calc(100vw - 2rem);
+        font-size: 0.75rem;
+    }
+
+    /* Prevent page-level horizontal overflow */
+    body {
+        overflow-x: hidden;
+    }
+
+    /* Better tap targets for small buttons */
+    button, [onclick], a {
+        min-height: 32px;
+    }
+
+    /* Readable minimum font size */
+    .text-\[10px\] {
+        font-size: 11px;
+    }
+    .text-\[9px\] {
+        font-size: 10px;
+    }
+
+    /* Full-width notification dropdown */
+    #notificationDropdown {
+        width: calc(100vw - 2rem) !important;
+        right: -0.5rem;
+    }
+}
+
+/* Tablet medium breakpoint */
+@media (min-width: 640px) and (max-width: 1023px) {
+    .stock-tab {
+        padding: 0.5rem 0.7rem;
         font-size: 0.75rem;
     }
 }
