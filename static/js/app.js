@@ -15,9 +15,6 @@ const App = {
         // Overview tab indicator charts
         this.rsiChart = new IndicatorChart('rsiChartOverview');
         this.macdChart = new IndicatorChart('macdChartOverview');
-        // Technical tab indicator charts
-        this.rsiChartTech = new IndicatorChart('rsiChart');
-        this.macdChartTech = new IndicatorChart('macdChart');
 
         Search.init();
         Predictions.init();
@@ -138,10 +135,6 @@ const App = {
                 // Lazy-load content on tab switch
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
                     Predictions.loadPredictions(this.currentSymbol);
-                }
-                // Re-render Technical tab charts (LightweightCharts needs visible container)
-                if (tab.dataset.stockTab === 'technical' && this.currentSymbol) {
-                    this._renderTechnicalTabCharts();
                 }
             });
         });
@@ -515,37 +508,12 @@ const App = {
                 }
             }
 
-            // Technical tab RSI/MACD (render only if tab is visible)
-            const techTab = document.getElementById('stockTab-technical');
-            if (techTab && techTab.classList.contains('active')) {
-                this._renderTechnicalTabCharts();
-            }
-
             // Re-fit chart to selected period after overlays are added
             if (this.chart && this.chart.chart) {
                 this.chart.chart.timeScale().fitContent();
             }
         } catch (e) {
             console.error('Failed to load indicators:', e);
-        }
-    },
-
-    _renderTechnicalTabCharts() {
-        const data = this._lastIndicatorData;
-        if (!data) return;
-
-        if (data.rsi) {
-            this.rsiChartTech.init();
-            const rsiData = data.rsi.dates.map((d, i) => ({ time: d, value: data.rsi.values[i] }));
-            this.rsiChartTech.setRSIData(rsiData);
-        }
-
-        if (data.macd_line) {
-            this.macdChartTech.init();
-            const macdLine = data.macd_line.dates.map((d, i) => ({ time: d, value: data.macd_line.values[i] }));
-            const signalLine = data.macd_signal.dates.map((d, i) => ({ time: d, value: data.macd_signal.values[i] }));
-            const histogram = data.macd_histogram.dates.map((d, i) => ({ time: d, value: data.macd_histogram.values[i] }));
-            this.macdChartTech.setMACDData(macdLine, signalLine, histogram);
         }
     },
 
