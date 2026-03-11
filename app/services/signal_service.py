@@ -458,7 +458,10 @@ class SignalService:
             change_pct = ((predicted_price - current_price) / current_price) * 100
 
             horizon_days = cfg.get("days", 1) if not is_intraday else 1
-            expected_move = 1.5 * math.sqrt(max(1, horizon_days))
+            # Use sub-linear scaling: sqrt(days) grows too fast for long horizons,
+            # dampening scores excessively. Cap effective days and use lower base vol.
+            effective_days = min(horizon_days, 30) + max(0, horizon_days - 30) * 0.3
+            expected_move = 1.5 * math.sqrt(max(1, effective_days))
             pred_score = (change_pct / expected_move) * 50
             pred_score = max(-100, min(100, round(pred_score, 2)))
 
@@ -594,9 +597,9 @@ class SignalService:
             prediction=pred_results.get("intraday", {}),
         )
 
-        # ── 2. SHORT-TERM (2 WEEKS) SIGNAL ──
+        # ── 2. SHORT-TERM (1 Week) SIGNAL ──
         short_term_signal = self._compute_timeframe_signal(
-            label="Short Term (2 Weeks)",
+            label="Short Term (1 Week)",
             df=daily_df,
             current_price=current_price,
             sentiment_score=sentiment_score,
@@ -608,9 +611,9 @@ class SignalService:
             prediction=pred_results.get("short_term", {}),
         )
 
-        # ── 3. LONG-TERM SIGNAL ──
+        # ── 3. LONG-TERM SIGNAL (3 Months) ──
         long_term_signal = self._compute_timeframe_signal(
-            label="Long Term",
+            label="Long Term (3 Months)",
             df=weekly_df,
             current_price=current_price,
             sentiment_score=sentiment_score,
@@ -759,9 +762,15 @@ class SignalService:
 
         composite = max(-100, min(100, round(composite, 2)))
 
-        if composite > SIGNAL_DIRECTION_THRESHOLD:
+        # Timeframe-specific direction thresholds:
+        # Long-term composites are naturally smaller (dampened prediction scores +
+        # small fundamental scores), so use a lower threshold to avoid always-neutral.
+        dir_thresholds = {"intraday": 10, "short_term": 8, "long_term": 5}
+        dir_threshold = dir_thresholds.get(timeframe, SIGNAL_DIRECTION_THRESHOLD)
+
+        if composite > dir_threshold:
             direction = "BULLISH"
-        elif composite < -SIGNAL_DIRECTION_THRESHOLD:
+        elif composite < -dir_threshold:
             direction = "BEARISH"
         else:
             direction = "NEUTRAL"
