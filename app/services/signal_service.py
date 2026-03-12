@@ -916,6 +916,9 @@ class SignalService:
             else:
                 stop_loss = atr_stop
             stop_loss = max(stop_loss, swing_low - atr * 0.5)
+            # Floor: never more than 4% below entry
+            min_sl = entry * 0.96
+            stop_loss = max(stop_loss, min_sl)
 
             # Target: blend AI predicted price with technical target
             resistance_candidates = sorted([
@@ -942,22 +945,28 @@ class SignalService:
             reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
 
         elif direction == "BEARISH":
-            # Entry: nearest resistance above current price
+            # Entry: at or just below current price (sell/short now)
             resistance_candidates = sorted([
-                lvl for lvl in [fib_382, fib_236, swing_high, ema21, vwap]
-                if lvl > current_price
+                lvl for lvl in [fib_382, fib_236, ema21, vwap]
+                if current_price * 0.99 <= lvl <= current_price * 1.01
             ])
-            entry = resistance_candidates[0] if resistance_candidates else current_price * 1.005
-            if entry > current_price * 1.03:
-                entry = current_price * 1.005
+            entry = resistance_candidates[0] if resistance_candidates else current_price * 1.002
+            # Clamp entry close to current price
+            entry = min(entry, current_price * 1.005)
+            entry = max(entry, current_price * 0.995)
 
-            # Stop loss: use confidence_upper from Prophet if available
+            # Stop loss: above entry by ATR (risk on the upside)
             atr_stop = entry + (atr * atr_multiplier_sl)
             if confidence_upper is not None and confidence_upper > entry:
+                # Blend Prophet upper bound with ATR stop, but cap it
                 stop_loss = confidence_upper * 0.4 + atr_stop * 0.6
             else:
                 stop_loss = atr_stop
-            stop_loss = min(stop_loss, swing_high + atr * 0.5)
+            # Cap stop loss: never more than swing_high + small buffer
+            stop_loss = min(stop_loss, swing_high + atr * 0.3)
+            # Also cap relative to entry — max 3-4% above for sanity
+            max_sl = entry * 1.04
+            stop_loss = min(stop_loss, max_sl)
 
             # Target: blend AI predicted price with technical target
             support_candidates = sorted([
