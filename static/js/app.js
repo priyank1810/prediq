@@ -17,11 +17,9 @@ const App = {
         this.macdChart = new IndicatorChart('macdChartOverview');
 
         Search.init();
-        Predictions.init();
-        Watchlist.init();
-        Insights.init();
-        Signals.init();
         Notifications.init();
+        // Signals must init early for WebSocket handlers
+        await Lazy.loadAndInit('signals');
         this.setupNavigation();
         this.setupChartControls();
         this.setupStockTabs();
@@ -70,8 +68,12 @@ const App = {
                 tab.classList.add('active');
                 document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
 
-                if (tab.dataset.tab === 'watchlist') Watchlist.load();
-                if (tab.dataset.tab === 'insights') Insights.load();
+                if (tab.dataset.tab === 'watchlist') {
+                    Lazy.loadAndInit('watchlist').then(() => Watchlist.load());
+                }
+                if (tab.dataset.tab === 'insights') {
+                    Lazy.loadAndInit('insights').then(() => Insights.load());
+                }
             });
         });
     },
@@ -134,7 +136,7 @@ const App = {
 
                 // Lazy-load content on tab switch
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
-                    Predictions.loadPredictions(this.currentSymbol);
+                    Lazy.loadAndInit('predictions').then(() => Predictions.loadPredictions(this.currentSymbol));
                 }
             });
         });
@@ -418,7 +420,7 @@ const App = {
             this.loadIndicators(symbol);
 
             // Auto-load fundamentals, news & 15-min signal
-            Fundamentals.load(symbol);
+            Lazy.load('fundamentals').then(() => Fundamentals.load(symbol));
             Signals.loadSignal(symbol);
 
         } catch (e) {
@@ -580,7 +582,7 @@ const App = {
         }
 
         // Update watchlist cards in-place
-        Watchlist.updateCard(data);
+        if (Lazy.isLoaded('watchlist')) Watchlist.updateCard(data);
     },
 
     updateOverviewCard(data) {
@@ -762,7 +764,7 @@ const App = {
 
         // Refresh watchlist alerts if tab is visible
         const tab = document.getElementById('tab-watchlist');
-        if (tab && !tab.classList.contains('hidden')) {
+        if (tab && !tab.classList.contains('hidden') && Lazy.isLoaded('watchlist')) {
             Watchlist.load(true);
         }
     },
