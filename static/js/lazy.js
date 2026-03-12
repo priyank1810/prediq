@@ -12,7 +12,7 @@ const Lazy = {
         watchlist:    { src: '/static/js/watchlist.js?v=12' },
         insights:     { src: '/static/js/insights.js?v=11' },
         fundamentals: { src: '/static/js/fundamentals.js?v=12' },
-        signals:      { src: '/static/js/signals.js?v=12' },
+        signals:      { src: '/static/js/signals.js?v=13' },
     },
 
     /**

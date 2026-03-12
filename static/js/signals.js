@@ -636,9 +636,14 @@ const Signals = {
                     ${predPrice}
                 </div>
                 <div class="border-t border-gray-700/50 pt-2 space-y-0.5">
-                    ${levelRow('Entry', sig.entry, 'text-white')}
-                    ${levelRow('Target', sig.target, 'text-green-400')}
-                    ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}
+                    ${sig.direction === 'BEARISH'
+                        ? `${levelRow('Exit', sig.entry, 'text-white')}
+                           ${levelRow('Downside', sig.target, 'text-red-400')}
+                           ${levelRow('Stop Loss', sig.stop_loss, 'text-yellow-400')}`
+                        : `${levelRow('Entry', sig.entry, 'text-white')}
+                           ${levelRow('Target', sig.target, 'text-green-400')}
+                           ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}`
+                    }
                 </div>
                 <div class="flex flex-wrap items-center gap-1 mt-2">
                     ${rrBadge}

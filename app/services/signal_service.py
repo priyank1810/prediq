@@ -945,30 +945,22 @@ class SignalService:
             reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
 
         elif direction == "BEARISH":
-            # Entry: at or just below current price (sell/short now)
-            resistance_candidates = sorted([
-                lvl for lvl in [fib_382, fib_236, ema21, vwap]
-                if current_price * 0.99 <= lvl <= current_price * 1.01
-            ])
-            entry = resistance_candidates[0] if resistance_candidates else current_price * 1.002
-            # Clamp entry close to current price
-            entry = min(entry, current_price * 1.005)
-            entry = max(entry, current_price * 0.995)
+            # Bearish for long-only investors: "exit your position"
+            # Entry = current price (where to sell/exit)
+            entry = current_price
 
-            # Stop loss: above entry by ATR (risk on the upside)
-            atr_stop = entry + (atr * atr_multiplier_sl)
-            if confidence_upper is not None and confidence_upper > entry:
-                # Blend Prophet upper bound with ATR stop, but cap it
-                stop_loss = confidence_upper * 0.4 + atr_stop * 0.6
+            # Stop loss: BELOW current price — if price drops to here, exit to limit losses
+            atr_stop = entry - (atr * atr_multiplier_sl)
+            if confidence_lower is not None and confidence_lower < entry:
+                stop_loss = confidence_lower * 0.4 + atr_stop * 0.6
             else:
                 stop_loss = atr_stop
-            # Cap stop loss: never more than swing_high + small buffer
-            stop_loss = min(stop_loss, swing_high + atr * 0.3)
-            # Also cap relative to entry — max 3-4% above for sanity
-            max_sl = entry * 1.04
-            stop_loss = min(stop_loss, max_sl)
+            stop_loss = max(stop_loss, swing_low - atr * 0.5)
+            # Floor: never more than 4% below entry
+            min_sl = entry * 0.96
+            stop_loss = max(stop_loss, min_sl)
 
-            # Target: blend AI predicted price with technical target
+            # Target: expected downside level (how far price may fall)
             support_candidates = sorted([
                 lvl for lvl in [fib_618, fib_500, swing_low]
                 if lvl < current_price
@@ -977,7 +969,6 @@ class SignalService:
 
             if predicted_price and predicted_price < current_price * 0.995:
                 target = predicted_price * ai_weight + tech_target * tech_weight
-                # Don't go below the lower confidence interval
                 if confidence_lower is not None and confidence_lower < current_price:
                     target = max(target, confidence_lower)
                 reasoning_parts.append(f"AI ₹{predicted_price:.2f}")
@@ -987,8 +978,8 @@ class SignalService:
             if target > current_price * 0.995:
                 target = current_price - atr * atr_multiplier_target
 
-            reasoning_parts.append(f"Sell near ₹{entry:.2f}")
-            reasoning_parts.append(f"Target ₹{target:.2f}")
+            reasoning_parts.append(f"Exit near ₹{entry:.2f}")
+            reasoning_parts.append(f"Downside ₹{target:.2f}")
             reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
 
         else:  # NEUTRAL
