@@ -250,18 +250,26 @@ const App = {
             container.innerHTML = '<div class="col-span-2 text-center py-4 text-gray-600 text-sm">No data</div>';
             return;
         }
+        const isStocks = containerId === 'stocksGrid';
         container.innerHTML = quotes.map(q => {
             const up = (q.pct_change || 0) >= 0;
             const textColor = up ? 'text-green-400' : 'text-red-400';
             const sign = up ? '+' : '';
             const arrow = up ? '&#9650;' : '&#9660;';
+            const inWl = isStocks && typeof Watchlist !== 'undefined' && Watchlist.isInWatchlist(q.symbol);
+            const wlBtn = isStocks ? `<button class="watchlist-toggle ml-1 text-sm leading-none ${inWl ? 'text-yellow-400' : 'text-gray-500'} hover:text-yellow-300 transition"
+                title="${inWl ? 'Remove from watchlist' : 'Add to watchlist'}"
+                onclick="event.stopPropagation(); Watchlist.toggleFromOverview('${q.symbol}', this)">${inWl ? '&#10003;' : '+'}</button>` : '';
             return `
                 <div class="bg-dark-800 rounded-lg px-3 py-2 cursor-pointer hover:bg-dark-700 transition"
                      data-live-symbol="${q.symbol}"
                      onclick="Search.select('${q.symbol}', '${q.symbol}')">
                     <div class="flex items-center justify-between">
                         <span class="text-xs text-white font-medium truncate">${q.symbol}</span>
-                        <span class="text-xs ${textColor}" data-live-arrow>${arrow}</span>
+                        <div class="flex items-center">
+                            ${wlBtn}
+                            <span class="text-xs ${textColor} ml-1" data-live-arrow>${arrow}</span>
+                        </div>
                     </div>
                     <div class="flex items-center justify-between mt-1">
                         <span class="text-xs text-gray-300" data-live-price>${q.ltp ? '₹' + q.ltp.toLocaleString('en-IN', {maximumFractionDigits: 0}) : '-'}</span>
@@ -339,11 +347,15 @@ const App = {
             const arrow = pct >= 0 ? '&#9650;' : '&#9660;';
             const rank = i + 1;
             const ltp = s.ltp ? '\u20b9' + s.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '-';
+            const inWl = typeof Watchlist !== 'undefined' && Watchlist.isInWatchlist(s.symbol);
             return `
                 <div class="flex items-center gap-2 bg-dark-800 rounded-lg px-3 py-2 cursor-pointer hover:bg-dark-700 border border-transparent ${bgHover} transition"
                      onclick="Search.select('${s.symbol}', '${s.symbol}')">
                     <span class="text-[10px] text-gray-600 w-4 text-right">${rank}</span>
                     <span class="text-xs text-white font-medium flex-1 truncate">${s.symbol}</span>
+                    <button class="watchlist-toggle text-sm leading-none ${inWl ? 'text-yellow-400' : 'text-gray-500'} hover:text-yellow-300 transition"
+                        title="${inWl ? 'Remove from watchlist' : 'Add to watchlist'}"
+                        onclick="event.stopPropagation(); Watchlist.toggleFromOverview('${s.symbol}', this)">${inWl ? '&#10003;' : '+'}</button>
                     <span class="text-xs text-gray-400">${ltp}</span>
                     <span class="text-xs ${color} min-w-[60px] text-right">${arrow} ${sign}${pct.toFixed(2)}%</span>
                 </div>

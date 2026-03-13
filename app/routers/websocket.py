@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.data_fetcher import data_fetcher
 from app.services.alert_service import alert_service
@@ -8,6 +9,13 @@ from app.utils.helpers import is_market_open
 from app.config import PRICE_STREAM_INTERVAL, ALERT_CHECK_INTERVAL
 
 router = APIRouter()
+
+# WebSocket limits
+WS_MAX_CONNECTIONS = 50          # Total concurrent connections
+WS_MAX_PER_IP = 5               # Max connections per IP
+WS_MAX_SUBSCRIPTIONS = 50       # Max symbols per client
+WS_MSG_RATE_LIMIT = 10          # Max messages per window
+WS_MSG_RATE_WINDOW = 10         # Rate window in seconds
 
 
 def _get_correctness_threshold(symbol: str) -> float:
@@ -21,19 +29,58 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
         self.subscriptions: dict[int, set[str]] = {}
+        self._ip_counts: dict[str, int] = {}
+        self._msg_timestamps: dict[int, list[float]] = {}
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket) -> bool:
+        """Accept connection if within limits. Returns False if rejected."""
+        client_ip = websocket.client.host if websocket.client else "unknown"
+
+        if len(self.active_connections) >= WS_MAX_CONNECTIONS:
+            await websocket.close(code=1013, reason="Server at capacity")
+            return False
+
+        if self._ip_counts.get(client_ip, 0) >= WS_MAX_PER_IP:
+            await websocket.close(code=1008, reason="Too many connections from this IP")
+            return False
+
         await websocket.accept()
         self.active_connections.append(websocket)
         self.subscriptions[id(websocket)] = set()
+        self._ip_counts[client_ip] = self._ip_counts.get(client_ip, 0) + 1
+        self._msg_timestamps[id(websocket)] = []
+        return True
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
         self.subscriptions.pop(id(websocket), None)
+        self._msg_timestamps.pop(id(websocket), None)
+        client_ip = websocket.client.host if websocket.client else "unknown"
+        self._ip_counts[client_ip] = max(0, self._ip_counts.get(client_ip, 0) - 1)
+        if self._ip_counts.get(client_ip) == 0:
+            self._ip_counts.pop(client_ip, None)
+
+    def check_rate_limit(self, websocket: WebSocket) -> bool:
+        """Returns True if message is allowed, False if rate-limited."""
+        ws_id = id(websocket)
+        now = time.monotonic()
+        timestamps = self._msg_timestamps.get(ws_id, [])
+        # Prune old timestamps
+        timestamps = [t for t in timestamps if now - t < WS_MSG_RATE_WINDOW]
+        if len(timestamps) >= WS_MSG_RATE_LIMIT:
+            self._msg_timestamps[ws_id] = timestamps
+            return False
+        timestamps.append(now)
+        self._msg_timestamps[ws_id] = timestamps
+        return True
 
     def subscribe(self, websocket: WebSocket, symbols: list[str]):
         existing = self.subscriptions.get(id(websocket), set())
-        existing.update(s.upper() for s in symbols)
+        for s in symbols:
+            if len(existing) >= WS_MAX_SUBSCRIPTIONS:
+                break
+            existing.add(s.upper())
         self.subscriptions[id(websocket)] = existing
 
     def get_all_subscribed_symbols(self) -> set[str]:
@@ -99,14 +146,23 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/prices")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+    accepted = await manager.connect(websocket)
+    if not accepted:
+        return
     try:
         while True:
             data = await websocket.receive_text()
+            if not manager.check_rate_limit(websocket):
+                await websocket.send_json({"type": "error", "detail": "Rate limit exceeded"})
+                continue
             msg = json.loads(data)
             if "subscribe" in msg:
-                manager.subscribe(websocket, msg["subscribe"])
+                symbols = msg["subscribe"]
+                if isinstance(symbols, list):
+                    manager.subscribe(websocket, symbols[:WS_MAX_SUBSCRIPTIONS])
     except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
         manager.disconnect(websocket)
 
 

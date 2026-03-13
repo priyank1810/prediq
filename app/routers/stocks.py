@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.services.data_fetcher import data_fetcher
 from app.services.market_movers import market_movers_service
-from app.utils.helpers import market_status
+from app.utils.helpers import market_status, validate_symbol
 
 router = APIRouter()
 
@@ -10,9 +10,20 @@ router = APIRouter()
 class BulkQuoteRequest(BaseModel):
     symbols: list[str]
 
+    @field_validator("symbols")
+    @classmethod
+    def validate_symbols(cls, v):
+        validated = []
+        for s in v[:40]:
+            try:
+                validated.append(validate_symbol(s))
+            except ValueError:
+                continue  # Skip invalid symbols silently
+        return validated
+
 
 @router.get("/search")
-def search_stocks(q: str = Query("", min_length=0)):
+def search_stocks(q: str = Query("", min_length=0, max_length=30)):
     if not q:
         return data_fetcher.get_popular_stocks()
     return data_fetcher.search_stocks(q)
@@ -43,16 +54,23 @@ def get_market_movers(count: int = Query(10, ge=1, le=50)):
 
 @router.post("/quotes/bulk")
 def get_bulk_quotes(req: BulkQuoteRequest):
-    symbols = [s.upper() for s in req.symbols[:40]]
-    return data_fetcher.get_bulk_quotes(symbols)
+    return data_fetcher.get_bulk_quotes(req.symbols)
+
+
+def _validated_symbol(symbol: str) -> str:
+    try:
+        return validate_symbol(symbol)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid symbol: {symbol!r}")
 
 
 @router.get("/{symbol}/fundamentals")
 def get_fundamentals(symbol: str):
     """Get fundamental data, financials, and quarterly results for a stock."""
+    sym = _validated_symbol(symbol)
     try:
         from app.services.fundamental_service import fundamental_service
-        data = fundamental_service.get_fundamentals(symbol.upper())
+        data = fundamental_service.get_fundamentals(sym)
         if not data or not data.get("symbol"):
             raise HTTPException(status_code=404, detail=f"No fundamental data for {symbol}")
         return data
@@ -65,9 +83,10 @@ def get_fundamentals(symbol: str):
 @router.get("/{symbol}/news")
 def get_stock_news(symbol: str):
     """Get latest news headlines with sentiment for a stock."""
+    sym = _validated_symbol(symbol)
     try:
         from app.services.sentiment_service import sentiment_service
-        data = sentiment_service.get_sentiment(symbol.upper())
+        data = sentiment_service.get_sentiment(sym)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch news: {str(e)}")
@@ -75,8 +94,9 @@ def get_stock_news(symbol: str):
 
 @router.get("/{symbol}/quote")
 def get_quote(symbol: str):
+    sym = _validated_symbol(symbol)
     try:
-        quote = data_fetcher.get_live_quote(symbol.upper())
+        quote = data_fetcher.get_live_quote(sym)
         if not quote:
             raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
         return quote
@@ -87,10 +107,10 @@ def get_quote(symbol: str):
 @router.get("/{symbol}/history")
 def get_history(symbol: str, period: str = Query("1y")):
     valid_periods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"]
+    sym = _validated_symbol(symbol)
     if period not in valid_periods:
         raise HTTPException(status_code=400, detail=f"Invalid period. Use one of: {valid_periods}")
     try:
-        sym = symbol.upper()
 
         # Short periods use intraday (15-min) candles for a meaningful chart
         if period in ("1d", "5d"):

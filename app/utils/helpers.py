@@ -34,6 +34,22 @@ def is_index(symbol: str) -> bool:
     return symbol.upper() in INDICES or symbol.startswith("^")
 
 
+import re
+
+# Valid stock symbols: 1-30 chars, alphanumeric + spaces + & (for M&M) + ^ (indices)
+_SYMBOL_RE = re.compile(r'^[A-Za-z0-9 &^.\-]{1,30}$')
+
+
+def validate_symbol(symbol: str) -> str:
+    """Validate and sanitize a stock symbol. Returns uppercased symbol or raises ValueError."""
+    if not symbol or not symbol.strip():
+        raise ValueError("Symbol cannot be empty")
+    symbol = symbol.strip()
+    if not _SYMBOL_RE.match(symbol):
+        raise ValueError(f"Invalid symbol: {symbol!r}")
+    return symbol.upper()
+
+
 
 # Symbols that Yahoo Finance has renamed or broken — map to working ticker
 _YF_SYMBOL_ALIASES = {

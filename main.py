@@ -215,6 +215,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+REQUEST_TIMEOUT = 120  # seconds — global safety net for all HTTP requests
+
+
+@app.middleware("http")
+async def timeout_middleware(request: Request, call_next):
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=REQUEST_TIMEOUT)
+    except asyncio.TimeoutError:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=504, content={"detail": "Request timed out"})
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 

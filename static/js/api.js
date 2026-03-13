@@ -45,6 +45,8 @@ const API = {
         this._cache.set(url, { data, expires: Date.now() + ttl });
     },
 
+    _defaultTimeout: 30000,  // 30s default timeout for all requests
+
     async request(url, options = {}) {
         const method = (options.method || 'GET').toUpperCase();
 
@@ -58,15 +60,43 @@ const API = {
             const headers = {
                 'Content-Type': 'application/json',
             };
+            // Attach auth token if available
+            if (typeof Auth !== 'undefined' && Auth.token) {
+                headers['Authorization'] = `Bearer ${Auth.token}`;
+            }
 
             const fetchOptions = { headers, ...options };
-            // Forward AbortController signal
-            if (options.signal) {
+
+            // Set up timeout via AbortController (unless caller provided their own signal)
+            let timeoutId;
+            if (!options.signal) {
+                const timeout = options.timeout || this._defaultTimeout;
+                const controller = new AbortController();
+                fetchOptions.signal = controller.signal;
+                timeoutId = setTimeout(() => controller.abort(), timeout);
+            } else {
                 fetchOptions.signal = options.signal;
             }
 
-            const res = await fetch(this.baseUrl + url, fetchOptions);
+            let res;
+            try {
+                res = await fetch(this.baseUrl + url, fetchOptions);
+            } finally {
+                if (timeoutId) clearTimeout(timeoutId);
+            }
 
+            if (res.status === 401 && typeof Auth !== 'undefined' && Auth.refreshToken) {
+                const refreshed = await Auth.tryRefresh();
+                if (refreshed) {
+                    fetchOptions.headers['Authorization'] = `Bearer ${Auth.token}`;
+                    const retryRes = await fetch(this.baseUrl + url, fetchOptions);
+                    if (!retryRes.ok) {
+                        const err = await retryRes.json().catch(() => ({ detail: retryRes.statusText }));
+                        throw new Error(err.detail || 'Request failed');
+                    }
+                    return await retryRes.json();
+                }
+            }
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ detail: res.statusText }));
                 throw new Error(err.detail || 'Request failed');
@@ -111,7 +141,8 @@ const API = {
     getPredictions(symbol, horizon = '1d', signal = null) {
         const opts = {
             method: 'POST',
-            body: JSON.stringify({ horizon })
+            body: JSON.stringify({ horizon }),
+            timeout: 95000,  // 95s to match backend's 90s prediction timeout
         };
         if (signal) opts.signal = signal;
         return this.request(`/api/predictions/${encodeURIComponent(symbol)}`, opts);

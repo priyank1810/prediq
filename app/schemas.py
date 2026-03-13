@@ -1,6 +1,16 @@
-from pydantic import BaseModel
+import re
+from pydantic import BaseModel, field_validator
 from datetime import date, datetime
 from typing import Optional
+
+_SYMBOL_RE = re.compile(r'^[A-Za-z0-9 &^.\-]{1,30}$')
+
+
+def _check_symbol(v: str) -> str:
+    v = v.strip()
+    if not v or not _SYMBOL_RE.match(v):
+        raise ValueError(f"Invalid symbol: {v!r}")
+    return v.upper()
 
 
 # --- Stock Schemas ---
@@ -37,6 +47,11 @@ class PortfolioHoldingCreate(BaseModel):
     buy_date: date
     notes: Optional[str] = None
 
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v):
+        return _check_symbol(v)
+
 
 class PortfolioHoldingResponse(BaseModel):
     id: int
@@ -68,6 +83,18 @@ class PriceAlertCreate(BaseModel):
     symbol: str
     target_price: float
     condition: str  # "above" or "below"
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v):
+        return _check_symbol(v)
+
+    @field_validator("condition")
+    @classmethod
+    def validate_condition(cls, v):
+        if v not in ("above", "below"):
+            raise ValueError("Condition must be 'above' or 'below'")
+        return v
 
 
 class PriceAlertResponse(BaseModel):
@@ -160,6 +187,11 @@ class BacktestResult(BaseModel):
 class WatchlistItemCreate(BaseModel):
     symbol: str
     item_type: str = "stock"
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v):
+        return _check_symbol(v)
 
 
 class WatchlistItemResponse(BaseModel):

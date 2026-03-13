@@ -392,6 +392,36 @@ const Watchlist = {
         }
     },
 
+    isInWatchlist(symbol) {
+        return this._items.some(i => i.symbol === symbol);
+    },
+
+    async toggleFromOverview(symbol, btnEl) {
+        if (this.isInWatchlist(symbol)) {
+            await this.removeSymbol(symbol);
+            if (btnEl) {
+                btnEl.innerHTML = '+';
+                btnEl.title = 'Add to watchlist';
+                btnEl.classList.remove('text-yellow-400');
+                btnEl.classList.add('text-gray-500');
+            }
+        } else {
+            try {
+                await API.addToWatchlist({ symbol, item_type: 'stock' });
+                App.showToast(`${symbol} added to watchlist`, 'success');
+                this.load(true);
+                if (btnEl) {
+                    btnEl.innerHTML = '&#10003;';
+                    btnEl.title = 'Remove from watchlist';
+                    btnEl.classList.remove('text-gray-500');
+                    btnEl.classList.add('text-yellow-400');
+                }
+            } catch (e) {
+                App.showToast('Failed to add: ' + e.message, 'error');
+            }
+        }
+    },
+
     async addSymbol() {
         const input = document.getElementById('watchlistSymbolInput');
         const symbol = input.value.trim().toUpperCase();

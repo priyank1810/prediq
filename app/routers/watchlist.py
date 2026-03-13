@@ -5,14 +5,16 @@ from app.models import WatchlistItem, SignalLog
 from app.schemas import WatchlistItemCreate
 from app.services.data_fetcher import data_fetcher
 from app.utils.helpers import is_index
+from app.auth import get_current_active_user
 
 router = APIRouter()
 
 
 @router.get("")
-def list_watchlist(db: Session = Depends(get_db)):
+def list_watchlist(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
     items = (
         db.query(WatchlistItem)
+        .filter(WatchlistItem.user_id == user.id)
         .order_by(WatchlistItem.added_at.desc())
         .all()
     )
@@ -31,18 +33,19 @@ def list_watchlist(db: Session = Depends(get_db)):
 def add_to_watchlist(
     data: WatchlistItemCreate,
     db: Session = Depends(get_db),
+    user=Depends(get_current_active_user),
 ):
     symbol = data.symbol.upper()
     existing = (
         db.query(WatchlistItem)
-        .filter(WatchlistItem.symbol == symbol)
+        .filter(WatchlistItem.symbol == symbol, WatchlistItem.user_id == user.id)
         .first()
     )
     if existing:
         raise HTTPException(status_code=400, detail=f"{symbol} already in watchlist")
 
     item_type = "index" if is_index(symbol) else data.item_type
-    item = WatchlistItem(symbol=symbol, item_type=item_type)
+    item = WatchlistItem(symbol=symbol, item_type=item_type, user_id=user.id)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -53,10 +56,11 @@ def add_to_watchlist(
 def remove_from_watchlist(
     symbol: str,
     db: Session = Depends(get_db),
+    user=Depends(get_current_active_user),
 ):
     item = (
         db.query(WatchlistItem)
-        .filter(WatchlistItem.symbol == symbol.upper())
+        .filter(WatchlistItem.symbol == symbol.upper(), WatchlistItem.user_id == user.id)
         .first()
     )
     if not item:
@@ -67,9 +71,10 @@ def remove_from_watchlist(
 
 
 @router.get("/overview")
-def watchlist_overview(db: Session = Depends(get_db)):
+def watchlist_overview(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
     items = (
         db.query(WatchlistItem)
+        .filter(WatchlistItem.user_id == user.id)
         .order_by(WatchlistItem.added_at.desc())
         .all()
     )
