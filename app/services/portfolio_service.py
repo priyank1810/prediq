@@ -4,11 +4,11 @@ from app.services.data_fetcher import data_fetcher
 
 
 class PortfolioService:
-    def get_holdings(self, db: Session, user_id: int = None) -> list[dict]:
+    def get_holdings(self, db: Session, user_id: int = None, limit: int = 100, offset: int = 0) -> list[dict]:
         query = db.query(PortfolioHolding)
         if user_id is not None:
             query = query.filter(PortfolioHolding.user_id == user_id)
-        holdings = query.all()
+        holdings = query.offset(offset).limit(limit).all()
         if not holdings:
             return []
 

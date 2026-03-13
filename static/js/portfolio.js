@@ -12,12 +12,29 @@ const Portfolio = {
                 API.getPortfolio(),
                 API.getPortfolioSummary()
             ]);
+            this._clearError();
             this.displayHoldings(holdings);
             this.displaySummary(summary);
         } catch (e) {
             console.error('Failed to load portfolio:', e);
+            this._showError('Failed to load portfolio');
         }
     },
+
+    _showError(message) {
+        const tbody = document.getElementById('holdingsTable');
+        const empty = document.getElementById('emptyPortfolio');
+        if (empty) empty.classList.add('hidden');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6">
+                <div class="text-red-400 text-sm mb-2">${message}</div>
+                <button onclick="Portfolio.load()" class="text-xs px-3 py-1 bg-dark-600 text-gray-300 rounded hover:bg-dark-700">Retry</button>
+            </td></tr>`;
+        }
+    },
+
+    _clearError() {},
+
 
     displaySummary(summary) {
         document.getElementById('totalInvested').textContent = `₹${summary.total_invested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;

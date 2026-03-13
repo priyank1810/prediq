@@ -8,6 +8,7 @@ from typing import Optional
 from app.utils.cache import cache
 from app.utils.helpers import yfinance_symbol, now_ist
 from app.utils.yahoo_api import yahoo_chart, yahoo_quote
+from app.utils.circuit_breaker import yahoo_breaker, angel_breaker, nse_breaker
 from app.config import CACHE_TTL_QUOTE, CACHE_TTL_HISTORY, CACHE_TTL_STOCK_LIST, CACHE_TTL_INTRADAY, POPULAR_STOCKS, INDICES
 
 NSE_EQUITY_CSV_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -47,24 +48,31 @@ class DataFetcher:
         quote = None
 
         # 1. Try Angel One (real-time, no delay)
-        if ANGEL_AVAILABLE:
+        if ANGEL_AVAILABLE and angel_breaker.allow_request():
             try:
                 quote = angel_provider.get_live_quote(symbol)
                 if quote:
+                    angel_breaker.record_success()
                     logger.debug(f"Got real-time quote for {symbol} from Angel One")
             except Exception as e:
+                angel_breaker.record_failure()
                 logger.debug(f"Angel One failed for {symbol}: {e}")
 
         # 2. Try nsetools (doesn't support indices)
-        if quote is None and not is_index(symbol) and NSE_AVAILABLE:
+        if quote is None and not is_index(symbol) and NSE_AVAILABLE and nse_breaker.allow_request():
             try:
                 quote = self._fetch_from_nsetools(symbol)
+                nse_breaker.record_success()
             except Exception:
-                pass
+                nse_breaker.record_failure()
 
         # 3. Fallback to Yahoo Finance API (15-20 min delayed)
-        if quote is None:
-            quote = self._fetch_from_yfinance(symbol)
+        if quote is None and yahoo_breaker.allow_request():
+            try:
+                quote = self._fetch_from_yfinance(symbol)
+                yahoo_breaker.record_success()
+            except Exception:
+                yahoo_breaker.record_failure()
 
         # Enrich with avg_volume from cached historical data
         if quote and not quote.get("avg_volume"):
@@ -86,13 +94,15 @@ class DataFetcher:
         results = {}
 
         # Try Angel One batch first (single API call for all symbols)
-        if ANGEL_AVAILABLE:
+        if ANGEL_AVAILABLE and angel_breaker.allow_request():
             try:
                 angel_quotes = angel_provider.get_multiple_quotes(symbols)
                 for sym, quote in angel_quotes.items():
                     results[sym] = quote
                     cache.set(f"quote:{sym}", quote, CACHE_TTL_QUOTE)
+                angel_breaker.record_success()
             except Exception as e:
+                angel_breaker.record_failure()
                 logger.debug(f"Angel One batch failed: {e}")
 
         # Fetch remaining symbols individually (yfinance fallback)
@@ -117,7 +127,7 @@ class DataFetcher:
         df = self._intraday_from_angel(symbol, period, interval)
 
         # 2. Fallback to Yahoo chart API (direct curl_cffi)
-        if df is None or df.empty:
+        if (df is None or df.empty) and yahoo_breaker.allow_request():
             yf_symbol = yfinance_symbol(symbol)
             df = yahoo_chart(yf_symbol, period=period, interval=interval)
             if not df.empty:
@@ -155,8 +165,14 @@ class DataFetcher:
         df = self._historical_from_angel(symbol, period)
 
         # 2. Fallback to yfinance
-        if df is None or df.empty:
-            df = self._historical_from_yfinance(symbol, period)
+        if (df is None or df.empty) and yahoo_breaker.allow_request():
+            try:
+                df = self._historical_from_yfinance(symbol, period)
+                if df is not None and not df.empty:
+                    yahoo_breaker.record_success()
+            except Exception:
+                yahoo_breaker.record_failure()
+                df = pd.DataFrame()
 
         if df is not None and not df.empty:
             cache.set(cache_key, df, CACHE_TTL_HISTORY)

@@ -1,4 +1,5 @@
 import os
+import logging
 
 # Configure TensorFlow before any TF import
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # Suppress TF info/warning logs
@@ -8,6 +9,7 @@ if os.getenv("LOW_RESOURCE_MODE", "").lower() in ("true", "1"):
     os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -182,9 +184,22 @@ async def worker_result_broadcaster():
         await asyncio.sleep(3)
 
 
+def _setup_audit_logger():
+    """Configure audit logger to write to logs/audit.log."""
+    log_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    handler = logging.FileHandler(os.path.join(log_dir, "audit.log"))
+    handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    audit = logging.getLogger("audit")
+    audit.setLevel(logging.INFO)
+    audit.addHandler(handler)
+    audit.propagate = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    _setup_audit_logger()
     Base.metadata.create_all(bind=engine)
     _migrate_db()
     tasks = [
@@ -216,6 +231,57 @@ app.add_middleware(
 )
 
 REQUEST_TIMEOUT = 120  # seconds — global safety net for all HTTP requests
+
+# Allowed origins for CSRF protection (state-changing requests must have valid Origin)
+_ALLOWED_ORIGINS = set(CORS_ORIGINS) | {"null"}  # "null" for same-origin requests without Origin header
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    """Reject state-changing requests from unknown origins."""
+    from fastapi.responses import JSONResponse
+    if request.method not in _SAFE_METHODS and request.url.path.startswith("/api/"):
+        origin = request.headers.get("origin")
+        # If Origin header is present, validate it
+        if origin and origin not in _ALLOWED_ORIGINS:
+            return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
+    return await call_next(request)
+
+
+audit_logger = logging.getLogger("audit")
+_AUDIT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.middleware("http")
+async def audit_logging_middleware(request: Request, call_next):
+    """Log state-changing API requests with user identity and outcome."""
+    start = time.monotonic()
+    response = await call_next(request)
+
+    if request.method in _AUDIT_METHODS and request.url.path.startswith("/api/"):
+        duration_ms = round((time.monotonic() - start) * 1000)
+        # Extract user from Authorization header (without full decode — just for logging)
+        auth_header = request.headers.get("authorization", "")
+        user_hint = "anonymous"
+        if auth_header.startswith("Bearer "):
+            try:
+                from jose import jwt as jose_jwt
+                from app.config import SECRET_KEY, ALGORITHM
+                payload = jose_jwt.decode(auth_header[7:], SECRET_KEY, algorithms=[ALGORITHM])
+                user_hint = payload.get("sub", "unknown")
+            except Exception:
+                user_hint = "invalid-token"
+        elif request.headers.get("x-api-key"):
+            user_hint = "api-key"
+
+        client_ip = request.client.host if request.client else "unknown"
+        audit_logger.info(
+            f"{request.method} {request.url.path} | user={user_hint} ip={client_ip} "
+            f"status={response.status_code} duration={duration_ms}ms"
+        )
+
+    return response
 
 
 @app.middleware("http")

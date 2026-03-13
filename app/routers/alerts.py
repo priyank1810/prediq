@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import PriceAlertCreate, SmartAlertCreate
@@ -9,8 +9,13 @@ router = APIRouter()
 
 
 @router.get("")
-def list_alerts(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
-    alerts = alert_service.get_alerts(db, user_id=user.id)
+def list_alerts(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_active_user),
+):
+    alerts = alert_service.get_alerts(db, user_id=user.id, limit=limit, offset=offset)
     return [
         {
             "id": a.id,
@@ -50,8 +55,13 @@ def delete_alert(
 # --- Smart Alerts ---
 
 @router.get("/smart")
-def list_smart_alerts(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
-    alerts = alert_service.get_smart_alerts(db, user_id=user.id)
+def list_smart_alerts(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_active_user),
+):
+    alerts = alert_service.get_smart_alerts(db, user_id=user.id, limit=limit, offset=offset)
     return [
         {
             "id": a.id,

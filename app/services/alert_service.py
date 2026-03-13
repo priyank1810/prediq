@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class AlertService:
-    def get_alerts(self, db: Session, user_id: int = None) -> list[PriceAlert]:
+    def get_alerts(self, db: Session, user_id: int = None, limit: int = 50, offset: int = 0) -> list[PriceAlert]:
         query = db.query(PriceAlert)
         if user_id is not None:
             query = query.filter(PriceAlert.user_id == user_id)
-        return query.order_by(PriceAlert.created_at.desc()).all()
+        return query.order_by(PriceAlert.created_at.desc()).offset(offset).limit(limit).all()
 
     def create_alert(self, db: Session, data: dict, user_id: int = None) -> PriceAlert:
         alert = PriceAlert(**data, user_id=user_id)
@@ -107,11 +107,11 @@ class AlertService:
 
     # --- Smart Alerts ---
 
-    def get_smart_alerts(self, db: Session, user_id: int = None) -> list[SmartAlert]:
+    def get_smart_alerts(self, db: Session, user_id: int = None, limit: int = 50, offset: int = 0) -> list[SmartAlert]:
         query = db.query(SmartAlert)
         if user_id is not None:
             query = query.filter(SmartAlert.user_id == user_id)
-        return query.order_by(SmartAlert.created_at.desc()).all()
+        return query.order_by(SmartAlert.created_at.desc()).offset(offset).limit(limit).all()
 
     def create_smart_alert(self, db: Session, data: dict, user_id: int = None) -> SmartAlert:
         alert = SmartAlert(**data, user_id=user_id)

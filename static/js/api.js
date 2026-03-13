@@ -225,30 +225,65 @@ const API = {
         this._connectWS();
     },
 
+    _wsReconnectTimer: null,
+    _wsConnected: false,
+
     _connectWS() {
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        this.ws = new WebSocket(`${protocol}//${location.host}/ws/prices`);
+        // Clear any pending reconnect timer
+        if (this._wsReconnectTimer) {
+            clearTimeout(this._wsReconnectTimer);
+            this._wsReconnectTimer = null;
+        }
+
+        try {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            this.ws = new WebSocket(`${protocol}//${location.host}/ws/prices`);
+        } catch (e) {
+            this._scheduleReconnect();
+            return;
+        }
+
         this.ws.onopen = () => {
             this._wsBackoff = 1000; // Reset backoff on successful connection
+            this._wsConnected = true;
+            console.log('[WS] Connected');
             if (this._wsSymbols && this._wsSymbols.length > 0) {
                 this.ws.send(JSON.stringify({ subscribe: this._wsSymbols }));
             }
         };
         this.ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'price_update' && this._wsOnPrice) this._wsOnPrice(msg.data);
-            if (msg.type === 'alert_triggered' && this._wsOnAlert) this._wsOnAlert(msg.data);
-            if (msg.type === 'signal_update' && this.onSignalUpdate) this.onSignalUpdate(msg.data);
-            if (msg.type === 'high_confidence_alert' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
-            if (msg.type === 'market_mood_update' && this.onMarketMoodUpdate) this.onMarketMoodUpdate(msg.data);
-            if (msg.type === 'smart_alert_triggered' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
-            if (msg.type === 'oi_update' && this.onOIUpdate) this.onOIUpdate(msg.data);
-            if (msg.type === 'mtf_update' && this.onMTFUpdate) this.onMTFUpdate(msg.data);
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'price_update' && this._wsOnPrice) this._wsOnPrice(msg.data);
+                if (msg.type === 'alert_triggered' && this._wsOnAlert) this._wsOnAlert(msg.data);
+                if (msg.type === 'signal_update' && this.onSignalUpdate) this.onSignalUpdate(msg.data);
+                if (msg.type === 'high_confidence_alert' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
+                if (msg.type === 'market_mood_update' && this.onMarketMoodUpdate) this.onMarketMoodUpdate(msg.data);
+                if (msg.type === 'smart_alert_triggered' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
+                if (msg.type === 'oi_update' && this.onOIUpdate) this.onOIUpdate(msg.data);
+                if (msg.type === 'mtf_update' && this.onMTFUpdate) this.onMTFUpdate(msg.data);
+            } catch (e) {
+                console.error('[WS] Failed to parse message:', e);
+            }
         };
-        this.ws.onclose = () => {
-            setTimeout(() => this._connectWS(), this._wsBackoff);
-            this._wsBackoff = Math.min(this._wsBackoff * 2, this._wsMaxBackoff);
+        this.ws.onerror = () => {
+            // onerror is always followed by onclose, so just log
+            console.warn('[WS] Error — will reconnect');
         };
+        this.ws.onclose = (event) => {
+            this._wsConnected = false;
+            console.log(`[WS] Closed (code=${event.code}). Reconnecting in ${this._wsBackoff}ms...`);
+            this._scheduleReconnect();
+        };
+    },
+
+    _scheduleReconnect() {
+        if (this._wsReconnectTimer) return; // Already scheduled
+        this._wsReconnectTimer = setTimeout(() => {
+            this._wsReconnectTimer = null;
+            this._connectWS();
+        }, this._wsBackoff);
+        this._wsBackoff = Math.min(this._wsBackoff * 2, this._wsMaxBackoff);
     },
 
     subscribeTo(symbols) {

@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func
 from app.database import SessionLocal
 from app.models import SignalLog, PredictionLog
+from app.utils.helpers import validate_symbol
 
 router = APIRouter()
 
@@ -379,7 +380,11 @@ async def get_intraday_signal(symbol: str):
 
 
 @router.get("/{symbol}/history")
-def get_signal_history(symbol: str, limit: int = 20):
+def get_signal_history(
+    symbol: str,
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
     try:
         db = SessionLocal()
         try:
@@ -387,6 +392,7 @@ def get_signal_history(symbol: str, limit: int = 20):
                 db.query(SignalLog)
                 .filter(SignalLog.symbol == symbol.upper())
                 .order_by(SignalLog.created_at.desc())
+                .offset(offset)
                 .limit(limit)
                 .all()
             )

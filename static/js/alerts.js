@@ -7,12 +7,30 @@ const Alerts = {
     },
 
     async load() {
+        const tbody = document.getElementById('alertsTable');
         try {
             const alerts = await API.getAlerts();
+            this._clearError();
             this.displayAlerts(alerts);
         } catch (e) {
             console.error('Failed to load alerts:', e);
+            this._showError(tbody, 'Failed to load alerts', () => this.load());
         }
+    },
+
+    _showError(container, message, retryFn) {
+        const empty = document.getElementById('emptyAlerts');
+        if (empty) empty.classList.add('hidden');
+        if (container) {
+            container.innerHTML = `<tr><td colspan="6" class="text-center py-6">
+                <div class="text-red-400 text-sm mb-2">${message}</div>
+                <button onclick="Alerts.load()" class="text-xs px-3 py-1 bg-dark-600 text-gray-300 rounded hover:bg-dark-700">Retry</button>
+            </td></tr>`;
+        }
+    },
+
+    _clearError() {
+        // Error state is cleared when displayAlerts runs successfully
     },
 
     displayAlerts(alerts) {

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import PortfolioHoldingCreate
@@ -9,8 +9,13 @@ router = APIRouter()
 
 
 @router.get("")
-def list_holdings(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
-    return portfolio_service.get_holdings(db, user_id=user.id)
+def list_holdings(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_active_user),
+):
+    return portfolio_service.get_holdings(db, user_id=user.id, limit=limit, offset=offset)
 
 
 @router.get("/summary")

@@ -50,8 +50,16 @@ const Signals = {
                 this.displayMultiTimeframeSignals(mtfData);
             }).catch(() => {});
         } catch (e) {
-            App.showToast('Failed to load signal: ' + e.message, 'error');
             loading.classList.add('hidden');
+            results.classList.remove('hidden');
+            results.innerHTML = `
+                <div class="text-center py-8">
+                    <div class="text-red-400 text-sm mb-3">Failed to load signal: ${e.message}</div>
+                    <button onclick="Signals.loadSignal('${symbol}')"
+                        class="text-xs px-4 py-2 bg-dark-600 text-gray-300 rounded hover:bg-dark-700 transition">
+                        Retry
+                    </button>
+                </div>`;
         } finally {
             this.isLoading = false;
         }
