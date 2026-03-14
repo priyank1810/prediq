@@ -161,6 +161,14 @@ INDICES = {
 # Reverse map: yfinance ticker -> display name
 INDICES_REVERSE = {v: k for k, v in INDICES.items()}
 
+# Email / SMTP Notification Settings
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER)
+NOTIFICATION_EMAIL_ENABLED = os.getenv("NOTIFICATION_EMAIL_ENABLED", "false").lower() in ("true", "1", "yes")
+
 # Authentication
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production-" + "x" * 32)
 ALGORITHM = os.getenv("ALGORITHM", "HS256")

@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import logging
 from sqlalchemy.orm import Session
-from app.models import PriceAlert, SmartAlert
+from app.models import PriceAlert, SmartAlert, User
 from app.services.data_fetcher import data_fetcher
+from app.services.notification_service import notification_service
 from app.utils.helpers import now_ist
 
 logger = logging.getLogger(__name__)
@@ -55,12 +56,18 @@ class AlertService:
                     alert.is_triggered = True
                     alert.triggered_at = now_ist()
                     db.commit()
-                    triggered.append({
+                    alert_info = {
                         "symbol": alert.symbol,
                         "condition": alert.condition,
                         "target_price": alert.target_price,
                         "current_price": current_price,
-                    })
+                    }
+                    triggered.append(alert_info)
+                    try:
+                        user = alert.owner
+                        notification_service.notify_alert_triggered(user, alert_info)
+                    except Exception as e:
+                        logger.debug(f"Email notification failed for alert {alert.id}: {e}")
             except Exception:
                 continue
 
@@ -96,12 +103,18 @@ class AlertService:
                 alert.is_triggered = True
                 alert.triggered_at = now_ist()
                 db.commit()
-                triggered.append({
+                alert_info = {
                     "symbol": alert.symbol,
                     "condition": alert.condition,
                     "target_price": alert.target_price,
                     "current_price": current_price,
-                })
+                }
+                triggered.append(alert_info)
+                try:
+                    user = alert.owner
+                    notification_service.notify_alert_triggered(user, alert_info)
+                except Exception as e:
+                    logger.debug(f"Email notification failed for alert {alert.id}: {e}")
 
         return triggered
 
@@ -153,12 +166,18 @@ class AlertService:
                     alert.triggered_at = now_ist()
                     alert.trigger_data = json.dumps(result)
                     db.commit()
-                    triggered.append({
+                    alert_info = {
                         "alert_id": alert.id,
                         "alert_type": alert.alert_type,
                         "symbol": alert.symbol,
                         **result,
-                    })
+                    }
+                    triggered.append(alert_info)
+                    try:
+                        user = db.query(User).filter(User.id == alert.user_id).first() if alert.user_id else None
+                        notification_service.notify_alert_triggered(user, alert_info)
+                    except Exception as e:
+                        logger.debug(f"Email notification failed for smart alert {alert.id}: {e}")
             except Exception as e:
                 logger.debug(f"Smart alert check failed for {alert.id}: {e}")
                 continue

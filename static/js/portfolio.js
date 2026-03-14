@@ -113,5 +113,90 @@ const Portfolio = {
         } catch (e) {
             App.showToast('Failed to delete: ' + e.message, 'error');
         }
+    },
+
+    // ------------------------------------------------------------------
+    // Analytics
+    // ------------------------------------------------------------------
+
+    async loadAnalytics() {
+        const container = document.getElementById('portfolioAnalytics');
+        if (!container) return;
+
+        container.innerHTML = '<div class="text-center py-6 text-gray-500 text-sm">Loading analytics...</div>';
+
+        try {
+            const data = await API.getPortfolioAnalytics();
+            this.displayAnalytics(data);
+        } catch (e) {
+            console.error('Failed to load analytics:', e);
+            container.innerHTML = `<div class="text-center py-6">
+                <div class="text-red-400 text-sm mb-2">Failed to load analytics</div>
+                <button onclick="Portfolio.loadAnalytics()" class="text-xs px-3 py-1 bg-dark-600 text-gray-300 rounded hover:bg-dark-700">Retry</button>
+            </div>`;
+        }
+    },
+
+    displayAnalytics(data) {
+        const container = document.getElementById('portfolioAnalytics');
+        if (!container) return;
+
+        const fmt = (v, suffix = '%') => v != null ? v.toFixed(2) + suffix : '--';
+        const color = (v) => v == null ? 'text-gray-400' : (v >= 0 ? 'text-green-400' : 'text-red-400');
+
+        // Metric cards
+        const cagrColor = color(data.cagr);
+        const sharpeColor = data.sharpe_ratio != null ? (data.sharpe_ratio >= 1 ? 'text-green-400' : data.sharpe_ratio >= 0 ? 'text-yellow-400' : 'text-red-400') : 'text-gray-400';
+        const ddColor = color(data.max_drawdown);
+
+        // Sector allocation bar chart (horizontal)
+        let sectorHtml = '';
+        if (data.sector_allocation && data.sector_allocation.length > 0) {
+            const sectorColors = [
+                'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500',
+                'bg-pink-500', 'bg-cyan-500', 'bg-orange-500', 'bg-teal-500',
+                'bg-indigo-500', 'bg-red-500', 'bg-lime-500', 'bg-amber-500',
+            ];
+            sectorHtml = data.sector_allocation.map((s, i) => {
+                const barColor = sectorColors[i % sectorColors.length];
+                return `
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="w-24 sm:w-28 text-gray-300 truncate">${s.sector}</span>
+                        <div class="flex-1 bg-dark-700 rounded-full h-3 overflow-hidden">
+                            <div class="${barColor} h-3 rounded-full transition-all" style="width: ${s.percentage}%"></div>
+                        </div>
+                        <span class="text-gray-400 w-14 text-right">${s.percentage.toFixed(1)}%</span>
+                    </div>`;
+            }).join('');
+        } else {
+            sectorHtml = '<div class="text-gray-500 text-xs text-center py-2">No sector data</div>';
+        }
+
+        container.innerHTML = `
+            <!-- Analytics Metric Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <div class="text-xs text-gray-400 mb-1">CAGR</div>
+                    <div class="text-xl font-bold ${cagrColor}">${fmt(data.cagr)}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">Compound Annual Growth Rate</div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <div class="text-xs text-gray-400 mb-1">Sharpe Ratio</div>
+                    <div class="text-xl font-bold ${sharpeColor}">${data.sharpe_ratio != null ? data.sharpe_ratio.toFixed(2) : '--'}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">Risk-adjusted return (Rf = 6%)</div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <div class="text-xs text-gray-400 mb-1">Max Drawdown</div>
+                    <div class="text-xl font-bold ${ddColor}">${fmt(data.max_drawdown)}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">Largest peak-to-trough decline</div>
+                </div>
+            </div>
+
+            <!-- Sector Allocation -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                <h4 class="text-sm font-semibold text-white mb-3">Sector Allocation</h4>
+                <div class="space-y-2">${sectorHtml}</div>
+            </div>
+        `;
     }
 };

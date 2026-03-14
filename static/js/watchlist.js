@@ -261,7 +261,7 @@ const Watchlist = {
                         <button onclick="Search.select('${item.symbol}', '${item.symbol}')"
                                 class="flex-1 text-[10px] px-2 py-1 rounded bg-dark-600 text-accent-blue hover:bg-dark-700 transition font-medium">Analyze</button>
                         <button onclick="Watchlist.removeSymbol('${item.symbol}')"
-                                class="text-[10px] px-2 py-1 rounded text-red-500 hover:bg-dark-700 transition" title="Remove">&#10005;</button>
+                                class="text-[10px] px-2 py-1 rounded text-red-500 hover:bg-dark-700 transition" title="Remove" aria-label="Remove ${item.symbol} from watchlist">&#10005;</button>
                     </div>
                 </div>
             `;
@@ -295,7 +295,7 @@ const Watchlist = {
                     </div>
                     <div class="flex items-center gap-3">
                         <span class="text-gray-600 text-[10px]">${created}</span>
-                        <button onclick="Watchlist.deleteAlert(${a.id})" class="text-red-500 hover:text-red-400 text-xs">Delete</button>
+                        <button onclick="Watchlist.deleteAlert(${a.id})" class="text-red-500 hover:text-red-400 text-xs" aria-label="Delete alert for ${a.symbol}">Delete</button>
                     </div>
                 </div>
             `;

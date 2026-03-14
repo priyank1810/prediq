@@ -13,6 +13,7 @@ const Lazy = {
         insights:     { src: '/static/js/insights.js?v=11' },
         fundamentals: { src: '/static/js/fundamentals.js?v=12' },
         signals:      { src: '/static/js/signals.js?v=13' },
+        portfolio:    { src: '/static/js/portfolio.js?v=1' },
     },
 
     /**

@@ -182,6 +182,7 @@ const API = {
     // Portfolio
     getPortfolio() { return this.request('/api/portfolio'); },
     getPortfolioSummary() { return this.request('/api/portfolio/summary'); },
+    getPortfolioAnalytics() { return this.request('/api/portfolio/analytics'); },
     addHolding(data) { return this.request('/api/portfolio', { method: 'POST', body: JSON.stringify(data) }); },
     deleteHolding(id) { return this.request(`/api/portfolio/${id}`, { method: 'DELETE' }); },
 

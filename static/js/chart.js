@@ -20,9 +20,13 @@ class StockChart {
         const container = document.getElementById(this.containerId);
         if (this.chart) { this.chart.remove(); }
 
-        // Remove previous resize listener to prevent leaks
+        // Remove previous resize / orientation listeners to prevent leaks
         if (this._resizeHandler) {
             window.removeEventListener('resize', this._resizeHandler);
+        }
+        if (this._orientationHandler && screen.orientation) {
+            screen.orientation.removeEventListener('change', this._orientationHandler);
+            this._orientationHandler = null;
         }
 
         this.chart = LightweightCharts.createChart(container, {
@@ -58,10 +62,22 @@ class StockChart {
 
         this._resizeHandler = () => {
             if (this.chart) {
-                this.chart.applyOptions({ width: container.clientWidth });
+                this.chart.applyOptions({
+                    width: container.clientWidth,
+                    height: container.clientHeight,
+                });
             }
         };
         window.addEventListener('resize', this._resizeHandler);
+
+        // Listen for orientation changes on mobile to resize chart height
+        if (screen.orientation) {
+            this._orientationHandler = () => {
+                // Delay slightly so the container CSS has time to apply
+                setTimeout(this._resizeHandler, 150);
+            };
+            screen.orientation.addEventListener('change', this._orientationHandler);
+        }
     }
 
     setData(data) {
@@ -234,7 +250,10 @@ class IndicatorChart {
 
         this._resizeHandler = () => {
             if (this.chart) {
-                this.chart.applyOptions({ width: container.clientWidth });
+                this.chart.applyOptions({
+                    width: container.clientWidth,
+                    height: container.clientHeight,
+                });
             }
         };
         window.addEventListener('resize', this._resizeHandler);

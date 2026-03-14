@@ -63,13 +63,23 @@ const App = {
     setupNavigation() {
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.nav-tab').forEach(t => {
+                    t.classList.remove('active');
+                    t.setAttribute('aria-selected', 'false');
+                });
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
                 tab.classList.add('active');
+                tab.setAttribute('aria-selected', 'true');
                 document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
 
                 if (tab.dataset.tab === 'watchlist') {
                     Lazy.loadAndInit('watchlist').then(() => Watchlist.load());
+                }
+                if (tab.dataset.tab === 'portfolio') {
+                    Lazy.loadAndInit('portfolio').then(() => {
+                        Portfolio.load();
+                        Portfolio.loadAnalytics();
+                    });
                 }
                 if (tab.dataset.tab === 'insights') {
                     Lazy.loadAndInit('insights').then(() => Insights.load());
@@ -128,9 +138,13 @@ const App = {
     setupStockTabs() {
         document.querySelectorAll('.stock-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                document.querySelectorAll('.stock-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.stock-tab').forEach(t => {
+                    t.classList.remove('active');
+                    t.setAttribute('aria-selected', 'false');
+                });
                 document.querySelectorAll('.stock-tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
+                tab.setAttribute('aria-selected', 'true');
                 const target = document.getElementById('stockTab-' + tab.dataset.stockTab);
                 if (target) target.classList.add('active');
 
@@ -377,10 +391,16 @@ const App = {
     // --- Stock View ---
 
     _switchToDashboardTab() {
-        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.nav-tab').forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+        });
         document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
         const dashTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
-        if (dashTab) dashTab.classList.add('active');
+        if (dashTab) {
+            dashTab.classList.add('active');
+            dashTab.setAttribute('aria-selected', 'true');
+        }
         document.getElementById('tab-dashboard').classList.remove('hidden');
     },
 
@@ -396,9 +416,14 @@ const App = {
         document.getElementById('stockDetailTabs').classList.remove('hidden');
 
         // Reset to Overview sub-tab
-        document.querySelectorAll('.stock-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.stock-tab').forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+        });
         document.querySelectorAll('.stock-tab-content').forEach(c => c.classList.remove('active'));
-        document.querySelector('.stock-tab[data-stock-tab="overview"]').classList.add('active');
+        const overviewTab = document.querySelector('.stock-tab[data-stock-tab="overview"]');
+        overviewTab.classList.add('active');
+        overviewTab.setAttribute('aria-selected', 'true');
         document.getElementById('stockTab-overview').classList.add('active');
 
         document.getElementById('stockSymbol').textContent = symbol;

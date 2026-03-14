@@ -30,14 +30,16 @@
             </h1>
             <!-- Search -->
             <div class="relative w-full sm:w-96 order-3 sm:order-2">
+                <label for="searchInput" class="sr-only">Search stocks</label>
                 <input type="text" id="searchInput" placeholder="Search stocks... (e.g. RELIANCE)"
+                    role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="searchResults" aria-activedescendant=""
                     class="w-full bg-dark-700 border border-gray-600 rounded-lg px-3 sm:px-4 py-2 text-sm focus:outline-none focus:border-accent-blue text-white placeholder-gray-500">
-                <div id="searchResults" class="absolute top-full left-0 w-full bg-dark-700 border border-gray-600 rounded-b-lg mt-1 hidden z-50 max-h-64 overflow-y-auto"></div>
+                <div id="searchResults" class="absolute top-full left-0 w-full bg-dark-700 border border-gray-600 rounded-b-lg mt-1 hidden z-50 max-h-64 overflow-y-auto" role="listbox" aria-live="polite"></div>
             </div>
             <div class="flex items-center gap-2 sm:gap-4 order-2 sm:order-3">
                 <!-- Notification Bell -->
                 <div class="relative">
-                    <button id="notificationBell" class="relative p-2 text-gray-400 hover:text-white transition">
+                    <button id="notificationBell" class="relative p-2 text-gray-400 hover:text-white transition" aria-label="Notifications">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                   d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -47,7 +49,7 @@
                     <div id="notificationDropdown" class="hidden absolute right-0 top-full mt-2 w-72 sm:w-80 bg-dark-700 border border-gray-600 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
                         <div class="px-4 py-2 border-b border-gray-600 flex justify-between items-center">
                             <span class="text-sm font-medium text-white">AI Signals</span>
-                            <button id="clearNotifications" class="text-xs text-gray-400 hover:text-white">Clear all</button>
+                            <button id="clearNotifications" class="text-xs text-gray-400 hover:text-white" aria-label="Clear all notifications">Clear all</button>
                         </div>
                         <div id="notificationList" class="divide-y divide-gray-700">
                             <div class="px-4 py-6 text-center text-gray-500 text-sm">No notifications yet</div>
@@ -69,24 +71,25 @@
 
     <!-- Navigation -->
     <nav class="bg-dark-800 border-b border-gray-700 overflow-x-auto">
-        <div class="max-w-7xl mx-auto flex gap-0 sm:gap-1 px-3 sm:px-6">
-            <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
-            <button class="nav-tab" data-tab="watchlist">Watchlist</button>
-            <button class="nav-tab" data-tab="insights">AI Insights</button>
+        <div class="max-w-7xl mx-auto flex gap-0 sm:gap-1 px-3 sm:px-6" role="tablist" aria-label="Main navigation">
+            <button class="nav-tab active" data-tab="dashboard" role="tab" aria-selected="true" aria-controls="tab-dashboard">Dashboard</button>
+            <button class="nav-tab" data-tab="watchlist" role="tab" aria-selected="false" aria-controls="tab-watchlist">Watchlist</button>
+            <button class="nav-tab" data-tab="portfolio" role="tab" aria-selected="false" aria-controls="tab-portfolio">Portfolio</button>
+            <button class="nav-tab" data-tab="insights" role="tab" aria-selected="false" aria-controls="tab-insights">AI Insights</button>
         </div>
     </nav>
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
         <!-- Dashboard Tab -->
-        <div id="tab-dashboard" class="tab-content">
+        <div id="tab-dashboard" class="tab-content" role="tabpanel" aria-labelledby="tab-dashboard">
             <!-- Stock Info Bar (hidden until stock selected) -->
             <div id="stockInfoBar" class="hidden bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                         <div class="flex items-center gap-3">
                             <h2 id="stockSymbol" class="text-xl sm:text-2xl font-bold text-white"></h2>
-                            <button id="btnBackToOverview" class="text-xs text-gray-500 hover:text-white border border-gray-700 rounded px-3 py-1.5 sm:px-2 sm:py-0.5 transition">
+                            <button id="btnBackToOverview" class="text-xs text-gray-500 hover:text-white border border-gray-700 rounded px-3 py-1.5 sm:px-2 sm:py-0.5 transition" aria-label="Back to market overview">
                                 &larr; Overview
                             </button>
                         </div>
@@ -115,16 +118,16 @@
             <!-- Stock Detail Sub-Tabs (hidden until stock selected) -->
             <div id="stockDetailTabs" class="hidden">
                 <!-- Sub-tab navigation -->
-                <nav class="flex gap-0 overflow-x-auto border-b border-gray-700 mb-3 scrollbar-thin">
-                    <button class="stock-tab active" data-stock-tab="overview">Overview</button>
-                    <button class="stock-tab" data-stock-tab="technical">Technical</button>
-                    <button class="stock-tab" data-stock-tab="fundamentals">Fundamentals</button>
-                    <button class="stock-tab" data-stock-tab="news">News & Events</button>
-                    <button class="stock-tab" data-stock-tab="predictions">Predictions</button>
+                <nav class="flex gap-0 overflow-x-auto border-b border-gray-700 mb-3 scrollbar-thin" role="tablist" aria-label="Stock detail tabs">
+                    <button class="stock-tab active" data-stock-tab="overview" role="tab" aria-selected="true" aria-controls="stockTab-overview">Overview</button>
+                    <button class="stock-tab" data-stock-tab="technical" role="tab" aria-selected="false" aria-controls="stockTab-technical">Technical</button>
+                    <button class="stock-tab" data-stock-tab="fundamentals" role="tab" aria-selected="false" aria-controls="stockTab-fundamentals">Fundamentals</button>
+                    <button class="stock-tab" data-stock-tab="news" role="tab" aria-selected="false" aria-controls="stockTab-news">News & Events</button>
+                    <button class="stock-tab" data-stock-tab="predictions" role="tab" aria-selected="false" aria-controls="stockTab-predictions">Predictions</button>
                 </nav>
 
                 <!-- ═══════ OVERVIEW TAB ═══════ -->
-                <div id="stockTab-overview" class="stock-tab-content active">
+                <div id="stockTab-overview" class="stock-tab-content active" role="tabpanel" aria-labelledby="stockTab-overview">
                     <!-- Chart Controls -->
                     <div id="chartControls" class="flex flex-wrap items-center gap-2 mb-2">
                         <div class="flex gap-1 overflow-x-auto">
@@ -176,7 +179,7 @@
                 </div>
 
                 <!-- ═══════ TECHNICAL TAB ═══════ -->
-                <div id="stockTab-technical" class="stock-tab-content">
+                <div id="stockTab-technical" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-technical">
                     <!-- Signal Panel -->
                     <div id="signalPanel">
                         <div id="signalLoading" class="hidden bg-dark-800 rounded-lg p-6 sm:p-8 text-center">
@@ -279,12 +282,12 @@
                 </div>
 
                 <!-- ═══════ FUNDAMENTALS TAB ═══════ -->
-                <div id="stockTab-fundamentals" class="stock-tab-content">
+                <div id="stockTab-fundamentals" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-fundamentals">
                     <div id="fundamentalsPanel"></div>
                 </div>
 
                 <!-- ═══════ NEWS & EVENTS TAB ═══════ -->
-                <div id="stockTab-news" class="stock-tab-content">
+                <div id="stockTab-news" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-news">
                     <!-- Signal-sourced news headlines -->
                     <div class="bg-dark-800 rounded-lg overflow-hidden mb-4">
                         <div class="px-3 py-2 text-xs text-gray-400 border-b border-gray-700">Stock News & Sentiment</div>
@@ -304,7 +307,7 @@
                 </div>
 
                 <!-- ═══════ PREDICTIONS TAB ═══════ -->
-                <div id="stockTab-predictions" class="stock-tab-content">
+                <div id="stockTab-predictions" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-predictions">
                     <div id="predictionPanel" class="bg-dark-800 rounded-lg p-3 sm:p-4">
                         <h3 class="text-base sm:text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
                         <div class="flex flex-wrap gap-2 mb-2">
@@ -525,7 +528,7 @@
         </div>
 
         <!-- Watchlist Tab -->
-        <div id="tab-watchlist" class="tab-content hidden">
+        <div id="tab-watchlist" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-watchlist">
             <!-- Header: title + add form + sort -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -533,14 +536,16 @@
                     <div class="flex flex-wrap gap-2 items-center">
                         <form id="addWatchlistForm" class="flex gap-2 items-center relative">
                             <div class="relative flex-1 sm:w-48">
+                                <label for="watchlistSymbolInput" class="sr-only">Add symbol to watchlist</label>
                                 <input type="text" id="watchlistSymbolInput" placeholder="Add symbol (e.g. RELIANCE)" autocomplete="off"
                                     class="w-full bg-dark-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent-blue">
-                                <div id="watchlistSearchResults" class="absolute top-full left-0 w-full bg-dark-700 border border-gray-600 rounded-b-lg mt-0.5 hidden z-50 max-h-48 overflow-y-auto shadow-xl"></div>
+                                <div id="watchlistSearchResults" class="absolute top-full left-0 w-full bg-dark-700 border border-gray-600 rounded-b-lg mt-0.5 hidden z-50 max-h-48 overflow-y-auto shadow-xl" aria-live="polite"></div>
                             </div>
                             <button type="submit" class="px-3 py-1.5 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium whitespace-nowrap">
                                 + Add
                             </button>
                         </form>
+                        <label for="watchlistSort" class="sr-only">Sort watchlist</label>
                         <select id="watchlistSort" class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-blue">
                             <option value="name">Sort: Name</option>
                             <option value="pct_change">Sort: % Change</option>
@@ -567,8 +572,90 @@
             </div>
         </div>
 
+        <!-- Portfolio Tab -->
+        <div id="tab-portfolio" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-portfolio">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <div class="text-xs text-gray-400">Total Invested</div>
+                    <div id="totalInvested" class="text-xl font-bold text-white mt-1">--</div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <div class="text-xs text-gray-400">Current Value</div>
+                    <div id="currentValue" class="text-xl font-bold text-white mt-1">--</div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <div class="text-xs text-gray-400">Total P&amp;L</div>
+                    <div id="totalPnl" class="text-xl font-bold text-gray-400 mt-1">--</div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <div class="text-xs text-gray-400">Holdings</div>
+                    <div id="holdingsCount" class="text-xl font-bold text-white mt-1">--</div>
+                </div>
+            </div>
+
+            <!-- Analytics Container -->
+            <div id="portfolioAnalytics" class="mb-4"></div>
+
+            <!-- Add Holding Form -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Add Holding</h3>
+                <form id="addHoldingForm" class="flex flex-wrap gap-2 items-end">
+                    <div>
+                        <label for="holdingSymbol" class="text-[10px] text-gray-500 block mb-0.5">Symbol</label>
+                        <input type="text" id="holdingSymbol" name="symbol" required placeholder="RELIANCE"
+                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-28 placeholder-gray-500 uppercase">
+                    </div>
+                    <div>
+                        <label for="holdingQuantity" class="text-[10px] text-gray-500 block mb-0.5">Qty</label>
+                        <input type="number" id="holdingQuantity" name="quantity" required min="1" placeholder="10"
+                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-20 placeholder-gray-500">
+                    </div>
+                    <div>
+                        <label for="holdingBuyPrice" class="text-[10px] text-gray-500 block mb-0.5">Buy Price</label>
+                        <input type="number" id="holdingBuyPrice" name="buy_price" required min="0.01" step="0.01" placeholder="2500.00"
+                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-28 placeholder-gray-500">
+                    </div>
+                    <div>
+                        <label for="holdingBuyDate" class="text-[10px] text-gray-500 block mb-0.5">Buy Date</label>
+                        <input type="date" id="holdingBuyDate" name="buy_date" required
+                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500">
+                    </div>
+                    <button type="submit" class="px-3 py-1 bg-accent-blue text-white text-xs rounded hover:bg-blue-600 transition">Add</button>
+                </form>
+            </div>
+
+            <!-- Holdings Table -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Holdings</h3>
+                <div id="emptyPortfolio" class="hidden text-center py-6 text-gray-500 text-sm">
+                    No holdings yet. Add your first stock above.
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm min-w-[600px]">
+                        <thead>
+                            <tr class="text-gray-400 border-b border-gray-700">
+                                <th class="text-left px-4 py-2">Symbol</th>
+                                <th class="text-right px-4 py-2">Qty</th>
+                                <th class="text-right px-4 py-2">Buy Price</th>
+                                <th class="text-right px-4 py-2">CMP</th>
+                                <th class="text-right px-4 py-2">Invested</th>
+                                <th class="text-right px-4 py-2">Current</th>
+                                <th class="text-right px-4 py-2">P&amp;L</th>
+                                <th class="text-right px-4 py-2">P&amp;L %</th>
+                                <th class="text-right px-4 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdingsTable">
+                            <tr><td colspan="9" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- AI Insights Tab -->
-        <div id="tab-insights" class="tab-content hidden">
+        <div id="tab-insights" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-insights">
             <!-- High Confidence Signals -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex items-center justify-between mb-3">
@@ -637,7 +724,9 @@
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <h3 class="text-sm font-semibold text-white mb-3">Signal System Backtest — New vs Old</h3>
                 <div class="flex flex-wrap gap-2 mb-3">
+                    <label for="backtestSymbol" class="sr-only">Backtest symbol</label>
                     <input type="text" id="backtestSymbol" placeholder="Symbol (e.g. RELIANCE)" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-40 placeholder-gray-500 uppercase">
+                    <label for="backtestDays" class="sr-only">Backtest period</label>
                     <select id="backtestDays" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
                         <option value="30">30 days</option>
                         <option value="60" selected>60 days</option>
@@ -699,13 +788,16 @@
                     <h3 class="text-sm font-semibold text-white">Smart Alerts</h3>
                 </div>
                 <div class="flex flex-wrap gap-2 mb-3">
+                    <label for="smartAlertType" class="sr-only">Smart alert type</label>
                     <select id="smartAlertType" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
                         <option value="mood_extreme">Mood Extreme</option>
                         <option value="sentiment_spike">Sentiment Spike</option>
                         <option value="prediction_change">Prediction Change</option>
                         <option value="confidence_change">Confidence Change</option>
                     </select>
+                    <label for="smartAlertSymbol" class="sr-only">Smart alert symbol</label>
                     <input type="text" id="smartAlertSymbol" placeholder="Symbol (optional)" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-28 placeholder-gray-500">
+                    <label for="smartAlertThreshold" class="sr-only">Smart alert threshold</label>
                     <input type="number" id="smartAlertThreshold" placeholder="Threshold" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24 placeholder-gray-500">
                     <button onclick="Insights.createSmartAlert()" class="px-3 py-1 bg-accent-blue text-white text-xs rounded hover:bg-blue-600 transition">Create</button>
                 </div>
@@ -726,7 +818,7 @@
     </main>
 
     <!-- Toast Container -->
-    <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 space-y-2"></div>
+    <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 space-y-2" aria-live="polite"></div>
 
     <script src="/static/js/shimmer.js?v=1"></script>
     <script>Shimmer.showMarketOverview();</script>
