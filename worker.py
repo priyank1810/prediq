@@ -1,7 +1,13 @@
 """
 ML Worker Process — polls SQLite job queue and processes heavy tasks.
 
-Usage: python worker.py
+Usage:
+    python worker.py            # run continuously
+    python worker.py --once     # process one batch, then exit (useful for testing)
+
+Environment variables:
+    WORKER_CONCURRENCY  — max parallel jobs (default: 2)
+    LOW_RESOURCE_MODE   — throttle TensorFlow threads when "true" or "1"
 """
 
 import os
@@ -10,6 +16,10 @@ import json
 import time
 import signal
 import logging
+import argparse
+import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 
 # Configure TensorFlow before any import
@@ -39,15 +49,28 @@ from app.database import SessionLocal
 from app.models import SignalLog
 from app.utils.helpers import now_ist
 
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+WORKER_CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "2"))
+HEALTH_LOG_INTERVAL = 300  # seconds (5 minutes)
+
 
 class Worker:
     """Polls the job queue and dispatches to the appropriate handler."""
 
-    def __init__(self):
+    def __init__(self, concurrency: int = WORKER_CONCURRENCY):
         self._shutdown = False
+        self._concurrency = max(1, concurrency)
+        self._worker_id = f"worker-{uuid.uuid4().hex[:8]}"
         self._prediction_service = None
         self._signal_service = None
         self._oi_service = None
+        # Health counters (thread-safe via lock)
+        self._lock = threading.Lock()
+        self._jobs_processed = 0
+        self._jobs_failed = 0
+        self._start_time = time.monotonic()
 
     # --- Lazy-loaded services (defer heavy imports) ---
 
@@ -78,7 +101,7 @@ class Worker:
     # --- Signal handlers ---
 
     def handle_shutdown(self, signum, frame):
-        log.info("Received shutdown signal, finishing current job...")
+        log.info("Received shutdown signal (%s), finishing current jobs...", signum)
         self._shutdown = True
 
     # --- Job dispatchers ---
@@ -220,6 +243,54 @@ class Worker:
         except Exception as e:
             log.warning("Signal logging failed for %s: %s", symbol, e)
 
+    # --- Health logging ---
+
+    def _log_health(self):
+        """Log basic health stats: jobs processed, failed, uptime."""
+        uptime_secs = time.monotonic() - self._start_time
+        hours, remainder = divmod(int(uptime_secs), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        with self._lock:
+            processed = self._jobs_processed
+            failed = self._jobs_failed
+        log.info(
+            "Health: %s | processed=%d failed=%d concurrency=%d uptime=%dh%02dm%02ds",
+            self._worker_id, processed, failed, self._concurrency,
+            hours, minutes, seconds,
+        )
+
+    # --- Single job processing (used by thread pool) ---
+
+    def _process_one_job(self, job: dict) -> bool:
+        """Process a single claimed job. Returns True on success, False on failure."""
+        job_id = job["id"]
+        job_type = job["job_type"]
+        params = job["params"]
+
+        handler_name = self.DISPATCH.get(job_type)
+        if not handler_name:
+            job_service.fail(job_id, f"Unknown job type: {job_type}")
+            log.warning("Unknown job type: %s (job %d)", job_type, job_id)
+            return False
+
+        log.info("Processing job %d: %s %s", job_id, job_type,
+                 params.get("symbol", "") if isinstance(params, dict) else "")
+
+        try:
+            handler = getattr(self, handler_name)
+            result = handler(params)
+            job_service.complete(job_id, result)
+            log.info("Completed job %d: %s", job_id, job_type)
+            with self._lock:
+                self._jobs_processed += 1
+            return True
+        except Exception as e:
+            job_service.fail(job_id, str(e))
+            log.error("Job %d failed: %s", job_id, e)
+            with self._lock:
+                self._jobs_failed += 1
+            return False
+
     # --- Main loop ---
 
     DISPATCH = {
@@ -230,66 +301,119 @@ class Worker:
         "oi_stream": "handle_oi_stream",
     }
 
-    def run(self):
+    def run(self, once: bool = False):
+        """Start the worker loop.
+
+        Args:
+            once: If True, process one batch of up to *concurrency* jobs, then exit.
+                  Useful for testing and one-shot cron invocations.
+        """
         signal.signal(signal.SIGTERM, self.handle_shutdown)
         signal.signal(signal.SIGINT, self.handle_shutdown)
 
-        log.info("Worker started, polling for jobs...")
+        log.info(
+            "Worker %s started (concurrency=%d, once=%s), polling for jobs...",
+            self._worker_id, self._concurrency, once,
+        )
 
         last_stale_check = time.time()
         last_cleanup = time.time()
+        last_health_log = time.time()
 
-        while not self._shutdown:
-            try:
-                # Periodic maintenance
-                now = time.time()
-                if now - last_stale_check > 60:
-                    reset = job_service.reset_stale()
-                    if reset:
-                        log.info("Reset %d stale jobs", reset)
-                    last_stale_check = now
+        executor = ThreadPoolExecutor(max_workers=self._concurrency)
 
-                if now - last_cleanup > 3600:
-                    deleted = job_service.cleanup_old()
-                    if deleted:
-                        log.info("Cleaned up %d old jobs", deleted)
-                    last_cleanup = now
+        try:
+            while not self._shutdown:
+                try:
+                    # --- Periodic maintenance ---
+                    now_ts = time.time()
 
-                # Poll for next job
-                job = job_service.claim_next()
-                if not job:
+                    if now_ts - last_stale_check > 60:
+                        # Use the new release_stale_jobs (10-min timeout) for
+                        # multi-worker safety; fall back to the legacy reset_stale
+                        # which is compatible with the old single-worker setup.
+                        released = job_service.release_stale_jobs()
+                        if released:
+                            log.info("Released %d stale jobs (>10 min)", released)
+                        last_stale_check = now_ts
+
+                    if now_ts - last_cleanup > 3600:
+                        deleted = job_service.cleanup_old()
+                        if deleted:
+                            log.info("Cleaned up %d old jobs", deleted)
+                        last_cleanup = now_ts
+
+                    if now_ts - last_health_log > HEALTH_LOG_INTERVAL:
+                        self._log_health()
+                        last_health_log = now_ts
+
+                    # --- Claim a batch of jobs (up to concurrency) ---
+                    jobs = []
+                    for _ in range(self._concurrency):
+                        job = job_service.claim_job(worker_id=self._worker_id)
+                        if job is None:
+                            break
+                        jobs.append(job)
+
+                    if not jobs:
+                        if once:
+                            log.info("--once mode: no pending jobs, exiting.")
+                            break
+                        time.sleep(1)
+                        continue
+
+                    # --- Submit jobs to thread pool ---
+                    futures = {
+                        executor.submit(self._process_one_job, job): job
+                        for job in jobs
+                    }
+
+                    # Wait for the batch to complete (with periodic shutdown check)
+                    for future in as_completed(futures):
+                        if self._shutdown:
+                            break
+                        # Propagate any unexpected executor errors
+                        try:
+                            future.result()
+                        except Exception as e:
+                            failed_job = futures[future]
+                            log.error("Unexpected executor error for job %d: %s",
+                                      failed_job["id"], e)
+
+                    if once:
+                        log.info("--once mode: batch complete, exiting.")
+                        break
+
+                except Exception as e:
+                    log.error("Worker loop error: %s", e)
+                    if once:
+                        break
                     time.sleep(1)
-                    continue
+        finally:
+            # Graceful shutdown: let running threads finish, then tear down
+            log.info("Shutting down thread pool (waiting for in-flight jobs)...")
+            executor.shutdown(wait=True)
+            self._log_health()
+            log.info("Worker %s shut down gracefully.", self._worker_id)
 
-                job_id = job["id"]
-                job_type = job["job_type"]
-                params = job["params"]
 
-                handler_name = self.DISPATCH.get(job_type)
-                if not handler_name:
-                    job_service.fail(job_id, f"Unknown job type: {job_type}")
-                    log.warning("Unknown job type: %s (job %d)", job_type, job_id)
-                    continue
-
-                log.info("Processing job %d: %s %s", job_id, job_type,
-                         params.get("symbol", "") if isinstance(params, dict) else "")
-
-                handler = getattr(self, handler_name)
-                result = handler(params)
-                job_service.complete(job_id, result)
-
-                log.info("Completed job %d: %s", job_id, job_type)
-
-            except Exception as e:
-                if 'job_id' in locals():
-                    job_service.fail(job_id, str(e))
-                    log.error("Job %d failed: %s", job_id, e)
-                else:
-                    log.error("Worker error: %s", e)
-
-        log.info("Worker shut down gracefully.")
+def parse_args():
+    parser = argparse.ArgumentParser(description="Stock Tracker ML Worker")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Process a single batch of jobs, then exit (useful for testing).",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=WORKER_CONCURRENCY,
+        help=f"Max parallel jobs (default: {WORKER_CONCURRENCY}, from WORKER_CONCURRENCY env).",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    worker = Worker()
-    worker.run()
+    args = parse_args()
+    worker = Worker(concurrency=args.concurrency)
+    worker.run(once=args.once)

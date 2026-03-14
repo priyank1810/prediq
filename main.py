@@ -75,11 +75,26 @@ async def market_mood_broadcaster():
 
 
 def _migrate_db():
-    """Add missing columns to existing tables (SQLite doesn't support IF NOT EXISTS for columns)."""
-    import sqlite3
-    from app.config import DATABASE_URL
+    """Add missing columns to existing tables.
 
-    db_path = DATABASE_URL.replace("sqlite:///", "")
+    For SQLite: uses sqlite3 directly (SQLite doesn't support IF NOT EXISTS for columns).
+    For PostgreSQL: uses SQLAlchemy inspect to check columns before ALTER TABLE,
+    and relies on Base.metadata.create_all for initial schema (called before this function).
+    """
+    from app.config import DATABASE_URL
+    from app.database import _is_sqlite
+
+    if _is_sqlite:
+        _migrate_db_sqlite(DATABASE_URL)
+    else:
+        _migrate_db_postgres()
+
+
+def _migrate_db_sqlite(database_url: str):
+    """SQLite-specific migration using sqlite3 module."""
+    import sqlite3
+
+    db_path = database_url.replace("sqlite:///", "")
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
@@ -121,6 +136,52 @@ def _migrate_db():
 
     conn.commit()
     conn.close()
+
+
+def _migrate_db_postgres():
+    """PostgreSQL migration using SQLAlchemy inspect to safely add missing columns."""
+    from sqlalchemy import inspect, text
+    from app.database import engine
+
+    inspector = inspect(engine)
+
+    migrations = [
+        ("prediction_logs", "sector", "TEXT"),
+        ("prediction_logs", "regime", "TEXT"),
+        ("signal_logs", "sector", "TEXT"),
+        ("signal_logs", "regime", "TEXT"),
+        ("signal_logs", "oi_score", "DOUBLE PRECISION"),
+        ("signal_logs", "price_after_30min", "DOUBLE PRECISION"),
+        ("signal_logs", "price_after_1hr", "DOUBLE PRECISION"),
+        ("signal_logs", "was_correct_30min", "BOOLEAN"),
+        ("signal_logs", "was_correct_1hr", "BOOLEAN"),
+    ]
+
+    with engine.begin() as conn:
+        for table, column, col_type in migrations:
+            if not inspector.has_table(table):
+                continue
+            existing_cols = {c["name"] for c in inspector.get_columns(table)}
+            if column not in existing_cols:
+                conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}'))
+
+        # Add indexes (IF NOT EXISTS is supported in PostgreSQL 9.5+)
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS ix_portfolio_holdings_user_id ON portfolio_holdings(user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_price_alerts_user_id ON price_alerts(user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_price_alerts_is_triggered ON price_alerts(is_triggered)",
+            "CREATE INDEX IF NOT EXISTS ix_prediction_logs_symbol ON prediction_logs(symbol)",
+            "CREATE INDEX IF NOT EXISTS ix_signal_logs_created_at ON signal_logs(created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_signal_logs_symbol_created ON signal_logs(symbol, created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_job_queue_poll ON job_queue(status, priority, created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_job_queue_job_type ON job_queue(job_type)",
+            "CREATE INDEX IF NOT EXISTS ix_job_queue_status ON job_queue(status)",
+        ]
+        for idx_sql in indexes:
+            try:
+                conn.execute(text(idx_sql))
+            except Exception:
+                pass  # Table may not exist yet
 
 
 async def periodic_job_enqueuer():

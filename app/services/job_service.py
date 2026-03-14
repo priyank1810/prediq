@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import timedelta
+from sqlalchemy import text
 from app.database import SessionLocal
 from app.models import JobQueue
 from app.utils.helpers import now_ist
@@ -29,7 +31,8 @@ class JobService:
     def claim_next(self) -> dict | None:
         """Atomically claim the highest-priority pending job.
         Returns dict with job info or None if no pending jobs.
-        Safe for single-worker — SQLite serializes writes via WAL + busy_timeout."""
+        Safe for single-worker — SQLite serializes writes via WAL + busy_timeout.
+        For multi-worker setups, prefer claim_job() which uses a unique worker_id."""
         db = SessionLocal()
         try:
             job = (
@@ -48,6 +51,60 @@ class JobService:
                 "job_type": job.job_type,
                 "priority": job.priority,
                 "params": json.loads(job.params) if job.params else {},
+            }
+        finally:
+            db.close()
+
+    def claim_job(self, worker_id: str | None = None) -> dict | None:
+        """Atomically claim the next pending job, preventing duplicate processing.
+
+        Uses an UPDATE ... WHERE pattern so that only one worker can claim a
+        given job even when multiple workers poll concurrently.  SQLite's
+        implicit write lock serializes these UPDATEs; the SELECT that follows
+        reads only the row this transaction touched.
+
+        Args:
+            worker_id: Optional identifier for the claiming worker (for debugging).
+
+        Returns:
+            dict with job info, or None if no pending jobs.
+        """
+        db = SessionLocal()
+        try:
+            # Step 1: find the best candidate (read, no lock needed)
+            candidate = (
+                db.query(JobQueue)
+                .filter(JobQueue.status == "pending")
+                .order_by(JobQueue.priority.desc(), JobQueue.created_at.asc())
+                .first()
+            )
+            if not candidate:
+                return None
+
+            # Step 2: atomic conditional UPDATE — only succeeds if still pending
+            now = now_ist()
+            result = db.execute(
+                text(
+                    "UPDATE job_queue "
+                    "SET status = 'running', started_at = :now "
+                    "WHERE id = :job_id AND status = 'pending'"
+                ),
+                {"now": now, "job_id": candidate.id},
+            )
+            db.commit()
+
+            if result.rowcount == 0:
+                # Another worker claimed it between our SELECT and UPDATE
+                return None
+
+            # Refresh to get committed state
+            db.refresh(candidate)
+            return {
+                "id": candidate.id,
+                "job_type": candidate.job_type,
+                "priority": candidate.priority,
+                "params": json.loads(candidate.params) if candidate.params else {},
+                "worker_id": worker_id,
             }
         finally:
             db.close()
@@ -156,6 +213,36 @@ class JobService:
         db = SessionLocal()
         try:
             cutoff = now_ist().replace(tzinfo=None) - timedelta(seconds=timeout_seconds)
+            stale = (
+                db.query(JobQueue)
+                .filter(
+                    JobQueue.status == "running",
+                    JobQueue.started_at < cutoff,
+                )
+                .all()
+            )
+            for job in stale:
+                job.status = "pending"
+                job.started_at = None
+            if stale:
+                db.commit()
+            return len(stale)
+        finally:
+            db.close()
+
+    def release_stale_jobs(self, timeout_minutes: int = 10) -> int:
+        """Reset jobs stuck in 'running' for more than *timeout_minutes* back to 'pending'.
+
+        This is the recommended stale-job recovery method for multi-worker
+        deployments.  It uses a longer default timeout (10 min) than
+        reset_stale() to avoid reclaiming jobs that are simply slow.
+
+        Returns:
+            Number of jobs released.
+        """
+        db = SessionLocal()
+        try:
+            cutoff = now_ist().replace(tzinfo=None) - timedelta(minutes=timeout_minutes)
             stale = (
                 db.query(JobQueue)
                 .filter(

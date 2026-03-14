@@ -30,3 +30,5 @@ hmmlearn>=0.3.0
 scipy>=1.11.0
 curl_cffi>=0.5.10
 gunicorn>=21.2.0
+# Uncomment psycopg2-binary to use PostgreSQL instead of SQLite
+# psycopg2-binary>=2.9.9

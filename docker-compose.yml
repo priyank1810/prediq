@@ -14,6 +14,9 @@ services:
       - TF_CPP_MIN_LOG_LEVEL=2
       - LOW_RESOURCE_MODE=${LOW_RESOURCE_MODE:-false}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+      - REDIS_URL=redis://redis:6379/0
+      # Uncomment the next line (and the postgres service below) to use PostgreSQL
+      # - DATABASE_URL=postgresql://stockuser:stockpass@postgres:5432/stock_tracker
     env_file:
       - .env
     healthcheck:
@@ -23,9 +26,17 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      # Uncomment when using PostgreSQL
+      # postgres:
+      #   condition: service_healthy
 
   worker:
     build: .
+    # Note: remove container_name when using deploy.replicas, since each
+    # replica needs a unique name and Docker Compose assigns one automatically.
     container_name: stock-tracker-worker
     command: ["python", "worker.py"]
     volumes:
@@ -35,27 +46,62 @@ services:
     environment:
       - TF_CPP_MIN_LOG_LEVEL=2
       - LOW_RESOURCE_MODE=${LOW_RESOURCE_MODE:-true}
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
+      - REDIS_URL=redis://redis:6379/0
+      # Uncomment the next line (and the postgres service below) to use PostgreSQL
+      # - DATABASE_URL=postgresql://stockuser:stockpass@postgres:5432/stock_tracker
     env_file:
       - .env
     restart: unless-stopped
     depends_on:
       app:
         condition: service_healthy
+      # Uncomment when using PostgreSQL
+      # postgres:
+      #   condition: service_healthy
+    # To scale workers horizontally, uncomment the deploy block below and
+    # remove the container_name directive above (replicas need unique names).
+    # Each replica uses claim_job() with atomic row-level claims, so multiple
+    # workers can safely poll the same SQLite queue without duplicate processing.
+    # deploy:
+    #   replicas: 2
 
-  # Redis — uncomment when ready to migrate from SQLite job queue
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: stock-tracker-redis
+  redis:
+    image: redis:7-alpine
+    container_name: stock-tracker-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # PostgreSQL — uncomment to use instead of SQLite.
+  # When enabled, also uncomment DATABASE_URL in app and worker services above,
+  # and the depends_on postgres entries.
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: stock-tracker-postgres
+  #   environment:
+  #     POSTGRES_USER: stockuser
+  #     POSTGRES_PASSWORD: stockpass
+  #     POSTGRES_DB: stock_tracker
   #   ports:
-  #     - "6379:6379"
+  #     - "5432:5432"
   #   volumes:
-  #     - redis_data:/data
+  #     - postgres_data:/var/lib/postgresql/data
   #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
+  #     test: ["CMD-SHELL", "pg_isready -U stockuser -d stock_tracker"]
   #     interval: 10s
   #     timeout: 5s
-  #     retries: 3
+  #     retries: 5
   #   restart: unless-stopped
 
-# volumes:
-#   redis_data:
+volumes:
+  redis_data:
+  # Uncomment when using PostgreSQL
+  # postgres_data:

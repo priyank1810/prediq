@@ -11,7 +11,10 @@ MODEL_DIR = BASE_DIR / "saved_models"
 DATA_DIR.mkdir(exist_ok=True)
 MODEL_DIR.mkdir(exist_ok=True)
 
-DATABASE_URL = f"sqlite:///{DATA_DIR}/stock_tracker.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR}/stock_tracker.db")
+
+# Redis (optional caching backend — leave empty to use in-memory TTLCache)
+REDIS_URL = os.getenv("REDIS_URL", "")
 
 # Market hours (IST)
 MARKET_OPEN_HOUR = 9
