@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base, get_db
 from app.auth import get_password_hash, create_access_token
+import app.models as _models  # noqa: F401 — ensure all model classes are registered with Base
 from app.models import User
 
 # ---------------------------------------------------------------------------
