@@ -14,6 +14,9 @@ const Lazy = {
         fundamentals: { src: '/static/js/fundamentals.js?v=12' },
         signals:      { src: '/static/js/signals.js?v=13' },
         portfolio:    { src: '/static/js/portfolio.js?v=1' },
+        mtf:          { src: '/static/js/mtf.js?v=1' },
+        options:      { src: '/static/js/options.js?v=1' },
+        screener:     { src: '/static/js/screener.js?v=1' },
     },
 
     /**

@@ -6,10 +6,18 @@ const Watchlist = {
     _searchTimer: null,
     _searchAbort: null,
     _lastLoadTime: 0,
+    _dragSrcSymbol: null,
 
     init() {
         const input = document.getElementById('watchlistSymbolInput');
         const resultsDiv = document.getElementById('watchlistSearchResults');
+
+        // Restore custom sort if a saved order exists
+        if (this._loadOrder().length > 0) {
+            this._sortBy = 'custom';
+            const sortSelect = document.getElementById('watchlistSort');
+            if (sortSelect) sortSelect.value = 'custom';
+        }
 
         document.getElementById('addWatchlistForm').addEventListener('submit', (e) => {
             e.preventDefault();
@@ -127,6 +135,8 @@ const Watchlist = {
     _getSorted() {
         const items = [...this._items];
         switch (this._sortBy) {
+            case 'custom':
+                return this._applyCustomOrder(items);
             case 'pct_change':
                 return items.sort((a, b) => Math.abs(b.pct_change || 0) - Math.abs(a.pct_change || 0));
             case 'confidence':
@@ -202,8 +212,8 @@ const Watchlist = {
                 : (item.item_type === 'etf' ? '<span class="text-[9px] px-1 py-0.5 rounded bg-teal-900/50 text-teal-300">ETF</span>' : '');
 
             return `
-                <div class="bg-dark-800 border-l-4 ${borderColor} rounded-lg p-3 flex flex-col gap-2 hover:bg-dark-700 transition relative group"
-                     data-wl-symbol="${item.symbol}">
+                <div class="wl-card bg-dark-800 border-l-4 ${borderColor} rounded-lg p-3 flex flex-col gap-2 hover:bg-dark-700 transition relative group"
+                     draggable="true" data-wl-symbol="${item.symbol}">
                     <!-- Header: Symbol + Direction badge -->
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-1.5">
@@ -266,6 +276,14 @@ const Watchlist = {
                 </div>
             `;
         }).join('');
+
+        // Bind drag-and-drop events to each card
+        container.querySelectorAll('.wl-card').forEach(card => {
+            card.addEventListener('dragstart', (e) => this._onDragStart(e));
+            card.addEventListener('dragover', (e) => this._onDragOver(e));
+            card.addEventListener('drop', (e) => this._onDrop(e));
+            card.addEventListener('dragend', () => this._onDragEnd());
+        });
     },
 
     renderAlerts() {
@@ -444,10 +462,95 @@ const Watchlist = {
             // Remove from local state and re-render without API call
             this._items = this._items.filter(i => i.symbol !== symbol);
             this._alerts = this._alerts.filter(a => a.symbol !== symbol);
+            // Also remove from saved order
+            const order = this._loadOrder();
+            const idx = order.indexOf(symbol);
+            if (idx !== -1) { order.splice(idx, 1); this._saveOrder(order); }
             this.renderCards();
             this.renderAlerts();
         } catch (e) {
             App.showToast('Failed to remove: ' + e.message, 'error');
         }
+    },
+
+    // ---- Drag-and-drop reorder helpers ----
+
+    _orderKey: 'watchlist_sort_order',
+
+    _loadOrder() {
+        try {
+            return JSON.parse(localStorage.getItem(this._orderKey)) || [];
+        } catch { return []; }
+    },
+
+    _saveOrder(symbols) {
+        localStorage.setItem(this._orderKey, JSON.stringify(symbols));
+    },
+
+    _applyCustomOrder(items) {
+        const order = this._loadOrder();
+        if (order.length === 0) return items;
+        const orderMap = {};
+        order.forEach((sym, i) => { orderMap[sym] = i; });
+        // Items not in the saved order go to the end
+        const maxIdx = order.length;
+        return items.sort((a, b) => {
+            const ai = orderMap[a.symbol] !== undefined ? orderMap[a.symbol] : maxIdx;
+            const bi = orderMap[b.symbol] !== undefined ? orderMap[b.symbol] : maxIdx;
+            return ai - bi;
+        });
+    },
+
+    _onDragStart(e) {
+        const card = e.target.closest('.wl-card');
+        if (!card) return;
+        this._dragSrcSymbol = card.dataset.wlSymbol;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', this._dragSrcSymbol);
+    },
+
+    _onDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const card = e.target.closest('.wl-card');
+        if (!card || card.dataset.wlSymbol === this._dragSrcSymbol) return;
+        // Clear previous drag-over indicators
+        document.querySelectorAll('.wl-card.drag-over').forEach(c => c.classList.remove('drag-over'));
+        card.classList.add('drag-over');
+    },
+
+    _onDrop(e) {
+        e.preventDefault();
+        const targetCard = e.target.closest('.wl-card');
+        if (!targetCard) return;
+        const targetSymbol = targetCard.dataset.wlSymbol;
+        if (!this._dragSrcSymbol || this._dragSrcSymbol === targetSymbol) return;
+
+        // Build current visual order from DOM
+        const container = document.getElementById('watchlistCards');
+        const cards = [...container.querySelectorAll('.wl-card')];
+        const symbols = cards.map(c => c.dataset.wlSymbol);
+
+        // Move source to target position
+        const srcIdx = symbols.indexOf(this._dragSrcSymbol);
+        const tgtIdx = symbols.indexOf(targetSymbol);
+        if (srcIdx === -1 || tgtIdx === -1) return;
+        symbols.splice(srcIdx, 1);
+        symbols.splice(tgtIdx, 0, this._dragSrcSymbol);
+
+        // Save and switch to custom sort
+        this._saveOrder(symbols);
+        this._sortBy = 'custom';
+        const sortSelect = document.getElementById('watchlistSort');
+        if (sortSelect) sortSelect.value = 'custom';
+
+        this.renderCards();
+    },
+
+    _onDragEnd() {
+        document.querySelectorAll('.wl-card.dragging').forEach(c => c.classList.remove('dragging'));
+        document.querySelectorAll('.wl-card.drag-over').forEach(c => c.classList.remove('drag-over'));
+        this._dragSrcSymbol = null;
     }
 };

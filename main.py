@@ -16,7 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import stocks, predictions, portfolio, alerts, indicators, signals, watchlist
+from app.routers import stocks, predictions, portfolio, alerts, indicators, signals, watchlist, screener, options
+from app.routers.mtf_dashboard import router as mtf_dashboard_router
 from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
 from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, signal_accuracy_validator_30min, signal_accuracy_validator_1hr
@@ -328,6 +329,9 @@ app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"]
 app.include_router(fii_dii_router, prefix="/api/fii-dii", tags=["fii-dii"])
 app.include_router(sectors_router, prefix="/api/sectors", tags=["sectors"])
 app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(screener.router, prefix="/api/screener", tags=["screener"])
+app.include_router(options.router, prefix="/api/options", tags=["options"])
+app.include_router(mtf_dashboard_router, prefix="/api/mtf", tags=["mtf-dashboard"])
 app.include_router(ws_router)
 
 

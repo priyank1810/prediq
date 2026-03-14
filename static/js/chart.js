@@ -14,6 +14,13 @@ class StockChart {
         this._throttleTimer = null;
         this._pendingPrice = null;
         this._pendingVolume = null;
+
+        // Drawing tools state
+        this._drawingMode = 'none'; // 'none' | 'horizontal' | 'trendline'
+        this._drawnPriceLines = [];   // horizontal price lines
+        this._drawnTrendlines = [];   // trendline series
+        this._trendlineStart = null;  // first click point for trendline
+        this._clickHandler = null;
     }
 
     init(timeVisible = false) {
@@ -218,6 +225,168 @@ class StockChart {
             text: `$${price.toFixed(0)}`,
         }));
         series.setMarkers(markers);
+    }
+
+    // ---- Drawing Tools ----
+
+    setDrawingMode(mode) {
+        // Toggle off if already active
+        if (this._drawingMode === mode) {
+            this._drawingMode = 'none';
+            this._trendlineStart = null;
+            this._updateDrawingButtons();
+            this._setCrosshairStyle(false);
+            return;
+        }
+        this._drawingMode = mode;
+        this._trendlineStart = null;
+        this._updateDrawingButtons();
+        this._setCrosshairStyle(mode !== 'none');
+    }
+
+    _setCrosshairStyle(drawing) {
+        const container = document.getElementById(this.containerId);
+        if (container) {
+            container.style.cursor = drawing ? 'crosshair' : '';
+        }
+    }
+
+    _updateDrawingButtons() {
+        const hBtn = document.getElementById('btnDrawHLine');
+        const tBtn = document.getElementById('btnDrawTrendline');
+        if (hBtn) hBtn.classList.toggle('active', this._drawingMode === 'horizontal');
+        if (tBtn) tBtn.classList.toggle('active', this._drawingMode === 'trendline');
+    }
+
+    initDrawingTools() {
+        // Remove old DOM listeners to prevent duplicates on re-init
+        if (this._drawBtnHandlers) {
+            const { hBtn, tBtn, cBtn, hFn, tFn, cFn } = this._drawBtnHandlers;
+            if (hBtn) hBtn.removeEventListener('click', hFn);
+            if (tBtn) tBtn.removeEventListener('click', tFn);
+            if (cBtn) cBtn.removeEventListener('click', cFn);
+        }
+
+        const hBtn = document.getElementById('btnDrawHLine');
+        const tBtn = document.getElementById('btnDrawTrendline');
+        const cBtn = document.getElementById('btnDrawClear');
+
+        const hFn = () => this.setDrawingMode('horizontal');
+        const tFn = () => this.setDrawingMode('trendline');
+        const cFn = () => this.clearDrawings();
+
+        if (hBtn) hBtn.addEventListener('click', hFn);
+        if (tBtn) tBtn.addEventListener('click', tFn);
+        if (cBtn) cBtn.addEventListener('click', cFn);
+
+        this._drawBtnHandlers = { hBtn, tBtn, cBtn, hFn, tFn, cFn };
+
+        // Reset drawing state
+        this._drawingMode = 'none';
+        this._drawnPriceLines = [];
+        this._drawnTrendlines = [];
+        this._trendlineStart = null;
+        this._updateDrawingButtons();
+
+        this._attachClickHandler();
+    }
+
+    _attachClickHandler() {
+        if (!this.chart) return;
+
+        // Remove previous handler if any
+        if (this._clickHandler) {
+            this.chart.unsubscribeClick(this._clickHandler);
+        }
+
+        this._clickHandler = (param) => {
+            if (this._drawingMode === 'none') return;
+            if (!param.point || !param.time) return;
+
+            const activeSeries = this.candleSeries || this.lineSeries;
+            if (!activeSeries) return;
+
+            const price = activeSeries.coordinateToPrice(param.point.y);
+            if (price == null || !isFinite(price)) return;
+
+            if (this._drawingMode === 'horizontal') {
+                this._addHorizontalLine(price);
+                // Stay in horizontal mode for rapid placement
+            } else if (this._drawingMode === 'trendline') {
+                if (!this._trendlineStart) {
+                    // First click: store start point
+                    this._trendlineStart = { time: param.time, price: price };
+                } else {
+                    // Second click: draw the trendline
+                    this._addTrendline(this._trendlineStart, { time: param.time, price: price });
+                    this._trendlineStart = null;
+                    // Exit trendline mode after drawing
+                    this.setDrawingMode('none');
+                }
+            }
+        };
+
+        this.chart.subscribeClick(this._clickHandler);
+    }
+
+    _addHorizontalLine(price) {
+        const activeSeries = this.candleSeries || this.lineSeries;
+        if (!activeSeries) return;
+
+        const priceLine = activeSeries.createPriceLine({
+            price: price,
+            color: '#ffd600',
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: '',
+        });
+        this._drawnPriceLines.push({ series: activeSeries, line: priceLine });
+    }
+
+    _addTrendline(start, end) {
+        if (!this.chart) return;
+
+        const trendSeries = this.chart.addLineSeries({
+            color: '#00bcd4',
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Solid,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+        });
+
+        // Ensure points are in chronological order
+        const points = [start, end].sort((a, b) => {
+            if (a.time < b.time) return -1;
+            if (a.time > b.time) return 1;
+            return 0;
+        });
+
+        trendSeries.setData([
+            { time: points[0].time, value: points[0].price },
+            { time: points[1].time, value: points[1].price },
+        ]);
+
+        this._drawnTrendlines.push(trendSeries);
+    }
+
+    clearDrawings() {
+        // Remove horizontal price lines
+        this._drawnPriceLines.forEach(({ series, line }) => {
+            try { series.removePriceLine(line); } catch (e) {}
+        });
+        this._drawnPriceLines = [];
+
+        // Remove trendline series
+        this._drawnTrendlines.forEach(s => {
+            try { this.chart.removeSeries(s); } catch (e) {}
+        });
+        this._drawnTrendlines = [];
+
+        // Reset drawing mode
+        this._trendlineStart = null;
+        this.setDrawingMode('none');
     }
 }
 

@@ -83,6 +83,9 @@ const App = {
                         Portfolio.loadAnalytics();
                     });
                 }
+                if (tab.dataset.tab === 'screener') {
+                    Lazy.loadAndInit('screener');
+                }
                 if (tab.dataset.tab === 'insights') {
                     Lazy.loadAndInit('insights').then(() => Insights.load());
                 }
@@ -153,6 +156,12 @@ const App = {
                 // Lazy-load content on tab switch
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
                     Lazy.loadAndInit('predictions').then(() => Predictions.loadPredictions(this.currentSymbol));
+                }
+                if (tab.dataset.stockTab === 'mtf' && this.currentSymbol) {
+                    Lazy.loadAndInit('mtf').then(() => Mtf.load(this.currentSymbol));
+                }
+                if (tab.dataset.stockTab === 'options' && this.currentSymbol) {
+                    Lazy.loadAndInit('options').then(() => Options.loadChain(this.currentSymbol));
                 }
             });
         });
@@ -444,6 +453,7 @@ const App = {
 
             this.displayQuote(quote);
             this.chart.init(this.currentPeriod === '1d' || this.currentPeriod === '5d');
+            this.chart.initDrawingTools();
             this.chart.setData(history);
 
             // Subscribe to live updates
@@ -503,6 +513,7 @@ const App = {
             }
             // Reinit chart with time axis visible for intraday (1D / 1W) periods
             this.chart.init(period === '1d' || period === '5d');
+            this.chart.initDrawingTools();
             this.chart.setData(history);
             if (this.showIndicators) this.loadIndicators(symbol);
         } catch (e) {

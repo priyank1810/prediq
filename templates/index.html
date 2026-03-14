@@ -88,6 +88,7 @@
             <button class="nav-tab active" data-tab="dashboard" role="tab" aria-selected="true" aria-controls="tab-dashboard">Dashboard</button>
             <button class="nav-tab" data-tab="watchlist" role="tab" aria-selected="false" aria-controls="tab-watchlist">Watchlist</button>
             <button class="nav-tab" data-tab="portfolio" role="tab" aria-selected="false" aria-controls="tab-portfolio">Portfolio</button>
+            <button class="nav-tab" data-tab="screener" role="tab" aria-selected="false" aria-controls="tab-screener">Screener</button>
             <button class="nav-tab" data-tab="insights" role="tab" aria-selected="false" aria-controls="tab-insights">AI Insights</button>
         </div>
     </nav>
@@ -134,9 +135,11 @@
                 <nav class="flex gap-0 overflow-x-auto border-b border-gray-700 mb-3 scrollbar-thin" role="tablist" aria-label="Stock detail tabs">
                     <button class="stock-tab active" data-stock-tab="overview" role="tab" aria-selected="true" aria-controls="stockTab-overview">Overview</button>
                     <button class="stock-tab" data-stock-tab="technical" role="tab" aria-selected="false" aria-controls="stockTab-technical">Technical</button>
+                    <button class="stock-tab" data-stock-tab="mtf" role="tab" aria-selected="false" aria-controls="stockTab-mtf">Multi-TF</button>
                     <button class="stock-tab" data-stock-tab="fundamentals" role="tab" aria-selected="false" aria-controls="stockTab-fundamentals">Fundamentals</button>
                     <button class="stock-tab" data-stock-tab="news" role="tab" aria-selected="false" aria-controls="stockTab-news">News & Events</button>
                     <button class="stock-tab" data-stock-tab="predictions" role="tab" aria-selected="false" aria-controls="stockTab-predictions">Predictions</button>
+                    <button class="stock-tab" data-stock-tab="options" role="tab" aria-selected="false" aria-controls="stockTab-options">Options</button>
                 </nav>
 
                 <!-- ═══════ OVERVIEW TAB ═══════ -->
@@ -158,6 +161,11 @@
                             <button id="btnLine" class="chart-type-btn active">Line</button>
                         </div>
                         <button id="btnIndicators" class="chart-type-btn bg-dark-600 text-gray-300">Indicators</button>
+                        <div class="flex gap-1 ml-auto drawing-tools">
+                            <button id="btnDrawHLine" class="draw-tool-btn" title="Horizontal Line">&#9473; H-Line</button>
+                            <button id="btnDrawTrendline" class="draw-tool-btn" title="Trendline">&#x2571; Trend</button>
+                            <button id="btnDrawClear" class="draw-tool-btn draw-tool-clear" title="Clear All Drawings">&#x2715; Clear</button>
+                        </div>
                     </div>
                     <!-- Chart -->
                     <div id="chartContainer" class="bg-dark-800 rounded-lg overflow-hidden relative h-[280px] sm:h-[380px] lg:h-[450px]">
@@ -292,6 +300,11 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- ═══════ MULTI-TIMEFRAME TAB ═══════ -->
+                <div id="stockTab-mtf" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-mtf">
+                    <div id="mtfDashboard" class="bg-dark-800 rounded-lg p-4"></div>
                 </div>
 
                 <!-- ═══════ FUNDAMENTALS TAB ═══════ -->
@@ -436,6 +449,52 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- ═══════ OPTIONS TAB ═══════ -->
+                <div id="stockTab-options" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-options">
+                    <div id="optionsPanel" class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                        <!-- Header row: title + expiry selector + max pain badge -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <h3 class="text-base sm:text-lg font-semibold text-white">Options Chain</h3>
+                            <div class="flex items-center gap-3">
+                                <div id="optionsMaxPainBadge" class="hidden text-xs px-2 py-1 rounded bg-purple-900/40 border border-purple-700/50 text-purple-300 font-medium"></div>
+                                <select id="optionsExpirySelect" class="bg-dark-700 border border-gray-600 text-gray-300 text-xs rounded px-2 py-1 focus:outline-none focus:border-accent-blue">
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Summary cards -->
+                        <div id="optionsSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                            <div class="bg-dark-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-gray-400">Total Call OI</div>
+                                <div id="optTotalCallOI" class="text-sm font-bold text-red-400">-</div>
+                            </div>
+                            <div class="bg-dark-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-gray-400">Total Put OI</div>
+                                <div id="optTotalPutOI" class="text-sm font-bold text-green-400">-</div>
+                            </div>
+                            <div class="bg-dark-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-gray-400">PCR</div>
+                                <div id="optPCR" class="text-sm font-bold text-white">-</div>
+                            </div>
+                            <div class="bg-dark-700 rounded p-2 text-center">
+                                <div class="text-[10px] text-gray-400">Max Pain</div>
+                                <div id="optMaxPain" class="text-sm font-bold text-purple-400">-</div>
+                            </div>
+                        </div>
+                        <!-- Loading spinner -->
+                        <div id="optionsLoading" class="hidden text-center py-8">
+                            <div class="animate-spin w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div>
+                            <p class="text-gray-400 text-sm mt-2">Loading options chain...</p>
+                        </div>
+                        <!-- Chain table -->
+                        <div id="optionsChainTable" class="overflow-x-auto"></div>
+                        <!-- Empty state -->
+                        <div id="optionsEmpty" class="hidden text-center py-8 text-gray-500 text-sm">
+                            Options data not available for this symbol. Options are typically available for F&amp;O stocks and indices (NIFTY, BANKNIFTY).
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Market Overview (shown when no stock is selected) -->
@@ -560,6 +619,7 @@
                         </form>
                         <label for="watchlistSort" class="sr-only">Sort watchlist</label>
                         <select id="watchlistSort" class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-blue">
+                            <option value="custom">Sort: Custom</option>
                             <option value="name">Sort: Name</option>
                             <option value="pct_change">Sort: % Change</option>
                             <option value="confidence">Sort: Confidence</option>
@@ -672,6 +732,107 @@
                         <tbody id="holdingsTable">
                             <tr><td colspan="9" class="text-center py-4 text-gray-500">Loading...</td></tr>
                         </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screener Tab -->
+        <div id="tab-screener" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-screener">
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Stock Screener</h3>
+                <p class="text-xs text-gray-400 mb-4">Scan 20 popular NSE stocks against technical filters. Select one or more criteria and hit Scan.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                    <div class="bg-dark-700 rounded-lg p-3">
+                        <div class="text-xs font-semibold text-gray-300 mb-2">RSI (14)</div>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 mb-1 cursor-pointer">
+                            <input type="checkbox" id="scrRsiOversold" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Oversold (RSI &lt; 30)
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                            <input type="checkbox" id="scrRsiOverbought" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Overbought (RSI &gt; 70)
+                        </label>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-3">
+                        <div class="text-xs font-semibold text-gray-300 mb-2">MACD</div>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 mb-1 cursor-pointer">
+                            <input type="checkbox" id="scrMacdBullish" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Bullish Crossover
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                            <input type="checkbox" id="scrMacdBearish" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Bearish Crossover
+                        </label>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-3">
+                        <div class="text-xs font-semibold text-gray-300 mb-2">Moving Averages</div>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 mb-1 cursor-pointer">
+                            <input type="checkbox" id="scrAboveSma20" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Above SMA 20
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 mb-1 cursor-pointer">
+                            <input type="checkbox" id="scrAboveSma50" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Above SMA 50
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 mb-1 cursor-pointer">
+                            <input type="checkbox" id="scrAboveSma200" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Above SMA 200
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 mb-1 cursor-pointer">
+                            <input type="checkbox" id="scrBelowSma200" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Below SMA 200
+                        </label>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-3">
+                        <div class="text-xs font-semibold text-gray-300 mb-2">Volume</div>
+                        <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                            <input type="checkbox" id="scrVolumeSpike" class="screener-filter rounded bg-dark-600 border-gray-500 text-accent-blue focus:ring-accent-blue">
+                            Volume Spike (&gt; 2x avg)
+                        </label>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-3">
+                        <div class="text-xs font-semibold text-gray-300 mb-2">Price Change %</div>
+                        <div class="flex gap-2 items-center">
+                            <input type="number" id="scrPriceMin" step="0.5" placeholder="Min %" class="bg-dark-600 border border-gray-600 rounded px-2 py-1 text-xs text-white w-20 placeholder-gray-500">
+                            <span class="text-gray-500 text-xs">to</span>
+                            <input type="number" id="scrPriceMax" step="0.5" placeholder="Max %" class="bg-dark-600 border border-gray-600 rounded px-2 py-1 text-xs text-white w-20 placeholder-gray-500">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="btnScreenerScan" class="px-4 py-2 bg-accent-blue text-white text-sm rounded hover:bg-blue-600 transition font-medium">Scan Stocks</button>
+                    <button id="btnScreenerClear" class="px-3 py-2 bg-dark-600 text-gray-300 text-sm rounded hover:bg-dark-700 transition">Clear</button>
+                    <span id="screenerStatus" class="text-xs text-gray-500"></span>
+                </div>
+            </div>
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold text-white">Results</h3>
+                    <span id="screenerCount" class="text-xs text-gray-400"></span>
+                </div>
+                <div id="screenerLoading" class="hidden text-center py-8">
+                    <div class="animate-spin w-6 h-6 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div>
+                    <p class="text-gray-500 text-xs mt-2">Scanning 20 stocks... this may take a moment</p>
+                </div>
+                <div id="screenerEmpty" class="text-center py-8 text-gray-500 text-sm">
+                    Select filters above and click "Scan Stocks" to find matching stocks.
+                </div>
+                <div id="screenerResults" class="hidden overflow-x-auto">
+                    <table class="w-full text-sm min-w-[700px]">
+                        <thead>
+                            <tr class="text-gray-400 border-b border-gray-700">
+                                <th class="text-left px-3 py-2">Symbol</th>
+                                <th class="text-right px-3 py-2">LTP</th>
+                                <th class="text-right px-3 py-2">Change %</th>
+                                <th class="text-right px-3 py-2">RSI</th>
+                                <th class="text-center px-3 py-2">MACD</th>
+                                <th class="text-center px-3 py-2">SMA Status</th>
+                                <th class="text-right px-3 py-2">Vol Ratio</th>
+                                <th class="text-left px-3 py-2">Matched Filters</th>
+                            </tr>
+                        </thead>
+                        <tbody id="screenerTableBody"></tbody>
                     </table>
                 </div>
             </div>

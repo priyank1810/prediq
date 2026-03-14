@@ -267,6 +267,68 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
     padding: 0.75rem;
 }
 
+/* ---- Drawing Tools ---- */
+.draw-tool-btn {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+.draw-tool-btn:hover {
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+.draw-tool-btn.active {
+    background: #2979ff;
+    color: #fff;
+    border-color: #2979ff;
+}
+.draw-tool-clear {
+    color: #ff6b6b;
+}
+.draw-tool-clear:hover {
+    background: rgba(255, 23, 68, 0.15);
+    color: #ff1744;
+    border-color: #ff1744;
+}
+
+@media (max-width: 639px) {
+    .drawing-tools {
+        width: 100%;
+        justify-content: flex-start;
+        margin-left: 0 !important;
+    }
+    .draw-tool-btn {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.65rem;
+        min-height: 32px;
+    }
+}
+
+/* ---- Drag-and-Drop Reorder ---- */
+.wl-card.dragging {
+    opacity: 0.4;
+    transform: scale(0.97);
+    box-shadow: none;
+}
+.wl-card.drag-over {
+    border-top: 2px solid #2979ff;
+}
+.wl-card {
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    cursor: grab;
+}
+.wl-card:active {
+    cursor: grabbing;
+}
+
 /* ---- Mobile Responsive ---- */
 
 /* Ensure minimum touch target size (44px) for interactive elements */
