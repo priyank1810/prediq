@@ -4,6 +4,7 @@ import pytest
 from datetime import date
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.auth import get_password_hash, create_access_token
@@ -15,7 +16,11 @@ from app.models import User
 # ---------------------------------------------------------------------------
 TEST_DATABASE_URL = "sqlite://"  # in-memory
 
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 
 
 @event.listens_for(engine, "connect")
