@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import pickle
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +98,7 @@ class RedisCache:
         self._client.flushdb()
 
 
-def _build_cache() -> TTLCache | RedisCache:
+def _build_cache() -> Union[TTLCache, RedisCache]:
     """Select the cache backend based on the REDIS_URL env var.
 
     Falls back to the in-memory TTLCache if REDIS_URL is unset or if
