@@ -327,9 +327,13 @@ async def csrf_middleware(request: Request, call_next):
     from fastapi.responses import JSONResponse
     if request.method not in _SAFE_METHODS and request.url.path.startswith("/api/"):
         origin = request.headers.get("origin")
-        # If Origin header is present, validate it
         if origin and origin not in _ALLOWED_ORIGINS:
-            return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
+            # Allow same-origin: compare Origin against the request's own Host
+            host = request.headers.get("host", "")
+            scheme = "https" if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https" else "http"
+            self_origin = f"{scheme}://{host}"
+            if origin != self_origin:
+                return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
     return await call_next(request)
 
 
