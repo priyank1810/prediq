@@ -11,6 +11,8 @@ const App = {
     _lastOverviewUpdate: null,
 
     async init() {
+        this.initTheme();
+
         this.chart = new StockChart('priceChart');
         // Overview tab indicator charts
         this.rsiChart = new IndicatorChart('rsiChartOverview');
@@ -804,6 +806,43 @@ const App = {
         if (tab && !tab.classList.contains('hidden') && Lazy.isLoaded('watchlist')) {
             Watchlist.load(true);
         }
+    },
+
+    // --- Theme Toggle ---
+    initTheme() {
+        const saved = localStorage.getItem('theme') || 'dark';
+        this.applyTheme(saved);
+
+        const btn = document.getElementById('themeToggle');
+        if (btn) {
+            btn.addEventListener('click', () => this.toggleTheme());
+        }
+    },
+
+    applyTheme(theme) {
+        const html = document.documentElement;
+        html.setAttribute('data-theme', theme);
+        html.classList.remove('dark', 'light');
+        html.classList.add(theme);
+
+        const moonIcon = document.getElementById('themeIconMoon');
+        const sunIcon = document.getElementById('themeIconSun');
+        if (moonIcon && sunIcon) {
+            if (theme === 'light') {
+                moonIcon.classList.add('hidden');
+                sunIcon.classList.remove('hidden');
+            } else {
+                moonIcon.classList.remove('hidden');
+                sunIcon.classList.add('hidden');
+            }
+        }
+    },
+
+    toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = current === 'dark' ? 'light' : 'dark';
+        this.applyTheme(next);
+        localStorage.setItem('theme', next);
     },
 
     showToast(message, type = 'success') {

@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: stock-tracker-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./saved_models:/app/saved_models
+      - ./logs:/app/logs
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=2
+      - LOW_RESOURCE_MODE=${LOW_RESOURCE_MODE:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    build: .
+    container_name: stock-tracker-worker
+    command: ["python", "worker.py"]
+    volumes:
+      - ./data:/app/data
+      - ./saved_models:/app/saved_models
+      - ./logs:/app/logs
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=2
+      - LOW_RESOURCE_MODE=${LOW_RESOURCE_MODE:-true}
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # Redis — uncomment when ready to migrate from SQLite job queue
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: stock-tracker-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+  #   restart: unless-stopped
+
+# volumes:
+#   redis_data:

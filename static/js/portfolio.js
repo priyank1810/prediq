@@ -105,6 +105,22 @@ const Portfolio = {
         }
     },
 
+    async exportCSV() {
+        try {
+            await API.exportPortfolioCSV();
+        } catch (e) {
+            App.showToast('Failed to export CSV: ' + e.message, 'error');
+        }
+    },
+
+    async exportHTML() {
+        try {
+            await API.exportPortfolioHTML();
+        } catch (e) {
+            App.showToast('Failed to export report: ' + e.message, 'error');
+        }
+    },
+
     async deleteHolding(id) {
         try {
             await API.deleteHolding(id);

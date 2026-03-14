@@ -185,6 +185,35 @@ const API = {
     getPortfolioAnalytics() { return this.request('/api/portfolio/analytics'); },
     addHolding(data) { return this.request('/api/portfolio', { method: 'POST', body: JSON.stringify(data) }); },
     deleteHolding(id) { return this.request(`/api/portfolio/${id}`, { method: 'DELETE' }); },
+    async exportPortfolioCSV() {
+        const headers = {};
+        if (typeof Auth !== 'undefined' && Auth.token) {
+            headers['Authorization'] = `Bearer ${Auth.token}`;
+        }
+        const res = await fetch('/api/portfolio/export/csv', { headers });
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'portfolio.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    },
+    async exportPortfolioHTML() {
+        const headers = {};
+        if (typeof Auth !== 'undefined' && Auth.token) {
+            headers['Authorization'] = `Bearer ${Auth.token}`;
+        }
+        const res = await fetch('/api/portfolio/export/html', { headers });
+        if (!res.ok) throw new Error('Export failed');
+        const html = await res.text();
+        const w = window.open('', '_blank');
+        w.document.write(html);
+        w.document.close();
+    },
 
     // Price Alerts
     getAlerts() { return this.request('/api/alerts'); },

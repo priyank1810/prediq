@@ -21,6 +21,7 @@ from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
 from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, signal_accuracy_validator_30min, signal_accuracy_validator_1hr
 from app.routers.jobs import router as jobs_router
+from app.utils.rate_limiter import RateLimiter
 
 
 async def smart_alert_checker():
@@ -232,9 +233,30 @@ app.add_middleware(
 
 REQUEST_TIMEOUT = 120  # seconds — global safety net for all HTTP requests
 
+# HTTP API rate limiting — configurable via RATE_LIMIT_RPM env var
+RATE_LIMIT_RPM = int(os.getenv("RATE_LIMIT_RPM", "60"))
+_rate_limiter = RateLimiter(max_requests=RATE_LIMIT_RPM, window_seconds=60)
+
 # Allowed origins for CSRF protection (state-changing requests must have valid Origin)
 _ALLOWED_ORIGINS = set(CORS_ORIGINS) | {"null"}  # "null" for same-origin requests without Origin header
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Rate-limit HTTP API requests per IP (skip WebSocket upgrades)."""
+    from fastapi.responses import JSONResponse
+    if (request.url.path.startswith("/api/")
+            and request.headers.get("upgrade", "").lower() != "websocket"):
+        client_ip = request.client.host if request.client else "unknown"
+        if not _rate_limiter.check_rate_limit(client_ip):
+            retry_after = _rate_limiter.time_until_available(client_ip)
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests"},
+                headers={"Retry-After": str(retry_after)},
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
