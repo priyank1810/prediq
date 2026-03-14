@@ -84,6 +84,36 @@ async def get_current_active_user(current_user=Depends(get_current_user)):
     return current_user
 
 
+async def get_optional_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+    api_key: Optional[str] = Depends(api_key_header),
+    db: Session = Depends(get_db),
+):
+    """Return the authenticated user if credentials are provided, else None."""
+    from app.models import User
+
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            if payload.get("type") != "access":
+                return None
+            email: str = payload.get("sub")
+            if email is None:
+                return None
+            user = db.query(User).filter(User.email == email).first()
+            if user and user.is_active:
+                return user
+        except JWTError:
+            return None
+
+    if api_key:
+        user = db.query(User).filter(User.api_key == api_key).first()
+        if user and user.is_active:
+            return user
+
+    return None
+
+
 async def get_admin_user(current_user=Depends(get_current_active_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")

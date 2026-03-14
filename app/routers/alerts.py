@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import PriceAlertCreate, SmartAlertCreate
 from app.services.alert_service import alert_service
-from app.auth import get_current_active_user
+from app.auth import get_optional_user
 
 router = APIRouter()
 
@@ -13,9 +13,10 @@ def list_alerts(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    alerts = alert_service.get_alerts(db, user_id=user.id, limit=limit, offset=offset)
+    user_id = user.id if user else None
+    alerts = alert_service.get_alerts(db, user_id=user_id, limit=limit, offset=offset)
     return [
         {
             "id": a.id,
@@ -34,9 +35,10 @@ def list_alerts(
 def create_alert(
     data: PriceAlertCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    alert = alert_service.create_alert(db, data.model_dump(), user_id=user.id)
+    user_id = user.id if user else None
+    alert = alert_service.create_alert(db, data.model_dump(), user_id=user_id)
     return {"id": alert.id, "message": "Alert created"}
 
 
@@ -44,9 +46,10 @@ def create_alert(
 def delete_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    success = alert_service.delete_alert(db, alert_id, user_id=user.id)
+    user_id = user.id if user else None
+    success = alert_service.delete_alert(db, alert_id, user_id=user_id)
     if not success:
         raise HTTPException(status_code=404, detail="Alert not found")
     return {"message": "Alert deleted"}
@@ -59,9 +62,10 @@ def list_smart_alerts(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    alerts = alert_service.get_smart_alerts(db, user_id=user.id, limit=limit, offset=offset)
+    user_id = user.id if user else None
+    alerts = alert_service.get_smart_alerts(db, user_id=user_id, limit=limit, offset=offset)
     return [
         {
             "id": a.id,
@@ -81,13 +85,14 @@ def list_smart_alerts(
 def create_smart_alert(
     data: SmartAlertCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
     valid_types = ["prediction_change", "sentiment_spike", "mood_extreme", "confidence_change"]
     if data.alert_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid alert type. Use one of: {valid_types}")
 
-    alert = alert_service.create_smart_alert(db, data.model_dump(), user_id=user.id)
+    user_id = user.id if user else None
+    alert = alert_service.create_smart_alert(db, data.model_dump(), user_id=user_id)
     return {"id": alert.id, "message": "Smart alert created"}
 
 
@@ -95,9 +100,10 @@ def create_smart_alert(
 def delete_smart_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    success = alert_service.delete_smart_alert(db, alert_id, user_id=user.id)
+    user_id = user.id if user else None
+    success = alert_service.delete_smart_alert(db, alert_id, user_id=user_id)
     if not success:
         raise HTTPException(status_code=404, detail="Smart alert not found")
     return {"message": "Smart alert deleted"}

@@ -5,19 +5,17 @@ from app.models import WatchlistItem, SignalLog
 from app.schemas import WatchlistItemCreate
 from app.services.data_fetcher import data_fetcher
 from app.utils.helpers import is_index
-from app.auth import get_current_active_user
+from app.auth import get_optional_user
 
 router = APIRouter()
 
 
 @router.get("")
-def list_watchlist(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
-    items = (
-        db.query(WatchlistItem)
-        .filter(WatchlistItem.user_id == user.id)
-        .order_by(WatchlistItem.added_at.desc())
-        .all()
-    )
+def list_watchlist(db: Session = Depends(get_db), user=Depends(get_optional_user)):
+    query = db.query(WatchlistItem)
+    if user:
+        query = query.filter(WatchlistItem.user_id == user.id)
+    items = query.order_by(WatchlistItem.added_at.desc()).all()
     return [
         {
             "id": item.id,
@@ -33,19 +31,19 @@ def list_watchlist(db: Session = Depends(get_db), user=Depends(get_current_activ
 def add_to_watchlist(
     data: WatchlistItemCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
     symbol = data.symbol.upper()
-    existing = (
-        db.query(WatchlistItem)
-        .filter(WatchlistItem.symbol == symbol, WatchlistItem.user_id == user.id)
-        .first()
-    )
+    user_id = user.id if user else None
+    query = db.query(WatchlistItem).filter(WatchlistItem.symbol == symbol)
+    if user_id is not None:
+        query = query.filter(WatchlistItem.user_id == user_id)
+    existing = query.first()
     if existing:
         raise HTTPException(status_code=400, detail=f"{symbol} already in watchlist")
 
     item_type = "index" if is_index(symbol) else data.item_type
-    item = WatchlistItem(symbol=symbol, item_type=item_type, user_id=user.id)
+    item = WatchlistItem(symbol=symbol, item_type=item_type, user_id=user_id)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -56,13 +54,12 @@ def add_to_watchlist(
 def remove_from_watchlist(
     symbol: str,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    item = (
-        db.query(WatchlistItem)
-        .filter(WatchlistItem.symbol == symbol.upper(), WatchlistItem.user_id == user.id)
-        .first()
-    )
+    query = db.query(WatchlistItem).filter(WatchlistItem.symbol == symbol.upper())
+    if user:
+        query = query.filter(WatchlistItem.user_id == user.id)
+    item = query.first()
     if not item:
         raise HTTPException(status_code=404, detail=f"{symbol} not in watchlist")
     db.delete(item)
@@ -71,13 +68,11 @@ def remove_from_watchlist(
 
 
 @router.get("/overview")
-def watchlist_overview(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
-    items = (
-        db.query(WatchlistItem)
-        .filter(WatchlistItem.user_id == user.id)
-        .order_by(WatchlistItem.added_at.desc())
-        .all()
-    )
+def watchlist_overview(db: Session = Depends(get_db), user=Depends(get_optional_user)):
+    query = db.query(WatchlistItem)
+    if user:
+        query = query.filter(WatchlistItem.user_id == user.id)
+    items = query.order_by(WatchlistItem.added_at.desc()).all()
     if not items:
         return []
 

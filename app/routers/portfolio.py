@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import PortfolioHoldingCreate
 from app.services.portfolio_service import portfolio_service
-from app.auth import get_current_active_user
+from app.auth import get_optional_user
 
 router = APIRouter()
 
@@ -18,27 +18,27 @@ def list_holdings(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    return portfolio_service.get_holdings(db, user_id=user.id, limit=limit, offset=offset)
+    return portfolio_service.get_holdings(db, user_id=user.id if user else None, limit=limit, offset=offset)
 
 
 @router.get("/summary")
-def get_summary(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
-    return portfolio_service.get_summary(db, user_id=user.id)
+def get_summary(db: Session = Depends(get_db), user=Depends(get_optional_user)):
+    return portfolio_service.get_summary(db, user_id=user.id if user else None)
 
 
 @router.get("/analytics")
-def get_analytics(db: Session = Depends(get_db), user=Depends(get_current_active_user)):
-    return portfolio_service.get_analytics(db, user_id=user.id)
+def get_analytics(db: Session = Depends(get_db), user=Depends(get_optional_user)):
+    return portfolio_service.get_analytics(db, user_id=user.id if user else None)
 
 
 @router.get("/export/csv")
 def export_csv(
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    holdings = portfolio_service.get_holdings(db, user_id=user.id, limit=500)
+    holdings = portfolio_service.get_holdings(db, user_id=user.id if user else None, limit=500)
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Symbol", "Quantity", "Buy Price", "Current Price", "Invested", "Current Value", "P&L", "P&L %"])
@@ -67,10 +67,10 @@ def export_csv(
 @router.get("/export/html")
 def export_html(
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    holdings = portfolio_service.get_holdings(db, user_id=user.id, limit=500)
-    summary = portfolio_service.get_summary(db, user_id=user.id)
+    holdings = portfolio_service.get_holdings(db, user_id=user.id if user else None, limit=500)
+    summary = portfolio_service.get_summary(db, user_id=user.id if user else None)
     timestamp = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
     rows = ""
@@ -132,9 +132,9 @@ def export_html(
 def add_holding(
     data: PortfolioHoldingCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    holding = portfolio_service.add_holding(db, data.model_dump(), user_id=user.id)
+    holding = portfolio_service.add_holding(db, data.model_dump(), user_id=user.id if user else None)
     return {"id": holding.id, "message": "Holding added successfully"}
 
 
@@ -142,9 +142,9 @@ def add_holding(
 def delete_holding(
     holding_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_active_user),
+    user=Depends(get_optional_user),
 ):
-    success = portfolio_service.delete_holding(db, holding_id, user_id=user.id)
+    success = portfolio_service.delete_holding(db, holding_id, user_id=user.id if user else None)
     if not success:
         raise HTTPException(status_code=404, detail="Holding not found")
     return {"message": "Holding deleted"}
