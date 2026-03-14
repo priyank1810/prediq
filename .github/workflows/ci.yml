@@ -43,23 +43,23 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
-    env:
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-
     steps:
       - name: Deploy to production server
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ env.DEPLOY_PORT || '22' }}
-          script: |
-            cd ${{ env.DEPLOY_PATH || '~/prediq' }}
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+          PATH_DIR: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -p "${PORT:-22}" "${USER}@${HOST}" << 'DEPLOY_SCRIPT'
+            cd ~/prediq
             git pull origin main
             pip install -r requirements.txt --quiet
-            # Restart the app (adjust to your process manager)
             if command -v supervisorctl &> /dev/null; then
               supervisorctl restart prediq prediq-worker
             elif command -v systemctl &> /dev/null; then
@@ -67,6 +67,7 @@ jobs:
             elif [ -f docker-compose.yml ]; then
               docker compose up -d --build
             else
-              # PM2 fallback
               pm2 restart prediq || echo "Manual restart needed"
             fi
+          DEPLOY_SCRIPT
+          rm -f ~/.ssh/deploy_key
