@@ -54,19 +54,7 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          echo "Connecting as: ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PORT:-22}"
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" << 'DEPLOY_SCRIPT'
-            cd ~/prediq
-            git pull origin main
-            pip install -r requirements.txt --quiet
-            if command -v supervisorctl &> /dev/null; then
-              supervisorctl restart prediq prediq-worker
-            elif command -v systemctl &> /dev/null; then
-              sudo systemctl restart prediq prediq-worker
-            elif [ -f docker-compose.yml ]; then
-              docker compose up -d --build
-            else
-              pm2 restart prediq || echo "Manual restart needed"
-            fi
-          DEPLOY_SCRIPT
+          ssh -vvv -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" 'cd ~/prediq && git pull origin main && pip install -r requirements.txt --quiet && (supervisorctl restart prediq prediq-worker 2>/dev/null || sudo systemctl restart prediq prediq-worker 2>/dev/null || pm2 restart prediq 2>/dev/null || echo "Manual restart needed")'
           rm -f ~/.ssh/deploy_key
