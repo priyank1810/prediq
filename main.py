@@ -22,6 +22,7 @@ from app.routers.fii_dii import router as fii_dii_router
 from app.routers.sectors import router as sectors_router
 from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, signal_accuracy_validator_30min, signal_accuracy_validator_1hr
 from app.routers.jobs import router as jobs_router
+from app.routers.trade_journal import router as trade_journal_router
 from app.utils.rate_limiter import RateLimiter
 
 
@@ -309,6 +310,139 @@ async def worker_result_broadcaster():
         await asyncio.sleep(3)
 
 
+async def news_alert_scanner():
+    """Monitor watchlist stocks for significant sentiment changes and broadcast alerts."""
+    from app.database import SessionLocal
+    from app.models import WatchlistItem
+
+    await asyncio.sleep(300)  # Let services warm up
+    _prev_scores = {}  # symbol -> last known score
+
+    while True:
+        try:
+            from app.utils.helpers import is_market_open
+            from app.routers.websocket import manager
+
+            if is_market_open() and manager.active_connections:
+                def _check_news():
+                    db = SessionLocal()
+                    try:
+                        # Get all watchlist symbols
+                        items = db.query(WatchlistItem.symbol).distinct().all()
+                        return [i.symbol for i in items]
+                    finally:
+                        db.close()
+
+                symbols = await asyncio.to_thread(_check_news)
+                if symbols:
+                    from app.services.sentiment_service import sentiment_service
+
+                    for symbol in symbols[:15]:  # Limit to avoid rate limiting
+                        try:
+                            sentiment = await asyncio.to_thread(sentiment_service.get_sentiment, symbol)
+                            if not sentiment:
+                                continue
+
+                            score = sentiment.get("score", 0)
+                            prev = _prev_scores.get(symbol, 0)
+                            _prev_scores[symbol] = score
+
+                            # Alert if score changed significantly (>30 points) or is extreme (>60)
+                            change = abs(score - prev)
+                            if prev != 0 and change >= 30:
+                                alert_data = {
+                                    "symbol": symbol,
+                                    "type": "news_sentiment_change",
+                                    "score": round(score, 1),
+                                    "previous_score": round(prev, 1),
+                                    "change": round(score - prev, 1),
+                                    "headline_count": sentiment.get("headline_count", 0),
+                                    "top_headline": sentiment["headlines"][0]["title"] if sentiment.get("headlines") else None,
+                                }
+                                await manager.broadcast_to_all("news_alert", alert_data)
+                            elif abs(score) >= 60 and prev == 0:
+                                # First check found extreme sentiment
+                                alert_data = {
+                                    "symbol": symbol,
+                                    "type": "news_extreme_sentiment",
+                                    "score": round(score, 1),
+                                    "headline_count": sentiment.get("headline_count", 0),
+                                    "top_headline": sentiment["headlines"][0]["title"] if sentiment.get("headlines") else None,
+                                }
+                                await manager.broadcast_to_all("news_alert", alert_data)
+                        except Exception:
+                            pass
+                        await asyncio.sleep(2)  # Pace requests
+        except Exception:
+            pass
+        await asyncio.sleep(600)  # Run every 10 minutes
+
+
+async def live_scanner():
+    """Run screener filters every 5 minutes and broadcast new matches via WebSocket."""
+    await asyncio.sleep(120)
+    _prev_matches = set()
+
+    while True:
+        try:
+            from app.utils.helpers import is_market_open
+            from app.routers.websocket import manager
+
+            if is_market_open() and manager.active_connections:
+                def _scan():
+                    from app.services.screener_service import screener_service
+                    # Scan for high-confidence setups
+                    filters = {
+                        "rsi_oversold": True,
+                        "volume_spike": True,
+                    }
+                    results1 = screener_service.scan(filters)
+
+                    filters2 = {
+                        "rsi_overbought": True,
+                        "volume_spike": True,
+                    }
+                    results2 = screener_service.scan(filters2)
+
+                    filters3 = {
+                        "macd_bullish": True,
+                        "volume_spike": True,
+                    }
+                    results3 = screener_service.scan(filters3)
+
+                    # Merge and deduplicate
+                    seen = set()
+                    all_results = []
+                    for r in results1 + results2 + results3:
+                        if r["symbol"] not in seen:
+                            seen.add(r["symbol"])
+                            all_results.append(r)
+                    return all_results
+
+                results = await asyncio.to_thread(_scan)
+                current_matches = {r["symbol"] for r in results}
+
+                # Only broadcast NEW matches (not already seen)
+                new_matches = current_matches - _prev_matches
+                _prev_matches = current_matches
+
+                for result in results:
+                    if result["symbol"] in new_matches:
+                        alert_data = {
+                            "symbol": result["symbol"],
+                            "ltp": result.get("ltp"),
+                            "change_pct": result.get("change_pct"),
+                            "rsi": result.get("rsi"),
+                            "volume_ratio": result.get("volume_ratio"),
+                            "matched_filters": result.get("matched_filters", []),
+                        }
+                        await manager.broadcast_to_all("scanner_alert", alert_data)
+
+        except Exception:
+            pass
+        await asyncio.sleep(300)  # Every 5 minutes
+
+
 def _setup_audit_logger():
     """Configure audit logger to write to logs/audit.log."""
     log_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -338,6 +472,8 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(periodic_job_enqueuer()),
         asyncio.create_task(worker_result_broadcaster()),
         asyncio.create_task(prediction_accuracy_backfiller()),
+        asyncio.create_task(news_alert_scanner()),
+        asyncio.create_task(live_scanner()),
     ]
     yield
     # Shutdown
@@ -460,6 +596,7 @@ app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(screener.router, prefix="/api/screener", tags=["screener"])
 app.include_router(options.router, prefix="/api/options", tags=["options"])
 app.include_router(mtf_dashboard_router, prefix="/api/mtf", tags=["mtf-dashboard"])
+app.include_router(trade_journal_router, prefix="/api/journal", tags=["journal"])
 app.include_router(ws_router)
 
 

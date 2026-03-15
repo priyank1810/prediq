@@ -94,6 +94,7 @@
             <button class="nav-tab" data-tab="watchlist" role="tab" aria-selected="false" aria-controls="tab-watchlist">Watchlist</button>
             <button class="nav-tab" data-tab="portfolio" role="tab" aria-selected="false" aria-controls="tab-portfolio">Portfolio</button>
             <button class="nav-tab" data-tab="screener" role="tab" aria-selected="false" aria-controls="tab-screener">Screener</button>
+            <button class="nav-tab" data-tab="journal" role="tab" aria-selected="false" aria-controls="tab-journal">Journal</button>
             <button class="nav-tab" data-tab="insights" role="tab" aria-selected="false" aria-controls="tab-insights">AI Insights</button>
         </div>
     </nav>
@@ -590,6 +591,17 @@
                     </div>
                 </div>
 
+                <!-- Earnings Calendar -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-white">Upcoming Earnings</h3>
+                        <span class="text-[10px] text-gray-500">Next 30 days</span>
+                    </div>
+                    <div id="earningsCalendar" class="space-y-2">
+                        <div class="text-center py-3 text-gray-500 text-xs">Loading...</div>
+                    </div>
+                </div>
+
                 <!-- High-Confidence AI Signals -->
                 <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
                     <div class="flex items-center justify-between mb-3">
@@ -744,6 +756,19 @@
 
         <!-- Screener Tab -->
         <div id="tab-screener" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-screener">
+            <!-- Live Scanner Feed -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                        Live Scanner
+                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    </h3>
+                    <span class="text-[10px] text-gray-500">Auto-scans every 5 min during market hours</span>
+                </div>
+                <div id="liveScannerFeed" class="space-y-1 max-h-48 overflow-y-auto">
+                    <div class="text-center py-2 text-gray-500 text-xs">Waiting for scanner results...</div>
+                </div>
+            </div>
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Stock Screener</h3>
                 <p class="text-xs text-gray-400 mb-4">Scan 20 popular NSE stocks against technical filters. Select one or more criteria and hit Scan.</p>
@@ -1026,6 +1051,66 @@
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
                 <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Recent Signal Activity</h3>
                 <div id="insightsRecentFeed" class="space-y-2 max-h-96 overflow-y-auto">
+                    <div class="text-center py-4 text-gray-500 text-sm">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-journal" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-journal">
+            <!-- Trade Stats -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Trade Performance</h3>
+                <div id="journalStats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div><div class="text-[10px] text-gray-500">Total Trades</div><div id="jStatTotal" class="text-white font-bold">-</div></div>
+                    <div><div class="text-[10px] text-gray-500">Win Rate</div><div id="jStatWinRate" class="text-white font-bold">-</div></div>
+                    <div><div class="text-[10px] text-gray-500">Total P&L</div><div id="jStatPnL" class="text-white font-bold">-</div></div>
+                    <div><div class="text-[10px] text-gray-500">Avg P&L %</div><div id="jStatAvgPnL" class="text-white font-bold">-</div></div>
+                </div>
+            </div>
+
+            <!-- Add Trade Form -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Log Trade</h3>
+                <form id="addTradeForm" class="flex flex-wrap gap-2 items-end">
+                    <div>
+                        <label for="tradeSymbol" class="sr-only">Symbol</label>
+                        <input type="text" id="tradeSymbol" placeholder="Symbol" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-28 placeholder-gray-500 uppercase" required>
+                    </div>
+                    <div>
+                        <label for="tradeAction" class="sr-only">Action</label>
+                        <select id="tradeAction" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white">
+                            <option value="buy">BUY</option>
+                            <option value="sell">SELL</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="tradePrice" class="sr-only">Price</label>
+                        <input type="number" id="tradePrice" placeholder="Price" step="0.01" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24 placeholder-gray-500" required>
+                    </div>
+                    <div>
+                        <label for="tradeQty" class="sr-only">Qty</label>
+                        <input type="number" id="tradeQty" placeholder="Qty" min="1" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-20 placeholder-gray-500" required>
+                    </div>
+                    <div>
+                        <label for="tradePnL" class="sr-only">P&L (sell only)</label>
+                        <input type="number" id="tradePnL" placeholder="P&L ₹" step="0.01" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24 placeholder-gray-500">
+                    </div>
+                    <div>
+                        <label for="tradeTags" class="sr-only">Tags</label>
+                        <input type="text" id="tradeTags" placeholder="Tags (comma-sep)" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-36 placeholder-gray-500">
+                    </div>
+                    <div class="w-full">
+                        <label for="tradeNotes" class="sr-only">Notes</label>
+                        <input type="text" id="tradeNotes" placeholder="Notes / reason for trade..." class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-full placeholder-gray-500">
+                    </div>
+                    <button type="submit" class="px-4 py-1 bg-accent-blue text-white text-xs rounded hover:bg-blue-600 transition">Log Trade</button>
+                </form>
+            </div>
+
+            <!-- Trade List -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Trade History</h3>
+                <div id="journalTrades" class="space-y-2 max-h-[500px] overflow-y-auto">
                     <div class="text-center py-4 text-gray-500 text-sm">Loading...</div>
                 </div>
             </div>

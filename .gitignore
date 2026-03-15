@@ -3,6 +3,8 @@ __pycache__/
 *.egg-info/
 .env
 data/*.db
+data/*.db-shm
+data/*.db-wal
 saved_models/
 .venv/
 venv/

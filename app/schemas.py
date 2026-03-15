@@ -77,6 +77,21 @@ class PortfolioSummary(BaseModel):
     holdings_count: int
 
 
+# --- Trade Journal Schemas ---
+
+class TradeJournalCreate(BaseModel):
+    symbol: str
+    action: str  # "buy" or "sell"
+    price: float
+    quantity: int
+    notes: Optional[str] = None
+    signal_direction: Optional[str] = None
+    signal_confidence: Optional[float] = None
+    pnl: Optional[float] = None
+    pnl_pct: Optional[float] = None
+    tags: Optional[str] = None
+
+
 # --- Alert Schemas ---
 
 class PriceAlertCreate(BaseModel):

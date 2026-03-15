@@ -125,6 +125,24 @@ class WatchlistItem(Base):
     owner = relationship("User", back_populates="watchlist")
 
 
+class TradeJournal(Base):
+    __tablename__ = "trade_journal"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, nullable=False, index=True)
+    action = Column(String, nullable=False)  # "buy" or "sell"
+    price = Column(Float, nullable=False)
+    quantity = Column(Integer, nullable=False)
+    notes = Column(Text, nullable=True)
+    signal_direction = Column(String, nullable=True)  # signal direction at time of trade
+    signal_confidence = Column(Float, nullable=True)   # signal confidence at time of trade
+    pnl = Column(Float, nullable=True)  # profit/loss (for sell trades)
+    pnl_pct = Column(Float, nullable=True)
+    tags = Column(String, nullable=True)  # comma-separated tags
+    created_at = Column(DateTime, default=now_ist)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+
 class JobQueue(Base):
     __tablename__ = "job_queue"
     __table_args__ = (

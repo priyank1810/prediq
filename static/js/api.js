@@ -133,6 +133,9 @@ const API = {
     // Market Movers (public)
     getMarketMovers(count = 10) { return this.request(`/api/stocks/market-movers?count=${count}`); },
 
+    // Earnings Calendar
+    getUpcomingEarnings(symbols = '') { return this.request(`/api/stocks/earnings/upcoming?symbols=${encodeURIComponent(symbols)}`); },
+
     // Fundamentals & News
     getFundamentals(symbol) { return this.request(`/api/stocks/${encodeURIComponent(symbol)}/fundamentals`); },
     getStockNews(symbol) { return this.request(`/api/stocks/${encodeURIComponent(symbol)}/news`); },
@@ -215,6 +218,12 @@ const API = {
         w.document.close();
     },
 
+    // Trade Journal
+    getTradeJournal(limit = 50) { return this.request(`/api/journal?limit=${limit}`); },
+    createTrade(data) { return this.request('/api/journal', { method: 'POST', body: JSON.stringify(data) }); },
+    deleteTrade(id) { return this.request(`/api/journal/${id}`, { method: 'DELETE' }); },
+    getTradeStats() { return this.request('/api/journal/stats'); },
+
     // Price Alerts
     getAlerts() { return this.request('/api/alerts'); },
     createAlert(data) { return this.request('/api/alerts', { method: 'POST', body: JSON.stringify(data) }); },
@@ -293,6 +302,73 @@ const API = {
                 if (msg.type === 'smart_alert_triggered' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
                 if (msg.type === 'oi_update' && this.onOIUpdate) this.onOIUpdate(msg.data);
                 if (msg.type === 'mtf_update' && this.onMTFUpdate) this.onMTFUpdate(msg.data);
+                if (msg.type === 'news_alert') {
+                    // Show toast notification for news alerts
+                    if (typeof App !== 'undefined') {
+                        const d = msg.data;
+                        const sentiment = d.score > 0 ? 'positive' : 'negative';
+                        const headline = d.top_headline ? `: ${d.top_headline.substring(0, 60)}...` : '';
+                        App.showToast(`${d.symbol} news ${sentiment} (score: ${d.score})${headline}`, 'alert');
+                    }
+                    // Also push to notifications
+                    if (typeof Notifications !== 'undefined' && Notifications.addNotification) {
+                        const d = msg.data;
+                        Notifications.addNotification({
+                            type: 'news',
+                            symbol: d.symbol,
+                            message: d.type === 'news_sentiment_change'
+                                ? `${d.symbol} sentiment shifted ${d.change > 0 ? '+' : ''}${d.change} (now ${d.score})`
+                                : `${d.symbol} extreme sentiment: ${d.score}`,
+                        });
+                    }
+                }
+                if (msg.type === 'scanner_alert') {
+                    if (typeof App !== 'undefined') {
+                        const d = msg.data;
+                        const filters = (d.matched_filters || []).join(', ');
+                        App.showToast(`Scanner: ${d.symbol} matched [${filters}]`, 'alert');
+                    }
+                    if (typeof Notifications !== 'undefined' && Notifications.addNotification) {
+                        const d = msg.data;
+                        Notifications.addNotification({
+                            type: 'scanner',
+                            symbol: d.symbol,
+                            message: `${d.symbol} matched: ${(d.matched_filters || []).join(', ')}`,
+                        });
+                    }
+                    // Update live scanner feed in screener tab
+                    const feed = document.getElementById('liveScannerFeed');
+                    if (feed) {
+                        const d = msg.data;
+                        const filters = (d.matched_filters || []).join(', ');
+                        const color = d.change_pct >= 0 ? 'text-green-400' : 'text-red-400';
+                        const sign = d.change_pct >= 0 ? '+' : '';
+                        const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                        const item = document.createElement('div');
+                        item.className = 'flex items-center justify-between py-1 px-2 bg-dark-700 rounded text-xs cursor-pointer hover:bg-dark-600 transition';
+                        item.onclick = () => Search.select(d.symbol, d.symbol);
+                        item.innerHTML = `
+                            <div class="flex items-center gap-2">
+                                <span class="text-white font-medium">${d.symbol}</span>
+                                <span class="${color}">${sign}${(d.change_pct || 0).toFixed(2)}%</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-500 text-[10px]">${filters}</span>
+                                <span class="text-gray-600 text-[10px]">${time}</span>
+                            </div>
+                        `;
+                        // Remove the "Waiting..." placeholder
+                        const placeholder = feed.querySelector('.text-center.text-gray-500');
+                        if (placeholder && placeholder.textContent.includes('Waiting')) {
+                            feed.innerHTML = '';
+                        }
+                        feed.prepend(item);
+                        // Keep max 20 items
+                        while (feed.children.length > 20) {
+                            feed.removeChild(feed.lastChild);
+                        }
+                    }
+                }
             } catch (e) {
                 console.error('[WS] Failed to parse message:', e);
             }

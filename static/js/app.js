@@ -86,6 +86,9 @@ const App = {
                 if (tab.dataset.tab === 'screener') {
                     Lazy.loadAndInit('screener');
                 }
+                if (tab.dataset.tab === 'journal') {
+                    Lazy.loadAndInit('journal').then(() => Journal.load());
+                }
                 if (tab.dataset.tab === 'insights') {
                     Lazy.loadAndInit('insights').then(() => Insights.load());
                 }
@@ -189,6 +192,7 @@ const App = {
             ]);
             // Fire market movers and new panels non-blocking
             this.loadMarketMovers();
+            this.loadEarnings();
             this.loadMarketMood();
             this.loadFIIDII();
             this.loadSectorHeatmap();
@@ -662,6 +666,55 @@ const App = {
                 arrowEl.className = `text-xs ${up ? 'text-green-400' : 'text-red-400'}`;
             }
         });
+    },
+
+    // --- Earnings Calendar ---
+    async loadEarnings() {
+        try {
+            // Use watchlist symbols if available, otherwise defaults
+            let symbols = '';
+            if (typeof Watchlist !== 'undefined' && Watchlist._items && Watchlist._items.length > 0) {
+                symbols = Watchlist._items.map(i => i.symbol).join(',');
+            }
+            const data = await API.getUpcomingEarnings(symbols);
+            this.renderEarnings(data);
+        } catch (e) {
+            console.error('Earnings load failed:', e);
+        }
+    },
+
+    renderEarnings(earnings) {
+        const container = document.getElementById('earningsCalendar');
+        if (!container) return;
+        if (!earnings || earnings.length === 0) {
+            container.innerHTML = '<div class="text-center py-3 text-gray-500 text-xs">No upcoming earnings data available</div>';
+            return;
+        }
+        container.innerHTML = earnings.map(e => {
+            const days = e.days_until;
+            let urgency = 'text-gray-400';
+            let badge = '';
+            if (days !== null && days <= 3) {
+                urgency = 'text-red-400';
+                badge = '<span class="text-[9px] px-1 py-0.5 rounded bg-red-900 text-red-400 ml-1">SOON</span>';
+            } else if (days !== null && days <= 7) {
+                urgency = 'text-yellow-400';
+            }
+            const daysText = days !== null ? (days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`) : '?';
+            return `
+                <div class="flex items-center justify-between py-1.5 px-2 bg-dark-700 rounded hover:bg-dark-600 cursor-pointer transition"
+                     onclick="Search.select('${e.symbol}', '${e.symbol}')">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-white font-medium">${e.symbol}</span>
+                        ${badge}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-gray-500">${e.earnings_date}</span>
+                        <span class="text-xs font-bold ${urgency}">${daysText}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
     },
 
     // --- Market Mood ---

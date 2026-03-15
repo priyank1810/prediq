@@ -104,6 +104,22 @@ def get_quote(symbol: str):
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@router.get("/earnings/upcoming")
+async def upcoming_earnings(symbols: str = Query("", description="Comma-separated symbols")):
+    """Get upcoming earnings dates for specified symbols."""
+    import asyncio
+    from app.services.earnings_service import earnings_service
+
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        # Default to popular stocks
+        sym_list = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+                     "HINDUNILVR", "SBIN", "BHARTIARTL", "KOTAKBANK", "ITC"]
+
+    result = await asyncio.to_thread(earnings_service.get_earnings, sym_list[:20])
+    return result
+
+
 @router.get("/{symbol}/history")
 def get_history(symbol: str, period: str = Query("1y")):
     valid_periods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"]
