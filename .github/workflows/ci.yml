@@ -54,6 +54,11 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          echo "Key bytes: $(wc -c < ~/.ssh/deploy_key)"
+          echo "Key lines: $(wc -l < ~/.ssh/deploy_key)"
+          echo "Key md5: $(md5sum ~/.ssh/deploy_key | cut -d' ' -f1)"
+          head -1 ~/.ssh/deploy_key
+          tail -1 ~/.ssh/deploy_key
           echo "Connecting as: ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PORT:-22}"
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" 'cd ~/prediq && git pull origin main && pip install -r requirements.txt --quiet && (supervisorctl restart prediq prediq-worker 2>/dev/null || sudo systemctl restart prediq prediq-worker 2>/dev/null || pm2 restart prediq 2>/dev/null || echo "Manual restart needed")'
