@@ -919,6 +919,12 @@ class PredictionService:
         if fundamental:
             result["fundamental"] = fundamental
 
+        # Log predictions for accuracy tracking
+        try:
+            self._log_predictions(symbol, horizon, model_results, result.get("ensemble"), regime)
+        except Exception as e:
+            logger.debug(f"Prediction logging failed: {e}")
+
         # Generate explanation — pass MERGED sentiment (stock + global combined)
         # so the explainer shows correct headline counts
         try:
@@ -935,6 +941,71 @@ class PredictionService:
             logger.warning(f"Failed to generate explanation: {e}")
 
         return result
+
+
+    def _log_predictions(self, symbol: str, horizon: str, model_results: dict,
+                         ensemble_result: dict | None, regime: dict | None):
+        """Log individual model and ensemble predictions to DB for accuracy tracking."""
+        from datetime import date, timedelta
+        from app.database import SessionLocal
+        from app.models import PredictionLog
+        from app.config import PREDICTION_HORIZONS
+
+        cfg = PREDICTION_HORIZONS.get(horizon, {})
+        is_intraday = cfg.get("intraday", False)
+        if is_intraday:
+            return  # Skip intraday — hard to backfill actual prices at exact timestamps
+
+        horizon_days = cfg.get("days", 1)
+        today = date.today()
+        target = today + timedelta(days=horizon_days)
+        regime_label = regime.get("regime") if regime else None
+
+        # Determine sector
+        sector = None
+        try:
+            from app.services.sector_service import sector_service
+            sector = sector_service.get_sector_for_symbol(symbol)
+        except Exception:
+            pass
+
+        db = SessionLocal()
+        try:
+            logs = []
+            # Log each individual model
+            for model_name, res in model_results.items():
+                if res and res.get("predictions"):
+                    final_price = res["predictions"][-1]
+                    cl = res.get("confidence_lower", [None])
+                    cu = res.get("confidence_upper", [None])
+                    logs.append(PredictionLog(
+                        symbol=symbol, model_type=model_name,
+                        prediction_date=today, target_date=target,
+                        predicted_price=round(final_price, 2),
+                        confidence_lower=round(cl[-1], 2) if cl and cl[-1] else None,
+                        confidence_upper=round(cu[-1], 2) if cu and cu[-1] else None,
+                        sector=sector, regime=regime_label,
+                    ))
+
+            # Log ensemble
+            if ensemble_result and ensemble_result.get("predictions"):
+                final_price = ensemble_result["predictions"][-1]
+                logs.append(PredictionLog(
+                    symbol=symbol, model_type="ensemble",
+                    prediction_date=today, target_date=target,
+                    predicted_price=round(final_price, 2),
+                    sector=sector, regime=regime_label,
+                ))
+
+            if logs:
+                db.add_all(logs)
+                db.commit()
+                logger.info(f"Logged {len(logs)} predictions for {symbol} (horizon={horizon})")
+        except Exception as e:
+            db.rollback()
+            logger.debug(f"Prediction log commit failed: {e}")
+        finally:
+            db.close()
 
 
 prediction_service = PredictionService()

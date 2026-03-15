@@ -30,6 +30,7 @@ const Insights = {
             this.loadAccuracyByRegime(),
             this.loadBacktestPnL(),
             this.loadSmartAlerts(),
+            this.loadPredictionLeaderboard(),
         ]);
     },
 
@@ -233,6 +234,124 @@ const Insights = {
         } catch (e) {
             console.error('Failed to load backtest P&L:', e);
         }
+    },
+
+    async loadPredictionLeaderboard() {
+        try {
+            const data = await API.getPredictionLeaderboard();
+            this._renderLeaderboardModels(data.models || []);
+            this._renderLeaderboardBySymbol(data.by_symbol || []);
+            this._renderLeaderboardBySector(data.by_sector || []);
+        } catch (e) {
+            console.error('Failed to load prediction leaderboard:', e);
+        }
+    },
+
+    _renderLeaderboardModels(models) {
+        const container = document.getElementById('predLeaderboardModels');
+        if (!container) return;
+        if (!models || models.length === 0) {
+            container.innerHTML = '<div class="text-center py-4 text-gray-500 text-sm col-span-full">No prediction data yet. Run predictions on stocks to populate the leaderboard.</div>';
+            return;
+        }
+
+        const nameMap = { ensemble: 'Ensemble', prophet: 'Prophet', xgboost: 'XGBoost' };
+        const iconMap = { ensemble: '&#9733;', prophet: '&#9670;', xgboost: '&#9632;' };
+        const colorMap = { ensemble: 'text-accent-blue', prophet: 'text-purple-400', xgboost: 'text-green-400' };
+        const borderMap = { ensemble: 'border-accent-blue', prophet: 'border-purple-500', xgboost: 'border-green-500' };
+
+        container.innerHTML = models.map((m, i) => {
+            const name = nameMap[m.model] || m.model;
+            const icon = iconMap[m.model] || '&#9679;';
+            const color = colorMap[m.model] || 'text-gray-400';
+            const border = borderMap[m.model] || 'border-gray-600';
+            const mapeColor = m.avg_mape <= 3 ? 'text-green-400' : (m.avg_mape <= 7 ? 'text-yellow-400' : 'text-red-400');
+            const rank = i === 0 ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-900 text-yellow-400 ml-1">BEST</span>' : '';
+
+            return `
+                <div class="bg-dark-700 border-l-4 ${border} rounded-lg p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="${color} text-lg">${icon}</span>
+                        <span class="text-white font-bold text-sm">${name}</span>
+                        ${rank}
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                            <div class="text-[10px] text-gray-500">Avg MAPE</div>
+                            <div class="text-sm font-bold ${mapeColor}">${m.avg_mape.toFixed(1)}%</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-gray-500">Win Rate</div>
+                            <div class="text-sm font-bold ${m.win_rate >= 50 ? 'text-green-400' : 'text-red-400'}">${m.win_rate.toFixed(0)}%</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-gray-500">Predictions</div>
+                            <div class="text-sm font-bold text-gray-300">${m.total}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    _renderLeaderboardBySymbol(items) {
+        const container = document.getElementById('predLeaderboardBySymbol');
+        if (!container) return;
+        if (!items || items.length === 0) {
+            container.innerHTML = '<div class="text-center py-2 text-gray-500 text-xs">No data yet</div>';
+            return;
+        }
+
+        const nameMap = { ensemble: 'ENS', prophet: 'PRO', xgboost: 'XGB' };
+        const colorMap = { ensemble: 'bg-blue-900 text-blue-300', prophet: 'bg-purple-900 text-purple-300', xgboost: 'bg-green-900 text-green-300' };
+
+        container.innerHTML = items.map(item => {
+            const mapeColor = item.avg_mape <= 3 ? 'text-green-400' : (item.avg_mape <= 7 ? 'text-yellow-400' : 'text-red-400');
+            const badge = nameMap[item.model] || item.model;
+            const badgeColor = colorMap[item.model] || 'bg-gray-800 text-gray-300';
+            return `
+                <div class="flex items-center justify-between py-1">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[9px] px-1 py-0.5 rounded ${badgeColor}">${badge}</span>
+                        <span class="text-xs text-white cursor-pointer hover:text-accent-blue" onclick="Search.select('${item.symbol}', '${item.symbol}')">${item.symbol}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-gray-500">${item.total}x</span>
+                        <span class="text-xs font-bold ${mapeColor}">${item.avg_mape.toFixed(1)}%</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    _renderLeaderboardBySector(items) {
+        const container = document.getElementById('predLeaderboardBySector');
+        if (!container) return;
+        if (!items || items.length === 0) {
+            container.innerHTML = '<div class="text-center py-2 text-gray-500 text-xs">No data yet</div>';
+            return;
+        }
+
+        const nameMap = { ensemble: 'ENS', prophet: 'PRO', xgboost: 'XGB' };
+        const colorMap = { ensemble: 'bg-blue-900 text-blue-300', prophet: 'bg-purple-900 text-purple-300', xgboost: 'bg-green-900 text-green-300' };
+
+        container.innerHTML = items.map(item => {
+            const mapeColor = item.avg_mape <= 3 ? 'text-green-400' : (item.avg_mape <= 7 ? 'text-yellow-400' : 'text-red-400');
+            const badge = nameMap[item.model] || item.model;
+            const badgeColor = colorMap[item.model] || 'bg-gray-800 text-gray-300';
+            return `
+                <div class="flex items-center justify-between py-1">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[9px] px-1 py-0.5 rounded ${badgeColor}">${badge}</span>
+                        <span class="text-xs text-gray-300">${item.sector}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-gray-500">${item.total}x</span>
+                        <span class="text-xs font-bold ${mapeColor}">${item.avg_mape.toFixed(1)}%</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
     },
 
     async loadSmartAlerts() {

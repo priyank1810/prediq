@@ -57,7 +57,7 @@ class PredictionLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String, nullable=False, index=True)
-    model_type = Column(String, nullable=False)  # "lstm" or "prophet"
+    model_type = Column(String, nullable=False)  # "prophet", "xgboost", "ensemble"
     prediction_date = Column(Date, nullable=False)
     target_date = Column(Date, nullable=False)
     predicted_price = Column(Float, nullable=False)

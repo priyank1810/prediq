@@ -184,6 +184,68 @@ def _migrate_db_postgres():
                 pass  # Table may not exist yet
 
 
+async def prediction_accuracy_backfiller():
+    """Background task: fill in actual_price for predictions whose target_date has passed."""
+    from datetime import date
+    from app.database import SessionLocal
+    from app.models import PredictionLog
+
+    await asyncio.sleep(180)  # Let services warm up
+    while True:
+        try:
+            def _backfill():
+                db = SessionLocal()
+                try:
+                    today = date.today()
+                    # Find predictions where target_date <= today and actual_price is NULL
+                    pending = (
+                        db.query(PredictionLog)
+                        .filter(
+                            PredictionLog.actual_price.is_(None),
+                            PredictionLog.target_date <= today,
+                        )
+                        .limit(50)
+                        .all()
+                    )
+                    if not pending:
+                        return 0
+
+                    # Group by symbol to batch quote fetches
+                    symbols = list({p.symbol for p in pending})
+                    from app.services.data_fetcher import data_fetcher
+                    quotes = {}
+                    for sym in symbols:
+                        try:
+                            q = data_fetcher.get_live_quote(sym)
+                            if q and q.get("ltp"):
+                                quotes[sym] = float(q["ltp"])
+                        except Exception:
+                            pass
+
+                    updated = 0
+                    for p in pending:
+                        if p.symbol in quotes:
+                            p.actual_price = quotes[p.symbol]
+                            updated += 1
+
+                    if updated:
+                        db.commit()
+                    return updated
+                except Exception as e:
+                    db.rollback()
+                    logging.getLogger(__name__).debug(f"Prediction backfill error: {e}")
+                    return 0
+                finally:
+                    db.close()
+
+            count = await asyncio.to_thread(_backfill)
+            if count > 0:
+                logging.getLogger(__name__).info(f"Backfilled {count} prediction actual prices")
+        except Exception:
+            pass
+        await asyncio.sleep(3600)  # Run every hour
+
+
 async def periodic_job_enqueuer():
     """Every 5 min, enqueue background jobs (watchlist_signals, mtf_stream, oi_stream)
     if market is open and no duplicate pending jobs exist."""
@@ -275,6 +337,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(market_mood_broadcaster()),
         asyncio.create_task(periodic_job_enqueuer()),
         asyncio.create_task(worker_result_broadcaster()),
+        asyncio.create_task(prediction_accuracy_backfiller()),
     ]
     yield
     # Shutdown
