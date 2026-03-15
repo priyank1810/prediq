@@ -394,3 +394,175 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
         font-size: 0.75rem;
     }
 }
+
+/* ---- Mobile Chart Toolbar ---- */
+.chart-mobile-toolbar {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    background: var(--bg-surface);
+    border-radius: 0 0 0.5rem 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+.chart-mobile-toolbar::-webkit-scrollbar {
+    display: none;
+}
+.chart-mobile-toolbar .toolbar-group {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    align-items: center;
+}
+.chart-mobile-toolbar .toolbar-divider {
+    width: 1px;
+    height: 1.5rem;
+    background: var(--border-color);
+    flex-shrink: 0;
+    margin: 0 0.25rem;
+}
+.chart-mobile-toolbar button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border: 1px solid transparent;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.chart-mobile-toolbar button:active {
+    transform: scale(0.95);
+}
+.chart-mobile-toolbar button.active {
+    background: #2979ff;
+    color: #fff;
+    border-color: #2979ff;
+}
+.chart-mobile-toolbar button.active:active {
+    background: #2962ff;
+}
+
+/* ---- Chart Fullscreen Mode ---- */
+.chart-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important;
+    border-radius: 0 !important;
+    background: var(--bg-primary);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.chart-fullscreen #priceChart {
+    height: calc(100vh - 60px) !important;
+}
+.chart-fullscreen .chart-mobile-toolbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10000;
+    border-radius: 0;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-color);
+    padding: 0.35rem 0.5rem;
+}
+.chart-fullscreen-enter {
+    animation: chartFullscreenIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.chart-fullscreen-exit {
+    animation: chartFullscreenOut 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes chartFullscreenIn {
+    from { opacity: 0.8; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+}
+@keyframes chartFullscreenOut {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0.8; transform: scale(0.95); }
+}
+
+/* ---- Chart OHLCV Tooltip ---- */
+.chart-ohlcv-tooltip {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 20;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.65rem;
+    color: var(--text-primary);
+    pointer-events: none;
+    line-height: 1.5;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.chart-ohlcv-tooltip.visible {
+    opacity: 1;
+}
+
+/* ---- Chart Responsive Heights ---- */
+@media (max-width: 639px) {
+    #chartContainer {
+        height: 250px !important;
+    }
+    .chart-mobile-toolbar {
+        display: flex;
+    }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+    #chartContainer {
+        height: 350px !important;
+    }
+}
+@media (min-width: 1024px) {
+    #chartContainer {
+        height: 400px !important;
+    }
+    /* Hide mobile toolbar on desktop — controls already in desktop bar */
+    .chart-mobile-toolbar {
+        display: none;
+    }
+}
+
+/* Mobile landscape fullscreen override */
+@media (max-width: 767px) and (orientation: landscape) {
+    .chart-fullscreen #priceChart {
+        height: calc(100vh - 50px) !important;
+    }
+}
+
+/* ---- Swipe hint indicator ---- */
+.chart-swipe-hint {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 15;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+.chart-swipe-hint.left { left: 0.5rem; }
+.chart-swipe-hint.right { right: 0.5rem; }
+.chart-swipe-hint.visible {
+    opacity: 0.6;
+}

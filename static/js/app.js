@@ -89,6 +89,9 @@ const App = {
                 if (tab.dataset.tab === 'journal') {
                     Lazy.loadAndInit('journal').then(() => Journal.load());
                 }
+                if (tab.dataset.tab === 'strategies') {
+                    Lazy.loadAndInit('strategies').then(() => Strategies.load());
+                }
                 if (tab.dataset.tab === 'insights') {
                     Lazy.loadAndInit('insights').then(() => Insights.load());
                 }
@@ -475,6 +478,9 @@ const App = {
             // Auto-load fundamentals, news & 15-min signal
             Lazy.load('fundamentals').then(() => Fundamentals.load(symbol));
             Signals.loadSignal(symbol);
+
+            // Update broker order panel with current symbol
+            if (typeof BrokerUI !== 'undefined') BrokerUI.setSymbol(symbol);
 
         } catch (e) {
             this.showToast('Failed to load stock data: ' + e.message, 'error');

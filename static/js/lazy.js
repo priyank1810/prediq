@@ -18,6 +18,7 @@ const Lazy = {
         options:      { src: '/static/js/options.js?v=1' },
         screener:     { src: '/static/js/screener.js?v=1' },
         journal:      { src: '/static/js/journal.js?v=1' },
+        strategies:   { src: '/static/js/strategies.js?v=1' },
     },
 
     /**

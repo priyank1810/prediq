@@ -288,3 +288,95 @@ class ChartPattern(BaseModel):
     end_date: str
     confidence: float
     description: str
+
+
+# --- Broker Order Schemas ---
+
+class OrderCreate(BaseModel):
+    symbol: str
+    exchange: str = "NSE"
+    order_type: str  # "MARKET", "LIMIT", "SL", "SL-M"
+    transaction_type: str  # "BUY", "SELL"
+    quantity: int
+    price: Optional[float] = None
+    trigger_price: Optional[float] = None
+    paper_trade: bool = False
+    notes: Optional[str] = None
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v):
+        return _check_symbol(v)
+
+    @field_validator("order_type")
+    @classmethod
+    def validate_order_type(cls, v):
+        v = v.upper()
+        if v not in ("MARKET", "LIMIT", "SL", "SL-M"):
+            raise ValueError("order_type must be MARKET, LIMIT, SL, or SL-M")
+        return v
+
+    @field_validator("transaction_type")
+    @classmethod
+    def validate_transaction_type(cls, v):
+        v = v.upper()
+        if v not in ("BUY", "SELL"):
+            raise ValueError("transaction_type must be BUY or SELL")
+        return v
+
+    @field_validator("quantity")
+    @classmethod
+    def validate_quantity(cls, v):
+        if v <= 0:
+            raise ValueError("quantity must be positive")
+        return v
+
+
+# --- Strategy Sharing Schemas ---
+
+class StrategyCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    symbols: str  # comma-separated
+    timeframe: str  # "1d", "1h", "15m", "1w"
+    entry_rules: str  # JSON string
+    exit_rules: str   # JSON string
+    is_public: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        v = v.strip()
+        if not v or len(v) > 100:
+            raise ValueError("Name must be 1-100 characters")
+        return v
+
+    @field_validator("timeframe")
+    @classmethod
+    def validate_timeframe(cls, v):
+        if v not in ("15m", "1h", "1d", "1w", "1mo"):
+            raise ValueError("Timeframe must be 15m, 1h, 1d, 1w, or 1mo")
+        return v
+
+
+class OrderResponse(BaseModel):
+    id: int
+    user_id: int
+    symbol: str
+    exchange: str
+    order_type: str
+    transaction_type: str
+    quantity: int
+    price: Optional[float]
+    trigger_price: Optional[float]
+    status: str
+    broker: str
+    broker_order_id: Optional[str]
+    paper_trade: bool
+    placed_at: Optional[datetime]
+    executed_at: Optional[datetime]
+    notes: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

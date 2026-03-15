@@ -19,6 +19,7 @@ class User(Base):
     holdings = relationship("PortfolioHolding", back_populates="owner")
     alerts = relationship("PriceAlert", back_populates="owner")
     watchlist = relationship("WatchlistItem", back_populates="owner")
+    orders = relationship("Order", back_populates="owner")
 
 
 class PortfolioHolding(Base):
@@ -141,6 +142,70 @@ class TradeJournal(Base):
     tags = Column(String, nullable=True)  # comma-separated tags
     created_at = Column(DateTime, default=now_ist)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+
+class Order(Base):
+    __tablename__ = "orders"
+    __table_args__ = (
+        Index("ix_orders_user_status", "user_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    symbol = Column(String, nullable=False, index=True)
+    exchange = Column(String, default="NSE")
+    order_type = Column(String, nullable=False)  # "MARKET", "LIMIT", "SL", "SL-M"
+    transaction_type = Column(String, nullable=False)  # "BUY", "SELL"
+    quantity = Column(Integer, nullable=False)
+    price = Column(Float, nullable=True)  # nullable for MARKET orders
+    trigger_price = Column(Float, nullable=True)  # for SL / SL-M
+    status = Column(String, default="pending")  # pending, placed, executed, cancelled, rejected
+    broker = Column(String, default="angel_one")
+    broker_order_id = Column(String, nullable=True)
+    paper_trade = Column(Boolean, default=False)
+    placed_at = Column(DateTime, nullable=True)
+    executed_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=now_ist)
+
+    owner = relationship("User", back_populates="orders")
+
+
+class SharedStrategy(Base):
+    __tablename__ = "shared_strategies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    symbols = Column(String, nullable=False)  # comma-separated
+    timeframe = Column(String, nullable=False)
+    entry_rules = Column(Text, nullable=False)  # JSON string
+    exit_rules = Column(Text, nullable=False)   # JSON string
+    is_public = Column(Boolean, default=True)
+    upvotes = Column(Integer, default=0)
+    total_trades = Column(Integer, default=0)
+    win_rate = Column(Float, nullable=True)
+    avg_return_pct = Column(Float, nullable=True)
+    sharpe_ratio = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=now_ist)
+    updated_at = Column(DateTime, default=now_ist, onupdate=now_ist)
+
+    followers = relationship("StrategyFollow", back_populates="strategy")
+
+
+class StrategyFollow(Base):
+    __tablename__ = "strategy_follows"
+    __table_args__ = (
+        UniqueConstraint("user_id", "strategy_id", name="uq_strategy_follow_user_strategy"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    strategy_id = Column(Integer, ForeignKey("shared_strategies.id"), nullable=False, index=True)
+    followed_at = Column(DateTime, default=now_ist)
+
+    strategy = relationship("SharedStrategy", back_populates="followers")
 
 
 class JobQueue(Base):

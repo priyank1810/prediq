@@ -224,6 +224,16 @@ const API = {
     deleteTrade(id) { return this.request(`/api/journal/${id}`, { method: 'DELETE' }); },
     getTradeStats() { return this.request('/api/journal/stats'); },
 
+    // Strategies
+    getStrategies(sort = 'newest', limit = 20, offset = 0) { return this.request(`/api/strategies/?sort=${sort}&limit=${limit}&offset=${offset}`); },
+    getStrategyLeaderboard() { return this.request('/api/strategies/leaderboard'); },
+    getMyStrategies() { return this.request('/api/strategies/my'); },
+    getStrategy(id) { return this.request(`/api/strategies/${id}`); },
+    createStrategy(data) { return this.request('/api/strategies/', { method: 'POST', body: JSON.stringify(data) }); },
+    upvoteStrategy(id) { return this.request(`/api/strategies/${id}/upvote`, { method: 'POST' }); },
+    followStrategy(id) { return this.request(`/api/strategies/${id}/follow`, { method: 'POST' }); },
+    deleteStrategy(id) { return this.request(`/api/strategies/${id}`, { method: 'DELETE' }); },
+
     // Price Alerts
     getAlerts() { return this.request('/api/alerts'); },
     createAlert(data) { return this.request('/api/alerts', { method: 'POST', body: JSON.stringify(data) }); },
@@ -401,5 +411,18 @@ const API = {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ subscribe: symbols }));
         }
-    }
+    },
+
+    // Broker
+    placeBrokerOrder(data) {
+        return this.request('/api/broker/order', { method: 'POST', body: JSON.stringify(data) });
+    },
+    cancelBrokerOrder(orderId) {
+        return this.request(`/api/broker/order/${orderId}`, { method: 'DELETE' });
+    },
+    getBrokerPositions() { return this.request('/api/broker/positions'); },
+    getBrokerOrders() { return this.request('/api/broker/orders'); },
+    getBrokerRecent(limit) { return this.request(`/api/broker/recent?limit=${limit || 5}`); },
+    syncBrokerPortfolio() { return this.request('/api/broker/sync', { method: 'POST' }); },
+    getBrokerStatus() { return this.request('/api/broker/status'); }
 };

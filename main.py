@@ -23,6 +23,8 @@ from app.routers.sectors import router as sectors_router
 from app.routers.websocket import router as ws_router, price_streamer, alert_checker, signal_accuracy_validator, signal_accuracy_validator_30min, signal_accuracy_validator_1hr
 from app.routers.jobs import router as jobs_router
 from app.routers.trade_journal import router as trade_journal_router
+from app.routers.strategies import router as strategies_router
+from app.routers.broker import router as broker_router
 from app.utils.rate_limiter import RateLimiter
 
 
@@ -597,6 +599,8 @@ app.include_router(screener.router, prefix="/api/screener", tags=["screener"])
 app.include_router(options.router, prefix="/api/options", tags=["options"])
 app.include_router(mtf_dashboard_router, prefix="/api/mtf", tags=["mtf-dashboard"])
 app.include_router(trade_journal_router, prefix="/api/journal", tags=["journal"])
+app.include_router(strategies_router, prefix="/api/strategies", tags=["strategies"])
+app.include_router(broker_router, prefix="/api/broker", tags=["broker"])
 app.include_router(ws_router)
 
 

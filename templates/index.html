@@ -95,6 +95,7 @@
             <button class="nav-tab" data-tab="portfolio" role="tab" aria-selected="false" aria-controls="tab-portfolio">Portfolio</button>
             <button class="nav-tab" data-tab="screener" role="tab" aria-selected="false" aria-controls="tab-screener">Screener</button>
             <button class="nav-tab" data-tab="journal" role="tab" aria-selected="false" aria-controls="tab-journal">Journal</button>
+            <button class="nav-tab" data-tab="strategies" role="tab" aria-selected="false" aria-controls="tab-strategies">Strategies</button>
             <button class="nav-tab" data-tab="insights" role="tab" aria-selected="false" aria-controls="tab-insights">AI Insights</button>
         </div>
     </nav>
@@ -174,13 +175,41 @@
                         </div>
                     </div>
                     <!-- Chart -->
-                    <div id="chartContainer" class="bg-dark-800 rounded-lg overflow-hidden relative h-[280px] sm:h-[380px] lg:h-[450px]">
-                        <div id="liveBadge" class="hidden absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-dark-900/80 rounded-full px-2.5 py-1">
-                            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                            <span class="text-[10px] text-green-400 font-medium">LIVE</span>
-                            <span id="liveTimestamp" class="text-[10px] text-gray-500"></span>
+                    <div id="chartWrapper" class="relative">
+                        <div id="chartContainer" class="bg-dark-800 rounded-lg overflow-hidden relative h-[280px] sm:h-[380px] lg:h-[450px]">
+                            <div id="liveBadge" class="hidden absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-dark-900/80 rounded-full px-2.5 py-1">
+                                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                <span class="text-[10px] text-green-400 font-medium">LIVE</span>
+                                <span id="liveTimestamp" class="text-[10px] text-gray-500"></span>
+                            </div>
+                            <div id="chartOhlcvTooltip" class="chart-ohlcv-tooltip"></div>
+                            <span id="chartSwipeLeft" class="chart-swipe-hint left">&#x276E;</span>
+                            <span id="chartSwipeRight" class="chart-swipe-hint right">&#x276F;</span>
+                            <div id="priceChart" class="h-full"></div>
                         </div>
-                        <div id="priceChart" class="h-full"></div>
+                        <!-- Mobile Chart Toolbar -->
+                        <div id="chartMobileToolbar" class="chart-mobile-toolbar">
+                            <div class="toolbar-group" id="mobileTimeframes">
+                                <button class="mobile-tf-btn" data-period="1d">1D</button>
+                                <button class="mobile-tf-btn" data-period="5d">5D</button>
+                                <button class="mobile-tf-btn" data-period="1mo">1M</button>
+                                <button class="mobile-tf-btn" data-period="3mo">3M</button>
+                                <button class="mobile-tf-btn" data-period="6mo">6M</button>
+                                <button class="mobile-tf-btn" data-period="1y">1Y</button>
+                                <button class="mobile-tf-btn" data-period="5y">5Y</button>
+                            </div>
+                            <div class="toolbar-divider"></div>
+                            <div class="toolbar-group" id="mobileIndicators">
+                                <button class="mobile-ind-btn" data-indicator="sma">SMA</button>
+                                <button class="mobile-ind-btn" data-indicator="ema">EMA</button>
+                                <button class="mobile-ind-btn" data-indicator="bb">BB</button>
+                                <button class="mobile-ind-btn" data-indicator="vol">Vol</button>
+                            </div>
+                            <div class="toolbar-divider"></div>
+                            <div class="toolbar-group">
+                                <button id="btnChartFullscreen" title="Fullscreen">&#x26F6;</button>
+                            </div>
+                        </div>
                     </div>
                     <!-- Indicator Panels (RSI, MACD) — toggleable -->
                     <div id="indicatorPanelsOverview" class="hidden space-y-2 mt-3">
@@ -203,6 +232,74 @@
                     </div>
                     <!-- Key Metrics Summary (populated by fundamentals.js) -->
                     <div id="overviewKeyMetrics" class="mt-3"></div>
+
+                    <!-- ═══════ ORDER PLACEMENT PANEL ═══════ -->
+                    <div id="orderPanel" class="bg-dark-800 rounded-lg p-3 sm:p-4 mt-3">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-semibold text-white">Place Order</h4>
+                            <div class="flex items-center gap-2">
+                                <label class="flex items-center gap-1 cursor-pointer">
+                                    <input type="checkbox" id="orderPaperTrade" class="w-3.5 h-3.5 rounded bg-dark-700 border-gray-600 text-yellow-500 focus:ring-0 focus:ring-offset-0">
+                                    <span class="text-[10px] text-yellow-400">Paper Trade</span>
+                                </label>
+                                <span id="orderBrokerBadge" class="text-[10px] px-1.5 py-0.5 rounded bg-dark-700 text-gray-500">Disconnected</span>
+                            </div>
+                        </div>
+                        <!-- Buy/Sell Toggle -->
+                        <div class="flex gap-1 mb-2">
+                            <button id="orderBuyBtn" class="flex-1 py-1.5 text-xs font-semibold rounded bg-green-600 text-white" onclick="BrokerUI.setTransactionType('BUY')">BUY</button>
+                            <button id="orderSellBtn" class="flex-1 py-1.5 text-xs font-semibold rounded bg-dark-700 text-gray-400 hover:bg-dark-600" onclick="BrokerUI.setTransactionType('SELL')">SELL</button>
+                        </div>
+                        <!-- Order Type + Inputs -->
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <div>
+                                <label class="text-[10px] text-gray-500 mb-0.5 block">Order Type</label>
+                                <select id="orderType" class="w-full bg-dark-700 border border-gray-600 text-gray-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-accent-blue" onchange="BrokerUI.onOrderTypeChange()">
+                                    <option value="MARKET">Market</option>
+                                    <option value="LIMIT">Limit</option>
+                                    <option value="SL">SL</option>
+                                    <option value="SL-M">SL-M</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-gray-500 mb-0.5 block">Quantity</label>
+                                <div class="flex gap-1">
+                                    <input type="number" id="orderQty" min="1" value="1" class="w-full bg-dark-700 border border-gray-600 text-gray-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-accent-blue">
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Quick quantity buttons -->
+                        <div class="flex gap-1 mb-2">
+                            <button class="px-2 py-0.5 text-[10px] bg-dark-700 hover:bg-dark-600 text-gray-400 rounded" onclick="BrokerUI.addQty(1)">+1</button>
+                            <button class="px-2 py-0.5 text-[10px] bg-dark-700 hover:bg-dark-600 text-gray-400 rounded" onclick="BrokerUI.addQty(5)">+5</button>
+                            <button class="px-2 py-0.5 text-[10px] bg-dark-700 hover:bg-dark-600 text-gray-400 rounded" onclick="BrokerUI.addQty(10)">+10</button>
+                            <button class="px-2 py-0.5 text-[10px] bg-dark-700 hover:bg-dark-600 text-gray-400 rounded" onclick="BrokerUI.setQtyLot()">Lot</button>
+                        </div>
+                        <!-- Price inputs (conditional) -->
+                        <div id="orderPriceRow" class="hidden grid grid-cols-2 gap-2 mb-2">
+                            <div id="orderPriceWrap">
+                                <label class="text-[10px] text-gray-500 mb-0.5 block">Price</label>
+                                <input type="number" id="orderPrice" step="0.05" placeholder="0.00" class="w-full bg-dark-700 border border-gray-600 text-gray-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-accent-blue">
+                            </div>
+                            <div id="orderTriggerWrap" class="hidden">
+                                <label class="text-[10px] text-gray-500 mb-0.5 block">Trigger Price</label>
+                                <input type="number" id="orderTriggerPrice" step="0.05" placeholder="0.00" class="w-full bg-dark-700 border border-gray-600 text-gray-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-accent-blue">
+                            </div>
+                        </div>
+                        <!-- Place Order Button -->
+                        <button id="orderPlaceBtn" class="w-full py-2 text-xs font-bold rounded bg-green-600 hover:bg-green-500 text-white transition" onclick="BrokerUI.placeOrder()">
+                            PLACE BUY ORDER
+                        </button>
+                        <div id="orderStatus" class="hidden text-xs mt-2 text-center"></div>
+                        <!-- Recent Orders -->
+                        <div class="mt-3 border-t border-gray-700 pt-2">
+                            <h5 class="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Recent Orders</h5>
+                            <div id="orderRecentList" class="space-y-1 max-h-[160px] overflow-y-auto">
+                                <p class="text-xs text-gray-600 text-center py-2">No recent orders</p>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- ═══════ TECHNICAL TAB ═══════ -->
@@ -1116,6 +1213,80 @@
             </div>
         </div>
 
+        <!-- Strategies Tab -->
+        <div id="tab-strategies" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-strategies">
+            <!-- Strategy Leaderboard -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Strategy Leaderboard</h3>
+                <div id="strategyLeaderboard" class="space-y-2">
+                    <div class="text-center py-4 text-gray-500 text-sm">Loading leaderboard...</div>
+                </div>
+            </div>
+
+            <!-- Share Strategy Form -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Share a Strategy</h3>
+                <form id="shareStrategyForm" class="space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="stratName" class="block text-[10px] text-gray-500 mb-1">Strategy Name *</label>
+                            <input type="text" id="stratName" placeholder="e.g. RSI Reversal Scalp" maxlength="100" class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white w-full placeholder-gray-500" required>
+                        </div>
+                        <div>
+                            <label for="stratSymbols" class="block text-[10px] text-gray-500 mb-1">Symbols (comma-separated) *</label>
+                            <input type="text" id="stratSymbols" placeholder="e.g. RELIANCE, TCS, INFY" class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white w-full placeholder-gray-500 uppercase" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="stratDescription" class="block text-[10px] text-gray-500 mb-1">Description</label>
+                        <input type="text" id="stratDescription" placeholder="Brief description of the strategy..." class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white w-full placeholder-gray-500">
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="stratTimeframe" class="block text-[10px] text-gray-500 mb-1">Timeframe</label>
+                            <select id="stratTimeframe" class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white w-full">
+                                <option value="15m">15 Minutes</option>
+                                <option value="1h">1 Hour</option>
+                                <option value="1d" selected>1 Day</option>
+                                <option value="1w">1 Week</option>
+                                <option value="1mo">1 Month</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <label class="flex items-center gap-2 cursor-pointer py-1.5">
+                                <input type="checkbox" id="stratPublic" checked class="w-4 h-4 rounded border-gray-600 bg-dark-700 text-accent-blue focus:ring-accent-blue">
+                                <span class="text-xs text-gray-300">Make public</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="stratEntryRules" class="block text-[10px] text-gray-500 mb-1">Entry Rules *</label>
+                        <textarea id="stratEntryRules" rows="3" placeholder='e.g. {"condition": "RSI < 30", "volume": "above average", "pattern": "hammer"}' class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white w-full placeholder-gray-500 font-mono" required></textarea>
+                    </div>
+                    <div>
+                        <label for="stratExitRules" class="block text-[10px] text-gray-500 mb-1">Exit Rules *</label>
+                        <textarea id="stratExitRules" rows="3" placeholder='e.g. {"take_profit": "2%", "stop_loss": "1%", "trailing_stop": true}' class="bg-dark-700 border border-gray-600 rounded px-2 py-1.5 text-xs text-white w-full placeholder-gray-500 font-mono" required></textarea>
+                    </div>
+                    <button type="submit" class="px-4 py-1.5 bg-accent-blue text-white text-xs rounded hover:bg-blue-600 transition">Share Strategy</button>
+                </form>
+            </div>
+
+            <!-- Public Strategies List -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold text-white">Public Strategies</h3>
+                    <select id="strategySortSelect" class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-[10px] text-white">
+                        <option value="newest">Newest</option>
+                        <option value="upvotes">Most Upvoted</option>
+                        <option value="win_rate">Best Win Rate</option>
+                    </select>
+                </div>
+                <div id="strategyList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div class="text-center py-4 text-gray-500 text-sm col-span-full">Loading strategies...</div>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Toast Container -->
@@ -1133,6 +1304,7 @@
     <script defer src="/static/js/search.js?v=11"></script>
     <script src="/static/js/lazy.js?v=1"></script>
     <script defer src="/static/js/notifications.js?v=11"></script>
+    <script defer src="/static/js/broker.js?v=1"></script>
     <script defer src="/static/js/app.js?v=13"></script>
 </body>
 </html>
