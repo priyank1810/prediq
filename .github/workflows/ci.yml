@@ -47,18 +47,15 @@ jobs:
       - name: Deploy to production server
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          HOST: ${{ secrets.DEPLOY_HOST }}
-          USER: ${{ secrets.DEPLOY_USER }}
-          PORT: ${{ secrets.DEPLOY_PORT }}
-          PATH_DIR: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           mkdir -p ~/.ssh
           printf '%s' "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          echo "Key file size: $(wc -c < ~/.ssh/deploy_key) bytes"
-          echo "Key starts with: $(head -c 36 ~/.ssh/deploy_key)"
-          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -p "${PORT:-22}" "${USER}@${HOST}" << 'DEPLOY_SCRIPT'
+          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" << 'DEPLOY_SCRIPT'
             cd ~/prediq
             git pull origin main
             pip install -r requirements.txt --quiet
