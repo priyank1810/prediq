@@ -31,6 +31,8 @@ const Signals = {
         const loading = document.getElementById('signalLoading');
         const results = document.getElementById('signalResults');
 
+        // Show shimmer placeholders instead of spinner
+        Shimmer.show('signalLoading', 'signal');
         loading.classList.remove('hidden');
         results.classList.add('hidden');
 
