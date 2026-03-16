@@ -510,8 +510,44 @@ const App = {
             // Update broker order panel with current symbol
             if (typeof BrokerUI !== 'undefined') BrokerUI.setSymbol(symbol);
 
+            // Update watchlist star button
+            this._updateWatchlistStar(symbol);
+
         } catch (e) {
             this.showToast('Failed to load stock data: ' + e.message, 'error');
+        }
+    },
+
+    _updateWatchlistStar(symbol) {
+        const icon = document.getElementById('watchlistStarIcon');
+        const btn = document.getElementById('btnAddToWatchlist');
+        if (!icon || !btn) return;
+        const inList = typeof Watchlist !== 'undefined' && Watchlist.isInWatchlist(symbol);
+        icon.innerHTML = inList ? '&#9733;' : '&#9734;';
+        btn.classList.toggle('text-yellow-400', inList);
+        btn.classList.toggle('border-yellow-600', inList);
+        btn.classList.toggle('text-gray-400', !inList);
+        btn.classList.toggle('border-gray-700', !inList);
+        btn.title = inList ? 'Remove from Watchlist' : 'Add to Watchlist';
+    },
+
+    async toggleWatchlistFromDetail() {
+        const symbol = this.currentSymbol;
+        if (!symbol) return;
+        const btn = document.getElementById('btnAddToWatchlist');
+        try {
+            await Lazy.loadAndInit('watchlist');
+            if (Watchlist.isInWatchlist(symbol)) {
+                await Watchlist.removeSymbol(symbol);
+                this.showToast(`${symbol} removed from watchlist`, 'success');
+            } else {
+                await API.addToWatchlist({ symbol, item_type: 'stock' });
+                Watchlist._items.push({ symbol, item_type: 'stock' });
+                this.showToast(`${symbol} added to watchlist`, 'success');
+            }
+            this._updateWatchlistStar(symbol);
+        } catch (e) {
+            this.showToast('Failed: ' + e.message, 'error');
         }
     },
 
