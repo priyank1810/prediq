@@ -6,15 +6,20 @@ const BrokerUI = {
     _txnType: 'BUY',
     _symbol: null,
 
+    /** Check if user is authenticated. */
+    _isLoggedIn() {
+        return typeof Auth !== 'undefined' && Auth.token;
+    },
+
     /** Initialise broker panel state and check broker status. */
     init() {
-        this.checkStatus();
+        if (this._isLoggedIn()) this.checkStatus();
     },
 
     /** Update the panel when a new stock is selected. */
     setSymbol(symbol) {
         this._symbol = symbol;
-        this.loadRecentOrders();
+        if (this._isLoggedIn()) this.loadRecentOrders();
     },
 
     /** Toggle between BUY and SELL. */
@@ -135,7 +140,7 @@ const BrokerUI = {
     /** Load recent orders into the list. */
     async loadRecentOrders() {
         const container = document.getElementById('orderRecentList');
-        if (!container) return;
+        if (!container || !this._isLoggedIn()) return;
 
         try {
             const orders = await API.getBrokerRecent(5);
