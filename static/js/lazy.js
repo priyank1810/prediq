@@ -53,12 +53,31 @@ const Lazy = {
         return this._loading[name];
     },
 
+    // Map module names to their global variable names
+    _globalNames: {
+        predictions: 'Predictions', watchlist: 'Watchlist', insights: 'Insights',
+        fundamentals: 'Fundamentals', signals: 'Signals', portfolio: 'Portfolio',
+        mtf: 'Mtf', options: 'Options', screener: 'Screener', journal: 'Journal',
+        strategies: 'Strategies',
+    },
+
+    /**
+     * Get the global object for a module.
+     * Uses direct variable lookup since const/let don't create window properties.
+     */
+    _getGlobal(name) {
+        const globalName = this._globalNames[name] || (name.charAt(0).toUpperCase() + name.slice(1));
+        // Try window first (var/function declarations), then eval for const/let
+        if (window[globalName]) return window[globalName];
+        try { return (0, eval)(globalName); } catch (e) { return null; }
+    },
+
     /**
      * Load a module and call its init() if it exists.
      */
     async loadAndInit(name) {
         await this.load(name);
-        const obj = window[name.charAt(0).toUpperCase() + name.slice(1)];
+        const obj = this._getGlobal(name);
         if (obj && typeof obj.init === 'function' && !obj._lazyInited) {
             obj.init();
             obj._lazyInited = true;
