@@ -1,4 +1,14 @@
 class StockChart {
+    static getThemeColors() {
+        const style = getComputedStyle(document.documentElement);
+        return {
+            bg: style.getPropertyValue('--chart-bg').trim() || '#1a1a2e',
+            text: style.getPropertyValue('--chart-text').trim() || '#9ca3af',
+            grid: style.getPropertyValue('--chart-grid').trim() || '#1e2a4a',
+            border: style.getPropertyValue('--chart-border').trim() || '#374151',
+        };
+    }
+
     constructor(containerId) {
         this.containerId = containerId;
         this.chart = null;
@@ -73,20 +83,21 @@ class StockChart {
             };
         }
 
+        var tc = StockChart.getThemeColors();
         this.chart = LightweightCharts.createChart(container, {
             width: container.clientWidth,
             height: container.clientHeight,
             layout: {
-                background: { color: '#1a1a2e' },
-                textColor: '#9ca3af',
+                background: { color: tc.bg },
+                textColor: tc.text,
             },
             grid: {
-                vertLines: { color: '#1e2a4a' },
-                horzLines: { color: '#1e2a4a' },
+                vertLines: { color: tc.grid },
+                horzLines: { color: tc.grid },
             },
             crosshair: crosshairConfig,
-            rightPriceScale: { borderColor: '#374151' },
-            timeScale: { borderColor: '#374151', timeVisible: timeVisible, secondsVisible: false },
+            rightPriceScale: { borderColor: tc.border },
+            timeScale: { borderColor: tc.border, timeVisible: timeVisible, secondsVisible: false },
             handleScroll: {
                 mouseWheel: true,
                 pressedMouseMove: true,
@@ -719,6 +730,17 @@ class StockChart {
         this.overlayLines = [];
     }
 
+    updateThemeColors() {
+        if (!this.chart) return;
+        var tc = StockChart.getThemeColors();
+        this.chart.applyOptions({
+            layout: { background: { color: tc.bg }, textColor: tc.text },
+            grid: { vertLines: { color: tc.grid }, horzLines: { color: tc.grid } },
+            rightPriceScale: { borderColor: tc.border },
+            timeScale: { borderColor: tc.border },
+        });
+    }
+
     addLineOverlay(data, color, title) {
         title = title || '';
         var series = this.chart.addLineSeries({
@@ -930,12 +952,13 @@ class IndicatorChart {
             window.removeEventListener('resize', this._resizeHandler);
         }
 
+        var tc = StockChart.getThemeColors();
         this.chart = LightweightCharts.createChart(container, {
             width: container.clientWidth,
             height: container.clientHeight,
-            layout: { background: { color: '#1a1a2e' }, textColor: '#9ca3af' },
-            grid: { vertLines: { color: '#1e2a4a' }, horzLines: { color: '#1e2a4a' } },
-            rightPriceScale: { borderColor: '#374151' },
+            layout: { background: { color: tc.bg }, textColor: tc.text },
+            grid: { vertLines: { color: tc.grid }, horzLines: { color: tc.grid } },
+            rightPriceScale: { borderColor: tc.border },
             timeScale: { visible: false },
         });
 
@@ -986,5 +1009,15 @@ class IndicatorChart {
             };
         }));
         this.chart.timeScale().fitContent();
+    }
+
+    updateThemeColors() {
+        if (!this.chart) return;
+        var tc = StockChart.getThemeColors();
+        this.chart.applyOptions({
+            layout: { background: { color: tc.bg }, textColor: tc.text },
+            grid: { vertLines: { color: tc.grid }, horzLines: { color: tc.grid } },
+            rightPriceScale: { borderColor: tc.border },
+        });
     }
 }

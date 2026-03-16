@@ -1,13 +1,20 @@
 /* ---- Theme Variables ---- */
 :root {
     --bg-primary: #0f1117;
+    --bg-secondary: #1a1a2e;
+    --bg-tertiary: #16213e;
     --bg-surface: #1a1d29;
     --bg-surface-hover: #16213e;
     --bg-elevated: #1e2a4a;
     --text-primary: #e5e7eb;
     --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
     --text-white: #ffffff;
     --border-color: #374151;
+    --hover-bg: #16213e;
+    --accent-blue: #2979ff;
+    --accent-green: #00c853;
+    --accent-red: #ff1744;
     --scrollbar-track: #0f0f1a;
     --scrollbar-thumb: #374151;
     --scrollbar-thumb-hover: #4b5563;
@@ -15,17 +22,28 @@
     --shimmer-highlight: #252545;
     --shimmer-card-bg: #0d1b2a;
     --shimmer-card-border: #1e2a4a;
+    --chart-bg: #1a1a2e;
+    --chart-text: #9ca3af;
+    --chart-grid: #1e2a4a;
+    --chart-border: #374151;
 }
 
 html[data-theme="light"] {
     --bg-primary: #f5f5f5;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f0f0f0;
     --bg-surface: #ffffff;
     --bg-surface-hover: #f0f0f0;
     --bg-elevated: #e8e8e8;
     --text-primary: #1f2937;
     --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
     --text-white: #111827;
     --border-color: #e5e7eb;
+    --hover-bg: #f3f4f6;
+    --accent-blue: #2563eb;
+    --accent-green: #16a34a;
+    --accent-red: #dc2626;
     --scrollbar-track: #f5f5f5;
     --scrollbar-thumb: #d1d5db;
     --scrollbar-thumb-hover: #9ca3af;
@@ -33,6 +51,10 @@ html[data-theme="light"] {
     --shimmer-highlight: #f3f4f6;
     --shimmer-card-bg: #ffffff;
     --shimmer-card-border: #e5e7eb;
+    --chart-bg: #ffffff;
+    --chart-text: #374151;
+    --chart-grid: #e5e7eb;
+    --chart-border: #d1d5db;
 }
 
 /* Light theme overrides for Tailwind utility classes */
@@ -96,6 +118,55 @@ html[data-theme="light"] textarea {
 
 html[data-theme="light"] .placeholder-gray-500::placeholder {
     color: var(--text-secondary);
+}
+
+/* Hover class overrides for light theme */
+html[data-theme="light"] .hover\:bg-dark-700:hover,
+html[data-theme="light"] .hover\:bg-dark-600:hover {
+    background-color: var(--hover-bg);
+}
+
+/* Dropdown / modal / elevated panels */
+html[data-theme="light"] #notificationDropdown,
+html[data-theme="light"] #searchResults {
+    background-color: var(--bg-surface);
+    border-color: var(--border-color);
+}
+
+html[data-theme="light"] .bg-green-900\/10 { background-color: rgba(22, 163, 74, 0.08); }
+html[data-theme="light"] .bg-red-900\/10 { background-color: rgba(220, 38, 38, 0.08); }
+
+/* Focus ring for inputs */
+html[data-theme="light"] input:focus,
+html[data-theme="light"] select:focus,
+html[data-theme="light"] textarea:focus {
+    border-color: var(--accent-blue);
+}
+
+/* Light theme stock tab active state */
+html[data-theme="light"] .stock-tab.active {
+    color: var(--accent-blue);
+}
+
+/* Smooth theme transition */
+body,
+header,
+nav,
+input,
+select,
+textarea,
+.bg-dark-900,
+.bg-dark-800,
+.bg-dark-700,
+.bg-dark-600,
+.toast,
+.shimmer-card,
+.chart-mobile-toolbar,
+.chart-fullscreen,
+.chart-ohlcv-tooltip,
+#notificationDropdown,
+#searchResults {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 /* Screen-reader only utility */

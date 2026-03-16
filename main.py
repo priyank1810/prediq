@@ -25,6 +25,7 @@ from app.routers.jobs import router as jobs_router
 from app.routers.trade_journal import router as trade_journal_router
 from app.routers.strategies import router as strategies_router
 from app.routers.broker import router as broker_router
+from app.routers.telegram import router as telegram_router
 from app.utils.rate_limiter import RateLimiter
 
 
@@ -54,6 +55,9 @@ async def smart_alert_checker():
                 if triggered:
                     for alert_data in triggered:
                         await manager.broadcast_to_all("smart_alert_triggered", alert_data)
+                        # Fire-and-forget Telegram broadcast for price alerts
+                        from app.services.telegram_service import broadcast_to_subscribers, send_price_alert as _tg_price
+                        asyncio.create_task(broadcast_to_subscribers("price_alerts", _tg_price, alert_data))
         except Exception:
             pass
         await asyncio.sleep(300)  # 5 min (was 60s) — smart alerts don't need second-level checks
@@ -111,6 +115,7 @@ def _migrate_db_sqlite(database_url: str):
         ("signal_logs", "price_after_1hr", "REAL"),
         ("signal_logs", "was_correct_30min", "BOOLEAN"),
         ("signal_logs", "was_correct_1hr", "BOOLEAN"),
+        ("users", "telegram_chat_id", "TEXT"),
     ]
 
     for table, column, col_type in migrations:
@@ -130,6 +135,7 @@ def _migrate_db_sqlite(database_url: str):
         "CREATE INDEX IF NOT EXISTS ix_job_queue_poll ON job_queue(status, priority, created_at)",
         "CREATE INDEX IF NOT EXISTS ix_job_queue_job_type ON job_queue(job_type)",
         "CREATE INDEX IF NOT EXISTS ix_job_queue_status ON job_queue(status)",
+        "CREATE INDEX IF NOT EXISTS ix_telegram_subscriptions_chat_id ON telegram_subscriptions(chat_id)",
     ]
     for idx_sql in indexes:
         try:
@@ -158,6 +164,7 @@ def _migrate_db_postgres():
         ("signal_logs", "price_after_1hr", "DOUBLE PRECISION"),
         ("signal_logs", "was_correct_30min", "BOOLEAN"),
         ("signal_logs", "was_correct_1hr", "BOOLEAN"),
+        ("users", "telegram_chat_id", "TEXT"),
     ]
 
     with engine.begin() as conn:
@@ -179,6 +186,7 @@ def _migrate_db_postgres():
             "CREATE INDEX IF NOT EXISTS ix_job_queue_poll ON job_queue(status, priority, created_at)",
             "CREATE INDEX IF NOT EXISTS ix_job_queue_job_type ON job_queue(job_type)",
             "CREATE INDEX IF NOT EXISTS ix_job_queue_status ON job_queue(status)",
+            "CREATE INDEX IF NOT EXISTS ix_telegram_subscriptions_chat_id ON telegram_subscriptions(chat_id)",
         ]
         for idx_sql in indexes:
             try:
@@ -295,6 +303,12 @@ async def worker_result_broadcaster():
                         signals_data = result.get("signals", {})
                         for sym, signal_data in signals_data.items():
                             await manager.broadcast_signal(sym, signal_data)
+                            # Telegram: broadcast high-confidence signals
+                            confidence = signal_data.get("confidence", 0)
+                            if confidence >= 60:
+                                from app.services.telegram_service import broadcast_to_subscribers, send_signal_alert as _tg_signal
+                                tg_data = {**signal_data, "symbol": sym}
+                                asyncio.create_task(broadcast_to_subscribers("signals", _tg_signal, tg_data))
 
                     elif job_type == "mtf_stream":
                         mtf_data = result.get("mtf_data", {})
@@ -362,6 +376,9 @@ async def news_alert_scanner():
                                     "top_headline": sentiment["headlines"][0]["title"] if sentiment.get("headlines") else None,
                                 }
                                 await manager.broadcast_to_all("news_alert", alert_data)
+                                # Fire-and-forget Telegram broadcast
+                                from app.services.telegram_service import broadcast_to_subscribers, send_news_alert as _tg_news
+                                asyncio.create_task(broadcast_to_subscribers("news", _tg_news, alert_data))
                             elif abs(score) >= 60 and prev == 0:
                                 # First check found extreme sentiment
                                 alert_data = {
@@ -372,6 +389,8 @@ async def news_alert_scanner():
                                     "top_headline": sentiment["headlines"][0]["title"] if sentiment.get("headlines") else None,
                                 }
                                 await manager.broadcast_to_all("news_alert", alert_data)
+                                from app.services.telegram_service import broadcast_to_subscribers, send_news_alert as _tg_news2
+                                asyncio.create_task(broadcast_to_subscribers("news", _tg_news2, alert_data))
                         except Exception:
                             pass
                         await asyncio.sleep(2)  # Pace requests
@@ -439,6 +458,9 @@ async def live_scanner():
                             "matched_filters": result.get("matched_filters", []),
                         }
                         await manager.broadcast_to_all("scanner_alert", alert_data)
+                        # Fire-and-forget Telegram broadcast
+                        from app.services.telegram_service import broadcast_to_subscribers, send_scanner_alert as _tg_scanner
+                        asyncio.create_task(broadcast_to_subscribers("scanner", _tg_scanner, alert_data))
 
         except Exception:
             pass
@@ -601,6 +623,7 @@ app.include_router(mtf_dashboard_router, prefix="/api/mtf", tags=["mtf-dashboard
 app.include_router(trade_journal_router, prefix="/api/journal", tags=["journal"])
 app.include_router(strategies_router, prefix="/api/strategies", tags=["strategies"])
 app.include_router(broker_router, prefix="/api/broker", tags=["broker"])
+app.include_router(telegram_router, prefix="/api/telegram", tags=["telegram"])
 app.include_router(ws_router)
 
 

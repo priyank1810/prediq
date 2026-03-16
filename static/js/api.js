@@ -182,6 +182,11 @@ const API = {
     // Chart Patterns
     getPatterns(symbol) { return this.request(`/api/indicators/${encodeURIComponent(symbol)}/patterns`); },
 
+    // Correlation Analysis
+    getCorrelationMatrix(symbols, period = '6mo') { return this.request(`/api/indicators/correlation-matrix?symbols=${encodeURIComponent(symbols.join(','))}&period=${period}`); },
+    getSectorCorrelation(period = '6mo') { return this.request(`/api/indicators/sector-correlation?period=${period}`); },
+    getStockCorrelations(symbol, n = 10, period = '6mo') { return this.request(`/api/indicators/${encodeURIComponent(symbol)}/correlations?n=${n}&period=${period}`); },
+
     // Portfolio
     getPortfolio() { return this.request('/api/portfolio'); },
     getPortfolioSummary() { return this.request('/api/portfolio/summary'); },
@@ -251,6 +256,20 @@ const API = {
     getBacktestPnL() { return this.request('/api/signals/stats/backtest-pnl'); },
     getPredictionLeaderboard() { return this.request('/api/signals/stats/prediction-leaderboard'); },
     getBacktestSignal(symbol, testDays = 60) { return this.request(`/api/signals/stats/backtest-signal?symbol=${encodeURIComponent(symbol)}&test_days=${testDays}`); },
+    runVisualBacktest(params) {
+        return this.request('/api/signals/stats/visual-backtest', {
+            method: 'POST',
+            body: JSON.stringify(params),
+            timeout: 120000,
+        });
+    },
+    runMonteCarlo(params) {
+        return this.request('/api/signals/stats/monte-carlo', {
+            method: 'POST',
+            body: JSON.stringify(params),
+            timeout: 60000,
+        });
+    },
 
     // High-confidence alert handler
     onHighConfidenceAlert: null,
@@ -424,5 +443,12 @@ const API = {
     getBrokerOrders() { return this.request('/api/broker/orders'); },
     getBrokerRecent(limit) { return this.request(`/api/broker/recent?limit=${limit || 5}`); },
     syncBrokerPortfolio() { return this.request('/api/broker/sync', { method: 'POST' }); },
-    getBrokerStatus() { return this.request('/api/broker/status'); }
+    getBrokerStatus() { return this.request('/api/broker/status'); },
+
+    // Telegram
+    getTelegramStatus() { return this.request('/api/telegram/status'); },
+    linkTelegram(chatId) { return this.request('/api/telegram/link', { method: 'POST', body: JSON.stringify({ chat_id: chatId }) }); },
+    unlinkTelegram() { return this.request('/api/telegram/unlink', { method: 'DELETE' }); },
+    updateTelegramPreferences(alertTypes) { return this.request('/api/telegram/preferences', { method: 'PUT', body: JSON.stringify({ alert_types: alertTypes }) }); },
+    sendTelegramTest() { return this.request('/api/telegram/test', { method: 'POST' }); }
 };

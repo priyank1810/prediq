@@ -9,6 +9,7 @@ const Signals = {
         API.setSignalUpdateHandler((data) => {
             if (data.symbol === App.currentSymbol) {
                 this.displaySignal(data);
+                App._lastSignalData = data;
             }
         });
         API.setOIUpdateHandler((data) => {
@@ -43,6 +44,7 @@ const Signals = {
             ]);
             this.displaySignal(signal);
             App.displaySignalBadge(signal);
+            App._lastSignalData = signal;
             this.displaySignalHistory(history);
 
             // Load multi-timeframe signals in background (non-blocking)

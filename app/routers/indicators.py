@@ -1,12 +1,78 @@
 from fastapi import APIRouter, HTTPException, Query
+from typing import List
 from app.services.data_fetcher import data_fetcher
 from app.services.indicator_service import indicator_service
 from app.utils.cache import cache
 
 CACHE_TTL_INDICATORS = 300  # 5 minutes
 VALID_PERIODS = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"]
+VALID_CORR_PERIODS = ["3mo", "6mo", "1y"]
 
 router = APIRouter()
+
+
+@router.get("/correlation-matrix")
+def get_correlation_matrix(
+    symbols: str = Query(..., description="Comma-separated stock symbols"),
+    period: str = Query("6mo"),
+):
+    """Compute Pearson correlation matrix for given symbols."""
+    if period not in VALID_CORR_PERIODS:
+        period = "6mo"
+    symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if len(symbol_list) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 symbols required")
+    if len(symbol_list) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 symbols allowed")
+
+    try:
+        from app.services.correlation_service import get_correlation_matrix
+        result = get_correlation_matrix(symbol_list, period)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Not enough data to compute correlations")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sector-correlation")
+def get_sector_correlation(period: str = Query("6mo")):
+    """Compute correlation matrix for Indian sector indices."""
+    if period not in VALID_CORR_PERIODS:
+        period = "6mo"
+    try:
+        from app.services.correlation_service import get_sector_correlation
+        result = get_sector_correlation(period)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Not enough data to compute sector correlations")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{symbol}/correlations")
+def get_stock_correlations(
+    symbol: str,
+    n: int = Query(10, ge=2, le=50),
+    period: str = Query("6mo"),
+):
+    """Find most and least correlated stocks from NIFTY50 universe."""
+    if period not in VALID_CORR_PERIODS:
+        period = "6mo"
+    try:
+        from app.services.correlation_service import get_top_correlations
+        result = get_top_correlations(symbol.upper(), n, period)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Not enough data for {symbol}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{symbol}/patterns")

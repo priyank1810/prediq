@@ -25,6 +25,7 @@ const App = {
         this.setupNavigation();
         this.setupChartControls();
         this.setupStockTabs();
+        this.initPositionSizer();
 
         this.loadMarketStatus();
         this.loadDataSource();
@@ -477,7 +478,15 @@ const App = {
 
             // Auto-load fundamentals, news & 15-min signal
             Lazy.load('fundamentals').then(() => Fundamentals.load(symbol));
-            Signals.loadSignal(symbol);
+            Signals.loadSignal(symbol).then(() => {
+                // Update position sizer with signal data after signal loads
+                if (this._lastSignalData) {
+                    this.updatePositionSizerFromStock(quote, this._lastSignalData);
+                }
+            }).catch(() => {});
+
+            // Auto-fill position sizer entry price from LTP immediately
+            this.updatePositionSizerFromStock(quote, null);
 
             // Update broker order panel with current symbol
             if (typeof BrokerUI !== 'undefined') BrokerUI.setSymbol(symbol);
@@ -913,6 +922,183 @@ const App = {
         const next = current === 'dark' ? 'light' : 'dark';
         this.applyTheme(next);
         localStorage.setItem('theme', next);
+        this.updateChartTheme();
+    },
+
+    updateChartTheme() {
+        // Re-apply chart colors after CSS variables have changed
+        if (this.chart) this.chart.updateThemeColors();
+        if (this.rsiChart) this.rsiChart.updateThemeColors();
+        if (this.macdChart) this.macdChart.updateThemeColors();
+    },
+
+    // --- Position Sizer ---
+    _psMethod: 'fixed',
+    _psInitialized: false,
+    _lastSignalData: null,
+
+    initPositionSizer() {
+        if (this._psInitialized) return;
+        this._psInitialized = true;
+
+        // Method toggle buttons
+        document.querySelectorAll('.ps-method-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.ps-method-btn').forEach(b => {
+                    b.classList.remove('bg-accent-blue', 'text-white');
+                    b.classList.add('bg-dark-700', 'text-gray-400');
+                });
+                btn.classList.remove('bg-dark-700', 'text-gray-400');
+                btn.classList.add('bg-accent-blue', 'text-white');
+                this._psMethod = btn.dataset.method;
+
+                // Show/hide Kelly-specific inputs
+                const kellyInputs = document.getElementById('psKellyInputs');
+                if (this._psMethod === 'kelly') {
+                    kellyInputs.classList.remove('hidden');
+                } else {
+                    kellyInputs.classList.add('hidden');
+                }
+            });
+        });
+
+        // Calculate button
+        document.getElementById('psCalculateBtn').addEventListener('click', () => {
+            this.calculatePositionSize();
+        });
+
+        // Allow Enter key in any position sizer input to trigger calculation
+        document.querySelectorAll('#positionSizerPanel input').forEach(input => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.calculatePositionSize();
+            });
+        });
+    },
+
+    calculatePositionSize() {
+        const accountSize = parseFloat(document.getElementById('psAccountSize').value) || 0;
+        const riskPct = parseFloat(document.getElementById('psRiskPct').value) || 2;
+        const entry = parseFloat(document.getElementById('psEntry').value) || 0;
+        const stopLoss = parseFloat(document.getElementById('psStopLoss').value) || 0;
+        const target = parseFloat(document.getElementById('psTarget').value) || 0;
+
+        if (entry <= 0) {
+            this.showToast('Enter a valid entry price', 'error');
+            return;
+        }
+        if (stopLoss <= 0 || stopLoss === entry) {
+            this.showToast('Enter a valid stop loss different from entry', 'error');
+            return;
+        }
+
+        const riskPerShare = Math.abs(entry - stopLoss);
+        const riskAmount = accountSize * (riskPct / 100);
+
+        let qty = 0;
+        let kellyPct = null;
+
+        if (this._psMethod === 'kelly') {
+            const winProb = (parseFloat(document.getElementById('psWinProb').value) || 55) / 100;
+            const winLossRatio = parseFloat(document.getElementById('psWinLossRatio').value) || 1.5;
+            const q = 1 - winProb;
+            // Kelly Criterion: f = (bp - q) / b
+            const kellyFraction = ((winLossRatio * winProb) - q) / winLossRatio;
+            kellyPct = Math.max(0, kellyFraction * 100);
+            // Use Kelly fraction of account for position sizing, but cap at risk amount
+            const kellyRisk = accountSize * Math.max(0, kellyFraction);
+            qty = riskPerShare > 0 ? Math.floor(kellyRisk / riskPerShare) : 0;
+        } else if (this._psMethod === 'fixed') {
+            // Fixed Fractional: position = (account_size * risk_pct) / (entry - stop_loss)
+            qty = riskPerShare > 0 ? Math.floor(riskAmount / riskPerShare) : 0;
+        } else if (this._psMethod === 'riskReward') {
+            // Risk-Reward based: use fixed fractional sizing
+            qty = riskPerShare > 0 ? Math.floor(riskAmount / riskPerShare) : 0;
+        }
+
+        // Calculate R:R ratio
+        let rrRatio = null;
+        if (target > 0 && riskPerShare > 0) {
+            const rewardPerShare = Math.abs(target - entry);
+            rrRatio = rewardPerShare / riskPerShare;
+        }
+
+        // Compute Kelly % even for non-Kelly methods (using default or supplied values)
+        if (kellyPct === null) {
+            const winProb = (parseFloat(document.getElementById('psWinProb').value) || 55) / 100;
+            const winLossRatio = parseFloat(document.getElementById('psWinLossRatio').value) || 1.5;
+            const q = 1 - winProb;
+            const kf = ((winLossRatio * winProb) - q) / winLossRatio;
+            kellyPct = Math.max(0, kf * 100);
+        }
+
+        const positionValue = qty * entry;
+        const maxLoss = qty * riskPerShare;
+        const actualRiskPct = accountSize > 0 ? (maxLoss / accountSize) * 100 : 0;
+
+        this.renderPositionSizer({
+            qty,
+            positionValue,
+            riskAmount: maxLoss,
+            rrRatio,
+            kellyPct,
+            maxLoss,
+            actualRiskPct
+        });
+    },
+
+    renderPositionSizer(result) {
+        const resultsDiv = document.getElementById('psResults');
+        const meterDiv = document.getElementById('psRiskMeter');
+        resultsDiv.classList.remove('hidden');
+        meterDiv.classList.remove('hidden');
+
+        const fmt = (v) => '₹' + v.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+        document.getElementById('psResQty').textContent = result.qty;
+        document.getElementById('psResValue').textContent = fmt(result.positionValue);
+        document.getElementById('psResRiskAmt').textContent = fmt(result.riskAmount);
+        document.getElementById('psResRR').textContent = result.rrRatio != null ? ('1 : ' + result.rrRatio.toFixed(2)) : 'N/A';
+        document.getElementById('psResKelly').textContent = result.kellyPct.toFixed(1) + '%';
+        document.getElementById('psResMaxLoss').textContent = fmt(result.maxLoss);
+
+        // Risk meter
+        const pct = result.actualRiskPct;
+        const bar = document.getElementById('psRiskBar');
+        const label = document.getElementById('psRiskLabel');
+        const barWidth = Math.min(pct * 20, 100); // scale: 5% = full bar
+
+        bar.style.width = barWidth + '%';
+        if (pct < 1) {
+            bar.className = 'h-full rounded-full bg-green-500 transition-all duration-300';
+            label.textContent = 'Low (' + pct.toFixed(1) + '%)';
+            label.className = 'text-[10px] font-medium text-green-400';
+        } else if (pct <= 3) {
+            bar.className = 'h-full rounded-full bg-yellow-500 transition-all duration-300';
+            label.textContent = 'Medium (' + pct.toFixed(1) + '%)';
+            label.className = 'text-[10px] font-medium text-yellow-400';
+        } else {
+            bar.className = 'h-full rounded-full bg-red-500 transition-all duration-300';
+            label.textContent = 'High (' + pct.toFixed(1) + '%)';
+            label.className = 'text-[10px] font-medium text-red-400';
+        }
+    },
+
+    updatePositionSizerFromStock(quote, signal) {
+        const entryInput = document.getElementById('psEntry');
+        const slInput = document.getElementById('psStopLoss');
+        const targetInput = document.getElementById('psTarget');
+        if (!entryInput) return;
+
+        // Auto-fill entry from LTP
+        if (quote && quote.ltp) {
+            entryInput.value = quote.ltp.toFixed(2);
+        }
+
+        // Auto-fill stop loss and target from signal if available
+        if (signal) {
+            if (signal.stop_loss) slInput.value = parseFloat(signal.stop_loss).toFixed(2);
+            if (signal.target) targetInput.value = parseFloat(signal.target).toFixed(2);
+        }
     },
 
     showToast(message, type = 'success') {

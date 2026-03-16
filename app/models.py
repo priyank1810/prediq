@@ -13,6 +13,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user")  # "user" or "admin"
     api_key = Column(String, unique=True, index=True, nullable=True)
+    telegram_chat_id = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist)
 
@@ -20,6 +21,7 @@ class User(Base):
     alerts = relationship("PriceAlert", back_populates="owner")
     watchlist = relationship("WatchlistItem", back_populates="owner")
     orders = relationship("Order", back_populates="owner")
+    telegram_subscription = relationship("TelegramSubscription", back_populates="owner", uselist=False)
 
 
 class PortfolioHolding(Base):
@@ -206,6 +208,19 @@ class StrategyFollow(Base):
     followed_at = Column(DateTime, default=now_ist)
 
     strategy = relationship("SharedStrategy", back_populates="followers")
+
+
+class TelegramSubscription(Base):
+    __tablename__ = "telegram_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    chat_id = Column(String, unique=True, index=True, nullable=False)
+    is_active = Column(Boolean, default=True)
+    alert_types = Column(String, default="signals,price_alerts,news,scanner,predictions")
+    created_at = Column(DateTime, default=now_ist)
+
+    owner = relationship("User", back_populates="telegram_subscription")
 
 
 class JobQueue(Base):

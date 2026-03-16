@@ -337,6 +337,43 @@ def backtest_portfolio(
         raise HTTPException(status_code=500, detail=f"Portfolio backtest failed: {str(e)}")
 
 
+@router.post("/stats/visual-backtest")
+def visual_backtest(payload: dict):
+    """Run a visual backtest with equity curve, drawdown, trades, and metrics."""
+    try:
+        from app.services.backtest_service import backtest_service
+        symbol = payload.get("symbol", "").upper()
+        if not symbol:
+            raise ValueError("symbol is required")
+        strategy_params = payload.get("strategy_params", {})
+        start_date = payload.get("start_date")
+        end_date = payload.get("end_date")
+        return backtest_service.run_visual_backtest(
+            symbol, strategy_params,
+            start_date=start_date, end_date=end_date,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Visual backtest failed: {str(e)}")
+
+
+@router.post("/stats/monte-carlo")
+def monte_carlo(payload: dict):
+    """Run Monte Carlo simulation on a backtest equity curve."""
+    try:
+        from app.services.backtest_service import backtest_service
+        equity_curve = payload.get("equity_curve")
+        simulations = payload.get("simulations", 1000)
+        if not equity_curve:
+            raise ValueError("equity_curve is required")
+        return backtest_service.run_monte_carlo(equity_curve, simulations=simulations)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Monte Carlo simulation failed: {str(e)}")
+
+
 @router.get("/scan/high-confidence")
 def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
     """Get the most recent high-confidence signal for each symbol."""

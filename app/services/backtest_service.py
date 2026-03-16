@@ -507,4 +507,374 @@ class BacktestService:
         }
 
 
+    # ────────────────────────────────────────────────────────────────
+    # 5. Visual backtest (equity curve, drawdown, trades, monthly returns)
+    # ────────────────────────────────────────────────────────────────
+
+    def run_visual_backtest(
+        self,
+        symbol: str,
+        strategy_params: dict,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> dict:
+        """Full visual backtest with equity curve, drawdown, trade list, and monthly returns.
+
+        strategy_params keys:
+            signal_type: 'composite' | 'technical' | 'sentiment'  (default 'composite')
+            confidence_threshold: int 0-100  (default 0)
+            stop_loss_pct: float  (default 5.0)
+            take_profit_pct: float  (default 10.0)
+            holding_period_days: int  (default 0 = unlimited)
+        """
+        df = data_fetcher.get_historical_data(symbol, period="5y")
+        if df is None or df.empty or len(df) < 100:
+            raise ValueError(f"Not enough data to backtest {symbol}")
+
+        # Ensure we have a proper date column
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"])
+        elif df.index.name == "date" or df.index.name == "Date":
+            df = df.reset_index()
+            df["date"] = pd.to_datetime(df["date"] if "date" in df.columns else df["Date"])
+        else:
+            df["date"] = pd.to_datetime(df.index)
+
+        df = df.sort_values("date").reset_index(drop=True)
+
+        # Apply date filters
+        if start_date:
+            df = df[df["date"] >= pd.to_datetime(start_date)]
+        if end_date:
+            df = df[df["date"] <= pd.to_datetime(end_date)]
+
+        if len(df) < 60:
+            raise ValueError("Not enough data in selected date range")
+
+        # Extract strategy params
+        signal_type = strategy_params.get("signal_type", "composite")
+        confidence_threshold = strategy_params.get("confidence_threshold", 0)
+        stop_loss_pct = strategy_params.get("stop_loss_pct", 5.0) / 100.0
+        take_profit_pct = strategy_params.get("take_profit_pct", 10.0) / 100.0
+        holding_period_days = strategy_params.get("holding_period_days", 0)
+
+        initial_capital = 100000.0
+        capital = initial_capital
+        position = 0  # 0=flat, 1=long
+        entry_price = 0.0
+        entry_date = None
+        entry_idx = 0
+        trades = []
+        equity_curve = []
+        daily_returns = []
+
+        for i in range(60, len(df)):
+            window = df.iloc[max(0, i - 60):i]
+            current_price = float(df.iloc[i]["close"])
+            current_date = df.iloc[i]["date"]
+            date_str = current_date.strftime("%Y-%m-%d")
+
+            # Compute signal score
+            score = self._get_signal_score(window, signal_type)
+            confidence = abs(score)
+
+            # Check exit conditions if in position
+            if position == 1:
+                pnl_pct_unrealized = (current_price - entry_price) / entry_price
+                days_held = i - entry_idx
+
+                should_exit = False
+                exit_reason = ""
+
+                # Stop loss
+                if pnl_pct_unrealized <= -stop_loss_pct:
+                    should_exit = True
+                    exit_reason = "stop_loss"
+                # Take profit
+                elif pnl_pct_unrealized >= take_profit_pct:
+                    should_exit = True
+                    exit_reason = "take_profit"
+                # Holding period
+                elif holding_period_days > 0 and days_held >= holding_period_days:
+                    should_exit = True
+                    exit_reason = "holding_period"
+                # Signal reversal
+                elif score < -SIGNAL_DIRECTION_THRESHOLD:
+                    should_exit = True
+                    exit_reason = "signal_reversal"
+
+                if should_exit:
+                    pnl = (current_price - entry_price) / entry_price - COMMISSION_PCT
+                    capital *= (1 + pnl)
+                    trades.append({
+                        "entry_date": entry_date,
+                        "exit_date": date_str,
+                        "entry_price": round(entry_price, 2),
+                        "exit_price": round(current_price, 2),
+                        "pnl": round(pnl * capital / (1 + pnl), 2),
+                        "pnl_pct": round(pnl * 100, 2),
+                        "direction": "LONG",
+                        "holding_days": days_held,
+                        "exit_reason": exit_reason,
+                    })
+                    position = 0
+
+            # Check entry conditions if flat
+            if position == 0 and confidence >= confidence_threshold:
+                if score > SIGNAL_DIRECTION_THRESHOLD:
+                    position = 1
+                    entry_price = current_price
+                    entry_date = date_str
+                    entry_idx = i
+                    capital -= capital * COMMISSION_PCT  # entry commission
+
+            # Mark-to-market equity
+            if position == 1:
+                unrealized = (current_price - entry_price) / entry_price
+                mtm = capital * (1 + unrealized)
+            else:
+                mtm = capital
+
+            equity_curve.append({"date": date_str, "equity": round(mtm, 2)})
+
+            if len(equity_curve) >= 2:
+                prev_eq = equity_curve[-2]["equity"]
+                daily_returns.append((mtm - prev_eq) / prev_eq if prev_eq > 0 else 0.0)
+            else:
+                daily_returns.append(0.0)
+
+        # Close any open position at the end
+        if position == 1 and len(df) > 0:
+            final_price = float(df.iloc[-1]["close"])
+            pnl = (final_price - entry_price) / entry_price - COMMISSION_PCT
+            capital *= (1 + pnl)
+            trades.append({
+                "entry_date": entry_date,
+                "exit_date": df.iloc[-1]["date"].strftime("%Y-%m-%d"),
+                "entry_price": round(entry_price, 2),
+                "exit_price": round(final_price, 2),
+                "pnl": round(pnl * capital / (1 + pnl), 2),
+                "pnl_pct": round(pnl * 100, 2),
+                "direction": "LONG",
+                "holding_days": len(df) - 1 - entry_idx,
+                "exit_reason": "end_of_period",
+            })
+
+        # Compute drawdown curve
+        drawdown_curve = self._compute_drawdown_curve(equity_curve)
+
+        # Compute monthly returns
+        monthly_returns = self._compute_monthly_returns(equity_curve)
+
+        # Compute full metrics
+        metrics = self._compute_visual_metrics(
+            trades, daily_returns, equity_curve, initial_capital
+        )
+
+        return {
+            "symbol": symbol,
+            "strategy_params": strategy_params,
+            "equity_curve": equity_curve,
+            "drawdown_curve": drawdown_curve,
+            "trades": trades,
+            "metrics": metrics,
+            "monthly_returns": monthly_returns,
+        }
+
+    def _get_signal_score(self, window: pd.DataFrame, signal_type: str) -> float:
+        """Get signal score based on signal type."""
+        if signal_type == "technical":
+            return self._score_old_system(window)
+        elif signal_type == "sentiment":
+            # Use new system which includes sentiment
+            return self._score_new_system(window)
+        else:
+            # composite — use new system (default)
+            return self._score_new_system(window)
+
+    def _compute_drawdown_curve(self, equity_curve: list) -> list:
+        """Compute drawdown percentage at each point."""
+        if not equity_curve:
+            return []
+        peak = equity_curve[0]["equity"]
+        drawdown = []
+        for point in equity_curve:
+            eq = point["equity"]
+            if eq > peak:
+                peak = eq
+            dd_pct = ((peak - eq) / peak * 100) if peak > 0 else 0
+            drawdown.append({
+                "date": point["date"],
+                "drawdown_pct": round(dd_pct, 2),
+            })
+        return drawdown
+
+    def _compute_monthly_returns(self, equity_curve: list) -> list:
+        """Compute monthly return percentages."""
+        if not equity_curve or len(equity_curve) < 2:
+            return []
+
+        monthly = {}
+        for point in equity_curve:
+            month_key = point["date"][:7]  # YYYY-MM
+            if month_key not in monthly:
+                monthly[month_key] = {"first": point["equity"], "last": point["equity"]}
+            monthly[month_key]["last"] = point["equity"]
+
+        result = []
+        prev_last = None
+        for month_key in sorted(monthly.keys()):
+            m = monthly[month_key]
+            base = prev_last if prev_last is not None else m["first"]
+            ret_pct = ((m["last"] - base) / base * 100) if base > 0 else 0
+            result.append({
+                "month": month_key,
+                "return_pct": round(ret_pct, 2),
+            })
+            prev_last = m["last"]
+
+        return result
+
+    def _compute_visual_metrics(self, trades, daily_returns, equity_curve, initial_capital):
+        """Compute comprehensive metrics for visual backtest."""
+        wins = [t for t in trades if t["pnl_pct"] > 0]
+        losses = [t for t in trades if t["pnl_pct"] <= 0]
+        total_trades = len(trades)
+
+        win_rate = round(len(wins) / total_trades * 100, 1) if total_trades > 0 else 0
+        avg_win = round(np.mean([t["pnl_pct"] for t in wins]), 2) if wins else 0
+        avg_loss = round(np.mean([abs(t["pnl_pct"]) for t in losses]), 2) if losses else 0
+
+        gross_profit = sum(t["pnl_pct"] for t in wins)
+        gross_loss = sum(abs(t["pnl_pct"]) for t in losses)
+        profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else (
+            float("inf") if gross_profit > 0 else 0
+        )
+
+        avg_holding = round(np.mean([t["holding_days"] for t in trades]), 1) if trades else 0
+
+        # Total return
+        final_equity = equity_curve[-1]["equity"] if equity_curve else initial_capital
+        total_return = round((final_equity - initial_capital) / initial_capital * 100, 2)
+
+        # CAGR
+        if equity_curve and len(equity_curve) > 1:
+            days = len(equity_curve)
+            years = days / TRADING_DAYS_PER_YEAR
+            if years > 0 and final_equity > 0:
+                cagr = round(((final_equity / initial_capital) ** (1 / years) - 1) * 100, 2)
+            else:
+                cagr = 0
+        else:
+            cagr = 0
+
+        # Sharpe, Sortino
+        ret_arr = np.array(daily_returns) if daily_returns else np.array([0.0])
+        mean_ret = float(np.mean(ret_arr))
+        std_ret = float(np.std(ret_arr, ddof=1)) if len(ret_arr) > 1 else 0
+        sharpe = round(mean_ret / std_ret * math.sqrt(TRADING_DAYS_PER_YEAR), 2) if std_ret > 0 else 0
+
+        downside = ret_arr[ret_arr < 0]
+        downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else 0
+        sortino = round(mean_ret / downside_std * math.sqrt(TRADING_DAYS_PER_YEAR), 2) if downside_std > 0 else 0
+
+        # Max drawdown
+        peak = initial_capital
+        max_dd = 0
+        max_dd_date = ""
+        for point in equity_curve:
+            eq = point["equity"]
+            if eq > peak:
+                peak = eq
+            dd = (peak - eq) / peak
+            if dd > max_dd:
+                max_dd = dd
+                max_dd_date = point["date"]
+
+        max_dd_pct = round(max_dd * 100, 2)
+
+        # Calmar ratio
+        calmar = round(cagr / max_dd_pct, 2) if max_dd_pct > 0 else 0
+
+        return {
+            "total_return": total_return,
+            "cagr": cagr,
+            "sharpe_ratio": sharpe,
+            "sortino_ratio": sortino,
+            "calmar_ratio": calmar,
+            "max_drawdown": max_dd_pct,
+            "max_drawdown_date": max_dd_date,
+            "win_rate": win_rate,
+            "profit_factor": profit_factor,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "total_trades": total_trades,
+            "avg_holding_days": avg_holding,
+        }
+
+    # ────────────────────────────────────────────────────────────────
+    # 6. Monte Carlo simulation
+    # ────────────────────────────────────────────────────────────────
+
+    def run_monte_carlo(self, equity_curve: list, simulations: int = 1000) -> dict:
+        """Shuffle trade returns to generate simulated equity paths with percentile bands."""
+        if not equity_curve or len(equity_curve) < 10:
+            raise ValueError("Not enough equity curve data for Monte Carlo simulation")
+
+        # Extract daily returns from the equity curve
+        returns = []
+        for i in range(1, len(equity_curve)):
+            prev = equity_curve[i - 1]["equity"]
+            curr = equity_curve[i]["equity"]
+            if prev > 0:
+                returns.append(curr / prev - 1)
+
+        if len(returns) < 5:
+            raise ValueError("Not enough return data for Monte Carlo")
+
+        returns_arr = np.array(returns)
+        n_days = len(returns_arr)
+        initial = equity_curve[0]["equity"]
+
+        # Run simulations: shuffle daily returns each time
+        sim_paths = np.zeros((simulations, n_days + 1))
+        sim_paths[:, 0] = initial
+
+        for s in range(simulations):
+            shuffled = np.random.permutation(returns_arr)
+            for d in range(n_days):
+                sim_paths[s, d + 1] = sim_paths[s, d] * (1 + shuffled[d])
+
+        # Compute percentile bands at each time step
+        percentiles = [5, 25, 50, 75, 95]
+        bands = {str(p): [] for p in percentiles}
+        dates = [equity_curve[0]["date"]] + [pt["date"] for pt in equity_curve[1:]]
+
+        for d in range(n_days + 1):
+            vals = sim_paths[:, d]
+            for p in percentiles:
+                pval = float(np.percentile(vals, p))
+                bands[str(p)].append({
+                    "date": dates[d] if d < len(dates) else dates[-1],
+                    "equity": round(pval, 2),
+                })
+
+        # Terminal distribution stats
+        terminal = sim_paths[:, -1]
+        terminal_stats = {
+            "mean": round(float(np.mean(terminal)), 2),
+            "median": round(float(np.median(terminal)), 2),
+            "std": round(float(np.std(terminal)), 2),
+            "p5": round(float(np.percentile(terminal, 5)), 2),
+            "p95": round(float(np.percentile(terminal, 95)), 2),
+            "prob_profit": round(float(np.mean(terminal > initial) * 100), 1),
+        }
+
+        return {
+            "simulations": simulations,
+            "bands": bands,
+            "terminal_stats": terminal_stats,
+        }
+
+
 backtest_service = BacktestService()
