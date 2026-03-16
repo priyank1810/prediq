@@ -637,3 +637,116 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
 .chart-swipe-hint.visible {
     opacity: 0.6;
 }
+
+/* ---- Dashboard Widget Drag-and-Drop ---- */
+.dashboard-widget {
+    position: relative;
+    transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-widget.dragging {
+    opacity: 0.4;
+    border: 2px dashed var(--accent-blue);
+    border-radius: 0.5rem;
+    transform: scale(0.98);
+}
+
+.dashboard-widget .widget-drag-handle {
+    display: none;
+    position: absolute;
+    top: 0.35rem;
+    right: 2.5rem;
+    z-index: 20;
+    padding: 0.3rem;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    cursor: grab;
+    line-height: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+.dashboard-widget .widget-drag-handle:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-hover);
+}
+.dashboard-widget .widget-drag-handle:active {
+    cursor: grabbing;
+}
+
+.dashboard-widget .widget-visibility-toggle {
+    display: none;
+    position: absolute;
+    top: 0.35rem;
+    right: 0.5rem;
+    z-index: 20;
+    padding: 0.3rem;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    line-height: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+.dashboard-widget .widget-visibility-toggle:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-hover);
+}
+
+.dashboard-widget .widget-hidden-label {
+    display: none;
+}
+
+.widget-drop-indicator {
+    height: 3px;
+    background: var(--accent-blue);
+    border-radius: 2px;
+    margin: 0.25rem 0;
+    box-shadow: 0 0 6px rgba(41, 121, 255, 0.5);
+    pointer-events: none;
+}
+
+/* Edit mode: show handles and toggles */
+.dashboard-edit-mode .widget-drag-handle,
+.dashboard-edit-mode .widget-visibility-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Hidden widget: collapsed with label */
+.dashboard-widget.widget-hidden > *:not(.widget-drag-handle):not(.widget-visibility-toggle):not(.widget-hidden-label) {
+    display: none !important;
+}
+.dashboard-widget.widget-hidden {
+    opacity: 0.4;
+    border: 1px dashed var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    min-height: auto;
+}
+.dashboard-widget.widget-hidden .widget-hidden-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-align: center;
+    padding: 0.25rem 0;
+}
+/* Keep controls visible even on hidden widgets in edit mode */
+.dashboard-edit-mode .dashboard-widget.widget-hidden .widget-drag-handle,
+.dashboard-edit-mode .dashboard-widget.widget-hidden .widget-visibility-toggle {
+    display: flex;
+}
+
+/* Smooth reorder animation */
+.dashboard-edit-mode .dashboard-widget {
+    transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
+}
+
+/* Edit mode visual cue: subtle outline on widgets */
+.dashboard-edit-mode .dashboard-widget:not(.dragging):not(.widget-hidden) {
+    outline: 1px dashed var(--border-color);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+}

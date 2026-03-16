@@ -450,5 +450,13 @@ const API = {
     linkTelegram(chatId) { return this.request('/api/telegram/link', { method: 'POST', body: JSON.stringify({ chat_id: chatId }) }); },
     unlinkTelegram() { return this.request('/api/telegram/unlink', { method: 'DELETE' }); },
     updateTelegramPreferences(alertTypes) { return this.request('/api/telegram/preferences', { method: 'PUT', body: JSON.stringify({ alert_types: alertTypes }) }); },
-    sendTelegramTest() { return this.request('/api/telegram/test', { method: 'POST' }); }
+    sendTelegramTest() { return this.request('/api/telegram/test', { method: 'POST' }); },
+
+    // SMS
+    getSMSStatus() { return this.request('/api/sms/status'); },
+    linkSMS(phoneNumber) { return this.request('/api/sms/link', { method: 'POST', body: JSON.stringify({ phone_number: phoneNumber }) }); },
+    verifySMSOTP(phoneNumber, otp) { return this.request('/api/sms/verify', { method: 'POST', body: JSON.stringify({ phone_number: phoneNumber, otp: otp }) }); },
+    unlinkSMS() { return this.request('/api/sms/unlink', { method: 'DELETE' }); },
+    updateSMSPreferences(alertTypes) { return this.request('/api/sms/preferences', { method: 'PUT', body: JSON.stringify({ alert_types: alertTypes }) }); },
+    sendSMSTest() { return this.request('/api/sms/test', { method: 'POST' }); }
 };

@@ -10,18 +10,23 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)
     role = Column(String, default="user")  # "user" or "admin"
     api_key = Column(String, unique=True, index=True, nullable=True)
     telegram_chat_id = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist)
+    google_id = Column(String, unique=True, nullable=True, index=True)
+    avatar_url = Column(String, nullable=True)
+    auth_provider = Column(String, default="local")  # "local" or "google"
 
     holdings = relationship("PortfolioHolding", back_populates="owner")
     alerts = relationship("PriceAlert", back_populates="owner")
     watchlist = relationship("WatchlistItem", back_populates="owner")
     orders = relationship("Order", back_populates="owner")
+    sms_phone = Column(String, nullable=True)
     telegram_subscription = relationship("TelegramSubscription", back_populates="owner", uselist=False)
+    sms_subscription = relationship("SMSSubscription", back_populates="owner", uselist=False)
 
 
 class PortfolioHolding(Base):
@@ -221,6 +226,19 @@ class TelegramSubscription(Base):
     created_at = Column(DateTime, default=now_ist)
 
     owner = relationship("User", back_populates="telegram_subscription")
+
+
+class SMSSubscription(Base):
+    __tablename__ = "sms_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    phone_number = Column(String, index=True, nullable=False)
+    is_active = Column(Boolean, default=True)
+    alert_types = Column(String, default="signals,price_alerts,news,scanner")
+    created_at = Column(DateTime, default=now_ist)
+
+    owner = relationship("User", back_populates="sms_subscription")
 
 
 class JobQueue(Base):

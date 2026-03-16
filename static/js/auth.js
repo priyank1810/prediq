@@ -4,6 +4,8 @@ const Auth = {
     user: null,
     _refreshing: false,
 
+    _googleInitialized: false,
+
     init() {
         this.token = localStorage.getItem('access_token');
         this.refreshToken = localStorage.getItem('refresh_token');
@@ -331,5 +333,120 @@ const Auth = {
                 errEl.classList.remove('hidden');
             }
         });
+    },
+
+    _getGoogleClientId() {
+        const meta = document.querySelector('meta[name="google-client-id"]');
+        return meta ? meta.getAttribute('content') : '';
+    },
+
+    googleSignIn() {
+        const clientId = this._getGoogleClientId();
+        if (!clientId) {
+            this._showGoogleError('Google Sign-In is not configured');
+            return;
+        }
+
+        const errEl = document.getElementById('googleAuthError');
+        if (errEl) errEl.classList.add('hidden');
+
+        if (typeof google === 'undefined' || !google.accounts) {
+            this._showGoogleError('Google Sign-In is loading, please try again');
+            return;
+        }
+
+        if (!this._googleInitialized) {
+            google.accounts.id.initialize({
+                client_id: clientId,
+                callback: (response) => this.handleGoogleResponse(response),
+                auto_select: false,
+                cancel_on_tap_outside: true,
+            });
+            this._googleInitialized = true;
+        }
+
+        google.accounts.id.prompt((notification) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                // One Tap not available; fall back to button-triggered popup
+                google.accounts.id.renderButton(
+                    document.createElement('div'),
+                    { type: 'standard' }
+                );
+                // Use the credential popup directly
+                this._googlePopupFallback(clientId);
+            }
+        });
+    },
+
+    _googlePopupFallback(clientId) {
+        // Use Google's OAuth2 code flow via popup as a fallback
+        const redirectUri = window.location.origin;
+        const scope = 'openid email profile';
+        const url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+            'client_id=' + encodeURIComponent(clientId) +
+            '&response_type=id_token' +
+            '&redirect_uri=' + encodeURIComponent(redirectUri) +
+            '&scope=' + encodeURIComponent(scope) +
+            '&nonce=' + Math.random().toString(36).substring(2);
+
+        // Try using Google Identity Services prompt again with a rendered button click
+        const tempDiv = document.createElement('div');
+        tempDiv.style.position = 'fixed';
+        tempDiv.style.top = '-9999px';
+        document.body.appendChild(tempDiv);
+
+        google.accounts.id.renderButton(tempDiv, {
+            type: 'standard',
+            size: 'large',
+            click_listener: () => {},
+        });
+
+        const rendered = tempDiv.querySelector('[role="button"]') || tempDiv.querySelector('div[data-client_id]') || tempDiv.firstElementChild;
+        if (rendered) {
+            rendered.click();
+        }
+        setTimeout(() => tempDiv.remove(), 1000);
+    },
+
+    async handleGoogleResponse(response) {
+        if (!response || !response.credential) {
+            this._showGoogleError('Google sign-in was cancelled');
+            return;
+        }
+
+        const errEl = document.getElementById('googleAuthError');
+        if (errEl) errEl.classList.add('hidden');
+
+        try {
+            const res = await fetch('/api/auth/google', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential: response.credential }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'Google sign-in failed');
+            }
+
+            const data = await res.json();
+            this.setTokens(data.access_token, data.refresh_token);
+            await this.loadProfile();
+            this.hideAuthModal();
+
+            if (typeof App !== 'undefined' && App.showToast) {
+                App.showToast('Signed in with Google!');
+            }
+        } catch (e) {
+            this._showGoogleError(e.message);
+        }
+    },
+
+    _showGoogleError(message) {
+        const errEl = document.getElementById('googleAuthError');
+        if (errEl) {
+            errEl.textContent = message;
+            errEl.classList.remove('hidden');
+        }
     },
 };

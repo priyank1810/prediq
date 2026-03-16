@@ -225,6 +225,10 @@ const App = {
             this.renderSmartAlerts(smartAlerts);
             this.updateOverviewTimestamp();
 
+            // Initialize dashboard widget drag-and-drop
+            if (typeof DashboardWidgets !== 'undefined') {
+                DashboardWidgets.init();
+            }
 
             // Subscribe to all overview symbols on WebSocket
             API.subscribeTo(this._overviewSymbols);
