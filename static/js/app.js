@@ -522,7 +522,12 @@ const App = {
         const icon = document.getElementById('watchlistStarIcon');
         const btn = document.getElementById('btnAddToWatchlist');
         if (!icon || !btn) return;
-        const inList = typeof Watchlist !== 'undefined' && Watchlist.isInWatchlist(symbol);
+        let inList = false;
+        try {
+            if (Lazy.isLoaded('watchlist') && typeof Watchlist !== 'undefined' && Watchlist._items) {
+                inList = Watchlist._items.some(i => i.symbol === symbol);
+            }
+        } catch (e) { /* Watchlist not loaded yet */ }
         icon.innerHTML = inList ? '&#9733;' : '&#9734;';
         btn.classList.toggle('text-yellow-400', inList);
         btn.classList.toggle('border-yellow-600', inList);
@@ -534,9 +539,12 @@ const App = {
     async toggleWatchlistFromDetail() {
         const symbol = this.currentSymbol;
         if (!symbol) return;
-        const btn = document.getElementById('btnAddToWatchlist');
         try {
             await Lazy.loadAndInit('watchlist');
+            // Ensure watchlist items are loaded
+            if (!Watchlist._items || Watchlist._items.length === 0) {
+                await Watchlist.load();
+            }
             if (Watchlist.isInWatchlist(symbol)) {
                 await Watchlist.removeSymbol(symbol);
                 this.showToast(`${symbol} removed from watchlist`, 'success');
