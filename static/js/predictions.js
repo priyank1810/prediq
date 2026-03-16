@@ -25,6 +25,7 @@ const Predictions = {
         const loading = document.getElementById('predictionLoading');
         const results = document.getElementById('predictionResults');
 
+        Shimmer.show('predictionLoading', 'prediction');
         loading.classList.remove('hidden');
         results.classList.add('hidden');
 
