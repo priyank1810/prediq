@@ -10,6 +10,8 @@ const App = {
     _overviewQuotes: {},        // symbol -> latest quote for in-place updates
     _lastOverviewUpdate: null,
 
+    _skipHashUpdate: false,  // prevent hash loops during restore
+
     async init() {
         this.initTheme();
 
@@ -26,6 +28,7 @@ const App = {
         this.setupChartControls();
         this.setupStockTabs();
         this.initPositionSizer();
+        this._initRouter();
 
         this.loadMarketStatus();
         this.loadDataSource();
@@ -74,6 +77,9 @@ const App = {
                 tab.classList.add('active');
                 tab.setAttribute('aria-selected', 'true');
                 document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
+
+                // Update URL hash
+                this._updateHash(tab.dataset.tab);
 
                 if (tab.dataset.tab === 'watchlist') {
                     Lazy.loadAndInit('watchlist').then(() => Watchlist.load());
@@ -159,6 +165,11 @@ const App = {
                 tab.setAttribute('aria-selected', 'true');
                 const target = document.getElementById('stockTab-' + tab.dataset.stockTab);
                 if (target) target.classList.add('active');
+
+                // Update URL hash with sub-tab
+                if (this.currentSymbol) {
+                    this._updateHash(`dashboard/${encodeURIComponent(this.currentSymbol)}/${tab.dataset.stockTab}`);
+                }
 
                 // Lazy-load content on tab switch
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
@@ -398,6 +409,7 @@ const App = {
 
     showMarketOverview() {
         this.currentSymbol = null;
+        this._updateHash('dashboard');
         document.getElementById('stockInfoBar').classList.add('hidden');
         document.getElementById('stockDetailTabs').classList.add('hidden');
         document.getElementById('marketOverview').classList.remove('hidden');
@@ -425,6 +437,9 @@ const App = {
 
     async loadStock(symbol, name = '') {
         this.currentSymbol = symbol;
+
+        // Update URL hash
+        this._updateHash(`dashboard/${encodeURIComponent(symbol)}`);
 
         // Always switch to dashboard tab first
         this._switchToDashboardTab();
@@ -930,6 +945,89 @@ const App = {
         if (this.chart) this.chart.updateThemeColors();
         if (this.rsiChart) this.rsiChart.updateThemeColors();
         if (this.macdChart) this.macdChart.updateThemeColors();
+    },
+
+    // --- Hash-based Router ---
+    _initRouter() {
+        window.addEventListener('hashchange', () => this._handleHashChange());
+        // Restore state from URL on initial load (after a small delay so DOM is ready)
+        setTimeout(() => this._handleHashChange(), 100);
+    },
+
+    _updateHash(path) {
+        if (this._skipHashUpdate) return;
+        const current = location.hash.replace(/^#/, '');
+        if (current !== path) {
+            history.pushState(null, '', '#' + path);
+        }
+    },
+
+    _handleHashChange() {
+        const hash = location.hash.replace(/^#/, '');
+        if (!hash) return; // No hash = default dashboard, already loaded
+
+        const parts = hash.split('/');
+        const tab = parts[0];
+        const symbol = parts[1] || null;
+        const subTab = parts[2] || null;
+
+        this._skipHashUpdate = true;
+
+        // Activate the correct main tab
+        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'screener', 'journal', 'strategies', 'insights'];
+        if (validTabs.includes(tab)) {
+            const tabBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
+            if (tabBtn) {
+                // Simulate tab click without re-triggering hash update
+                document.querySelectorAll('.nav-tab').forEach(t => {
+                    t.classList.remove('active');
+                    t.setAttribute('aria-selected', 'false');
+                });
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                tabBtn.classList.add('active');
+                tabBtn.setAttribute('aria-selected', 'true');
+                const tabContent = document.getElementById(`tab-${tab}`);
+                if (tabContent) tabContent.classList.remove('hidden');
+
+                // Trigger lazy loading for the tab
+                if (tab === 'watchlist') Lazy.loadAndInit('watchlist').then(() => Watchlist.load());
+                if (tab === 'portfolio') Lazy.loadAndInit('portfolio').then(() => { Portfolio.load(); Portfolio.loadAnalytics(); });
+                if (tab === 'screener') Lazy.loadAndInit('screener');
+                if (tab === 'journal') Lazy.loadAndInit('journal').then(() => Journal.load());
+                if (tab === 'strategies') Lazy.loadAndInit('strategies').then(() => Strategies.load());
+                if (tab === 'insights') Lazy.loadAndInit('insights').then(() => Insights.load());
+            }
+        }
+
+        // If dashboard with a stock symbol, load that stock
+        if (tab === 'dashboard' && symbol) {
+            this.loadStock(decodeURIComponent(symbol)).then(() => {
+                // Restore stock sub-tab if specified
+                if (subTab) {
+                    const stBtn = document.querySelector(`.stock-tab[data-stock-tab="${subTab}"]`);
+                    if (stBtn) {
+                        document.querySelectorAll('.stock-tab').forEach(t => {
+                            t.classList.remove('active');
+                            t.setAttribute('aria-selected', 'false');
+                        });
+                        document.querySelectorAll('.stock-tab-content').forEach(c => c.classList.remove('active'));
+                        stBtn.classList.add('active');
+                        stBtn.setAttribute('aria-selected', 'true');
+                        const target = document.getElementById('stockTab-' + subTab);
+                        if (target) target.classList.add('active');
+                        // Trigger lazy loading for sub-tabs
+                        if (subTab === 'predictions' && this.currentSymbol) {
+                            Lazy.loadAndInit('predictions').then(() => Predictions.loadPredictions(this.currentSymbol));
+                        }
+                        if (subTab === 'mtf' && this.currentSymbol) {
+                            Lazy.loadAndInit('mtf').then(() => Mtf.load(this.currentSymbol));
+                        }
+                    }
+                }
+            });
+        }
+
+        this._skipHashUpdate = false;
     },
 
     // --- Position Sizer ---
