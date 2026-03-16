@@ -518,14 +518,19 @@ const App = {
         }
     },
 
+    _getWatchlist() {
+        return Lazy._getGlobal('watchlist');
+    },
+
     _updateWatchlistStar(symbol) {
         const icon = document.getElementById('watchlistStarIcon');
         const btn = document.getElementById('btnAddToWatchlist');
         if (!icon || !btn) return;
         let inList = false;
         try {
-            if (Lazy.isLoaded('watchlist') && typeof Watchlist !== 'undefined' && Watchlist._items) {
-                inList = Watchlist._items.some(i => i.symbol === symbol);
+            const wl = this._getWatchlist();
+            if (wl && wl._items) {
+                inList = wl._items.some(i => i.symbol === symbol);
             }
         } catch (e) { /* Watchlist not loaded yet */ }
         icon.innerHTML = inList ? '&#9733;' : '&#9734;';
@@ -541,16 +546,18 @@ const App = {
         if (!symbol) return;
         try {
             await Lazy.loadAndInit('watchlist');
+            const wl = this._getWatchlist();
+            if (!wl) throw new Error('Watchlist module not available');
             // Ensure watchlist items are loaded
-            if (!Watchlist._items || Watchlist._items.length === 0) {
-                await Watchlist.load();
+            if (!wl._items || wl._items.length === 0) {
+                await wl.load();
             }
-            if (Watchlist.isInWatchlist(symbol)) {
-                await Watchlist.removeSymbol(symbol);
+            if (wl.isInWatchlist(symbol)) {
+                await wl.removeSymbol(symbol);
                 this.showToast(`${symbol} removed from watchlist`, 'success');
             } else {
                 await API.addToWatchlist({ symbol, item_type: 'stock' });
-                Watchlist._items.push({ symbol, item_type: 'stock' });
+                wl._items.push({ symbol, item_type: 'stock' });
                 this.showToast(`${symbol} added to watchlist`, 'success');
             }
             this._updateWatchlistStar(symbol);
