@@ -62,12 +62,15 @@ class PriceAlert(Base):
 
 class PredictionLog(Base):
     __tablename__ = "prediction_logs"
+    __table_args__ = (
+        Index("ix_prediction_logs_backfill", "actual_price", "target_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String, nullable=False, index=True)
     model_type = Column(String, nullable=False)  # "prophet", "xgboost", "ensemble"
     prediction_date = Column(Date, nullable=False)
-    target_date = Column(Date, nullable=False)
+    target_date = Column(Date, nullable=False, index=True)
     predicted_price = Column(Float, nullable=False)
     actual_price = Column(Float, nullable=True)
     confidence_lower = Column(Float, nullable=True)
@@ -108,14 +111,14 @@ class SmartAlert(Base):
     __tablename__ = "smart_alerts"
 
     id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String, nullable=True)  # nullable for market-wide alerts
+    symbol = Column(String, nullable=True, index=True)  # nullable for market-wide alerts
     alert_type = Column(String, nullable=False)  # prediction_change, sentiment_spike, mood_extreme, confidence_change
     threshold = Column(Float, nullable=True)
-    is_triggered = Column(Boolean, default=False)
+    is_triggered = Column(Boolean, default=False, index=True)
     triggered_at = Column(DateTime, nullable=True)
     trigger_data = Column(String, nullable=True)  # JSON string with details
     created_at = Column(DateTime, default=now_ist)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
 
 class WatchlistItem(Base):
@@ -128,7 +131,7 @@ class WatchlistItem(Base):
     symbol = Column(String, nullable=False, index=True)
     item_type = Column(String, default="stock")
     added_at = Column(DateTime, default=now_ist)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     owner = relationship("User", back_populates="watchlist")
 

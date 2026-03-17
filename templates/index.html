@@ -4,9 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StockAI - Indian Stock Tracker & AI Predictor</title>
+    <!-- Preconnect to external origins for faster resource fetching -->
+    <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://accounts.google.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://accounts.google.com">
+    <!-- Critical above-the-fold CSS inlined for fastest first paint -->
+    <style>
+        :root{--bg-primary:#0f1117;--bg-secondary:#1a1a2e;--bg-surface:#1a1d29;--text-primary:#e5e7eb;--text-secondary:#9ca3af;--border-color:#374151;--accent-blue:#2979ff;--shimmer-base:#1a1a2e;--shimmer-highlight:#252545;--shimmer-card-bg:#0d1b2a;--shimmer-card-border:#1e2a4a}
+        body{background:#0f1117;color:#e5e7eb;margin:0;font-family:system-ui,-apple-system,sans-serif}
+        .shimmer{background:linear-gradient(90deg,var(--shimmer-base) 25%,var(--shimmer-highlight) 37%,var(--shimmer-base) 63%);background-size:800px 100%;animation:shimmer 1.5s ease-in-out infinite;border-radius:0.25rem}
+        @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+        .shimmer-card{background:var(--shimmer-card-bg);border:1px solid var(--shimmer-card-border);border-radius:0.5rem;padding:0.75rem}
+        .shimmer-line{height:0.75rem;margin-bottom:0.5rem;border-radius:0.25rem}
+        .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
+    </style>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-    <link rel="stylesheet" href="/static/css/style.css?v=3">
+    <!-- Load main stylesheet asynchronously (non-render-blocking) -->
+    <link rel="preload" href="/static/css/style.css?v=4" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/static/css/style.css?v=4"></noscript>
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#2979ff">
     <meta name="apple-mobile-web-app-capable" content="yes">

@@ -12,10 +12,29 @@ const API = {
         '/api/signals/': 30000,         // signals: 30s
         '/api/indicators/': 60000,      // indicators: 60s
         '/history': 60000,              // history: 60s
-        '/api/fii-dii/': 60000,         // FII/DII: 60s
-        '/api/sectors/': 60000,         // sectors: 60s
+        '/api/fii-dii/': 120000,        // FII/DII: 2min (changes infrequently)
+        '/api/sectors/': 120000,        // sectors: 2min (changes infrequently)
     },
     _cacheMaxEntries: 200,
+
+    // --- In-flight request deduplication ---
+    _inflight: new Map(),
+
+    // --- Stale-while-revalidate patterns (non-critical endpoints) ---
+    _staleWhileRevalidate: new Set([
+        '/api/fii-dii/',
+        '/api/sectors/',
+        '/api/signals/stats/',
+        '/api/stocks/market-movers',
+        '/api/stocks/earnings/',
+    ]),
+
+    _isStaleWhileRevalidate(url) {
+        for (const pattern of this._staleWhileRevalidate) {
+            if (url.includes(pattern)) return true;
+        }
+        return false;
+    },
 
     _getCacheTTL(url) {
         for (const [pattern, ttl] of Object.entries(this._cacheTTLs)) {
@@ -28,6 +47,11 @@ const API = {
         const entry = this._cache.get(url);
         if (!entry) return null;
         if (Date.now() > entry.expires) {
+            // For stale-while-revalidate, return stale data within 2x TTL
+            if (this._isStaleWhileRevalidate(url) && Date.now() < entry.expires + (entry.ttl || 60000)) {
+                entry._stale = true;
+                return entry.data;
+            }
             this._cache.delete(url);
             return null;
         }
@@ -42,7 +66,7 @@ const API = {
                 this._cache.delete(keys[i]);
             }
         }
-        this._cache.set(url, { data, expires: Date.now() + ttl });
+        this._cache.set(url, { data, expires: Date.now() + ttl, ttl });
     },
 
     _defaultTimeout: 30000,  // 30s default timeout for all requests
@@ -53,9 +77,45 @@ const API = {
         // Check client-side cache for GET requests
         if (method === 'GET') {
             const cached = this._cacheGet(url);
-            if (cached !== null) return cached;
+            if (cached !== null) {
+                // Stale-while-revalidate: return stale data immediately, refresh in background
+                const entry = this._cache.get(url);
+                if (entry && entry._stale) {
+                    entry._stale = false;
+                    // Background revalidation (fire-and-forget)
+                    this._revalidate(url, options);
+                }
+                return cached;
+            }
+
+            // Request deduplication: if same GET URL is already in-flight, return existing promise
+            if (this._inflight.has(url)) {
+                return this._inflight.get(url);
+            }
         }
 
+        const requestPromise = this._doRequest(url, options, method);
+
+        // Track in-flight GET requests for deduplication
+        if (method === 'GET') {
+            this._inflight.set(url, requestPromise);
+            requestPromise.finally(() => this._inflight.delete(url));
+        }
+
+        return requestPromise;
+    },
+
+    async _revalidate(url, options) {
+        try {
+            const data = await this._doRequest(url, options, 'GET');
+            const ttl = this._getCacheTTL(url);
+            if (ttl > 0) this._cacheSet(url, data, ttl);
+        } catch (e) {
+            // Silently fail — stale data was already served
+        }
+    },
+
+    async _doRequest(url, options = {}, method = 'GET') {
         try {
             const headers = {
                 'Content-Type': 'application/json',

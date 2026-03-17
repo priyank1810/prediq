@@ -233,6 +233,7 @@ textarea,
     font-size: 0.875rem;
     animation: slideIn 0.3s ease;
     max-width: 400px;
+    will-change: transform, opacity;
 }
 .toast-success { background: #064e3b; color: #6ee7b7; border: 1px solid #065f46; }
 .toast-error { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; }
@@ -265,6 +266,7 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
 }
 .signal-active {
     animation: signalPulse 2s ease-in-out infinite;
+    will-change: opacity;
 }
 
 /* Notification bell shake */
@@ -317,6 +319,7 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
     background-size: 800px 100%;
     animation: shimmer 1.5s ease-in-out infinite;
     border-radius: 0.25rem;
+    will-change: background-position;
 }
 .shimmer-line {
     height: 0.75rem;
@@ -537,6 +540,7 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
     border-radius: 0 !important;
     background: var(--bg-primary);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, opacity;
 }
 .chart-fullscreen #priceChart {
     height: calc(100vh - 60px) !important;
@@ -642,6 +646,7 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
 .dashboard-widget {
     position: relative;
     transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+    contain: layout style;
 }
 
 .dashboard-widget.dragging {

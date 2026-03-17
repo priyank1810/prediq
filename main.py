@@ -15,6 +15,8 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from starlette.responses import Response
 from app.database import engine, Base
 from app.routers import stocks, predictions, portfolio, alerts, indicators, signals, watchlist, screener, options
 from app.routers.mtf_dashboard import router as mtf_dashboard_router
@@ -147,6 +149,11 @@ def _migrate_db_sqlite(database_url: str):
         "CREATE INDEX IF NOT EXISTS ix_telegram_subscriptions_chat_id ON telegram_subscriptions(chat_id)",
         "CREATE INDEX IF NOT EXISTS ix_sms_subscriptions_phone_number ON sms_subscriptions(phone_number)",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_id ON users(google_id)",
+        "CREATE INDEX IF NOT EXISTS ix_smart_alerts_is_triggered ON smart_alerts(is_triggered)",
+        "CREATE INDEX IF NOT EXISTS ix_smart_alerts_user_id ON smart_alerts(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_prediction_logs_backfill ON prediction_logs(actual_price, target_date)",
+        "CREATE INDEX IF NOT EXISTS ix_prediction_logs_target_date ON prediction_logs(target_date)",
+        "CREATE INDEX IF NOT EXISTS ix_watchlist_items_user_id ON watchlist_items(user_id)",
     ]
     for idx_sql in indexes:
         try:
@@ -204,6 +211,11 @@ def _migrate_db_postgres():
             "CREATE INDEX IF NOT EXISTS ix_telegram_subscriptions_chat_id ON telegram_subscriptions(chat_id)",
             "CREATE INDEX IF NOT EXISTS ix_sms_subscriptions_phone_number ON sms_subscriptions(phone_number)",
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_id ON users(google_id)",
+            "CREATE INDEX IF NOT EXISTS ix_smart_alerts_is_triggered ON smart_alerts(is_triggered)",
+            "CREATE INDEX IF NOT EXISTS ix_smart_alerts_user_id ON smart_alerts(user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_prediction_logs_backfill ON prediction_logs(actual_price, target_date)",
+            "CREATE INDEX IF NOT EXISTS ix_prediction_logs_target_date ON prediction_logs(target_date)",
+            "CREATE INDEX IF NOT EXISTS ix_watchlist_items_user_id ON watchlist_items(user_id)",
         ]
         for idx_sql in indexes:
             try:
@@ -535,6 +547,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Indian Stock Market Tracker & AI Predictor", lifespan=lifespan)
 
+# GZip compression for responses > 500 bytes (significant savings for JSON API & HTML)
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -553,6 +568,25 @@ _rate_limiter = RateLimiter(max_requests=RATE_LIMIT_RPM, window_seconds=60)
 # Allowed origins for CSRF protection (state-changing requests must have valid Origin)
 _ALLOWED_ORIGINS = set(CORS_ORIGINS) | {"null"}  # "null" for same-origin requests without Origin header
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def cache_control_middleware(request: Request, call_next):
+    """Set Cache-Control headers: long cache for versioned static assets, no-cache for HTML."""
+    response: Response = await call_next(request)
+    path = request.url.path
+
+    # Versioned static assets (contain ?v=) — cache for 1 year (immutable)
+    if path.startswith("/static/") and "v=" in str(request.url.query):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    # Non-versioned static assets — cache for 1 day with revalidation
+    elif path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=3600"
+    # HTML pages — always revalidate
+    elif not path.startswith("/api/") and not path.startswith("/ws/") and path != "/health":
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+
+    return response
 
 
 @app.middleware("http")
