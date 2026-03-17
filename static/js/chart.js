@@ -358,8 +358,9 @@ class StockChart {
     _handleStockSwipe(direction) {
         // Get watchlist symbols
         var symbols = [];
-        if (typeof Watchlist !== 'undefined' && Watchlist._items && Watchlist._items.length > 0) {
-            symbols = Watchlist._items.map(function(i) { return { symbol: i.symbol, name: i.name || i.symbol }; });
+        var _wl = (typeof Lazy !== 'undefined') ? Lazy._getGlobal('watchlist') : null;
+        if (_wl && _wl._items && _wl._items.length > 0) {
+            symbols = _wl._items.map(function(i) { return { symbol: i.symbol, name: i.name || i.symbol }; });
         }
         if (symbols.length < 2) return;
 

@@ -30,6 +30,7 @@ const Signals = {
 
         const loading = document.getElementById('signalLoading');
         const results = document.getElementById('signalResults');
+        if (!loading || !results) { this.isLoading = false; return; }
 
         // Show shimmer placeholders instead of spinner
         Shimmer.show('signalLoading', 'signal');

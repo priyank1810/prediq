@@ -755,3 +755,38 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
     outline-offset: 2px;
     border-radius: 0.5rem;
 }
+
+/* ---- Mobile UX & Accessibility Fixes ---- */
+
+/* Ensure minimum 44px touch targets on mobile */
+@media (max-width: 640px) {
+    button, [role="button"], select, [type="checkbox"], .nav-tab, .stock-tab, .horizon-btn, .period-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+/* Override tiny font sizes to at least 11px on mobile */
+@media (max-width: 640px) {
+    .text-\[9px\], .text-\[10px\] { font-size: 11px; }
+}
+
+/* Horizontal scroll wrapper for wide tables on mobile */
+.table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Notification dropdown max-width on small screens */
+@media (max-width: 640px) {
+    #notificationDropdown {
+        max-width: calc(100vw - 1rem);
+    }
+}
+
+/* Modal max-height to not exceed viewport */
+#telegramModal > div,
+#smsModal > div {
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+}

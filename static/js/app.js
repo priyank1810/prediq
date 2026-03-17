@@ -1,3 +1,6 @@
+// Safe module accessor for onclick handlers (const/let don't create window properties)
+window._mod = function(name) { return Lazy._getGlobal(name); };
+
 const App = {
     currentSymbol: null,
     currentPeriod: '1d',
@@ -35,9 +38,12 @@ const App = {
         this.loadMarketOverview();
 
         // Back to Overview button
-        document.getElementById('btnBackToOverview').addEventListener('click', () => {
-            this.showMarketOverview();
-        });
+        const btnBack = document.getElementById('btnBackToOverview');
+        if (btnBack) {
+            btnBack.addEventListener('click', () => {
+                this.showMarketOverview();
+            });
+        }
 
         // WebSocket — subscribe to all overview symbols immediately
         try {
@@ -82,25 +88,22 @@ const App = {
                 this._updateHash(tab.dataset.tab);
 
                 if (tab.dataset.tab === 'watchlist') {
-                    Lazy.loadAndInit('watchlist').then(() => Watchlist.load());
+                    Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
                 }
                 if (tab.dataset.tab === 'portfolio') {
-                    Lazy.loadAndInit('portfolio').then(() => {
-                        Portfolio.load();
-                        Portfolio.loadAnalytics();
-                    });
+                    Lazy.loadAndInit('portfolio').then(() => { const m = Lazy._getGlobal('portfolio'); if (m) { m.load(); m.loadAnalytics(); } }).catch(() => {});
                 }
                 if (tab.dataset.tab === 'screener') {
-                    Lazy.loadAndInit('screener');
+                    Lazy.loadAndInit('screener').catch(() => {});
                 }
                 if (tab.dataset.tab === 'journal') {
-                    Lazy.loadAndInit('journal').then(() => Journal.load());
+                    Lazy.loadAndInit('journal').then(() => { const m = Lazy._getGlobal('journal'); if (m) m.load(); }).catch(() => {});
                 }
                 if (tab.dataset.tab === 'strategies') {
-                    Lazy.loadAndInit('strategies').then(() => Strategies.load());
+                    Lazy.loadAndInit('strategies').then(() => { const m = Lazy._getGlobal('strategies'); if (m) m.load(); }).catch(() => {});
                 }
                 if (tab.dataset.tab === 'insights') {
-                    Lazy.loadAndInit('insights').then(() => Insights.load());
+                    Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
                 }
             });
         });
@@ -173,13 +176,13 @@ const App = {
 
                 // Lazy-load content on tab switch
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
-                    Lazy.loadAndInit('predictions').then(() => Predictions.loadPredictions(this.currentSymbol));
+                    Lazy.loadAndInit('predictions').then(() => { const m = Lazy._getGlobal('predictions'); if (m) m.loadPredictions(this.currentSymbol); }).catch(() => {});
                 }
                 if (tab.dataset.stockTab === 'mtf' && this.currentSymbol) {
-                    Lazy.loadAndInit('mtf').then(() => Mtf.load(this.currentSymbol));
+                    Lazy.loadAndInit('mtf').then(() => { const m = Lazy._getGlobal('mtf'); if (m) m.load(this.currentSymbol); }).catch(() => {});
                 }
                 if (tab.dataset.stockTab === 'options' && this.currentSymbol) {
-                    Lazy.loadAndInit('options').then(() => Options.loadChain(this.currentSymbol));
+                    Lazy.loadAndInit('options').then(() => { const m = Lazy._getGlobal('options'); if (m) m.loadChain(this.currentSymbol); }).catch(() => {});
                 }
             });
         });
@@ -307,7 +310,7 @@ const App = {
             const inWl = isStocks && typeof Watchlist !== 'undefined' && Watchlist.isInWatchlist(q.symbol);
             const wlBtn = isStocks ? `<button class="watchlist-toggle ml-1 text-sm leading-none ${inWl ? 'text-yellow-400' : 'text-gray-500'} hover:text-yellow-300 transition"
                 title="${inWl ? 'Remove from watchlist' : 'Add to watchlist'}"
-                onclick="event.stopPropagation(); Watchlist.toggleFromOverview('${q.symbol}', this)">${inWl ? '&#10003;' : '+'}</button>` : '';
+                onclick="event.stopPropagation(); _mod('watchlist')?.toggleFromOverview('${q.symbol}', this)">${inWl ? '&#10003;' : '+'}</button>` : '';
             return `
                 <div class="bg-dark-800 rounded-lg px-3 py-2 cursor-pointer hover:bg-dark-700 transition"
                      data-live-symbol="${q.symbol}"
@@ -403,7 +406,7 @@ const App = {
                     <span class="text-xs text-white font-medium flex-1 truncate">${s.symbol}</span>
                     <button class="watchlist-toggle text-sm leading-none ${inWl ? 'text-yellow-400' : 'text-gray-500'} hover:text-yellow-300 transition"
                         title="${inWl ? 'Remove from watchlist' : 'Add to watchlist'}"
-                        onclick="event.stopPropagation(); Watchlist.toggleFromOverview('${s.symbol}', this)">${inWl ? '&#10003;' : '+'}</button>
+                        onclick="event.stopPropagation(); _mod('watchlist')?.toggleFromOverview('${s.symbol}', this)">${inWl ? '&#10003;' : '+'}</button>
                     <span class="text-xs text-gray-400">${ltp}</span>
                     <span class="text-xs ${color} min-w-[60px] text-right">${arrow} ${sign}${pct.toFixed(2)}%</span>
                 </div>
@@ -496,13 +499,16 @@ const App = {
             this.loadIndicators(symbol);
 
             // Auto-load fundamentals, news & 15-min signal
-            Lazy.load('fundamentals').then(() => Fundamentals.load(symbol));
-            Signals.loadSignal(symbol).then(() => {
-                // Update position sizer with signal data after signal loads
-                if (this._lastSignalData) {
-                    this.updatePositionSizerFromStock(quote, this._lastSignalData);
-                }
-            }).catch(() => {});
+            Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(symbol); }).catch(() => {});
+            const _signals = Lazy._getGlobal('signals');
+            if (_signals) {
+                _signals.loadSignal(symbol).then(() => {
+                    // Update position sizer with signal data after signal loads
+                    if (this._lastSignalData) {
+                        this.updatePositionSizerFromStock(quote, this._lastSignalData);
+                    }
+                }).catch(() => {});
+            }
 
             // Auto-fill position sizer entry price from LTP immediately
             this.updatePositionSizerFromStock(quote, null);
@@ -758,8 +764,9 @@ const App = {
         try {
             // Use watchlist symbols if available, otherwise defaults
             let symbols = '';
-            if (typeof Watchlist !== 'undefined' && Watchlist._items && Watchlist._items.length > 0) {
-                symbols = Watchlist._items.map(i => i.symbol).join(',');
+            const _wl = Lazy._getGlobal('watchlist');
+            if (_wl && _wl._items && _wl._items.length > 0) {
+                symbols = _wl._items.map(i => i.symbol).join(',');
             }
             const data = await API.getUpcomingEarnings(symbols);
             this.renderEarnings(data);
@@ -953,7 +960,8 @@ const App = {
         // Refresh watchlist alerts if tab is visible
         const tab = document.getElementById('tab-watchlist');
         if (tab && !tab.classList.contains('hidden') && Lazy.isLoaded('watchlist')) {
-            Watchlist.load(true);
+            const _wlMod = Lazy._getGlobal('watchlist');
+            if (_wlMod) _wlMod.load(true);
         }
     },
 
@@ -1045,12 +1053,12 @@ const App = {
                 if (tabContent) tabContent.classList.remove('hidden');
 
                 // Trigger lazy loading for the tab
-                if (tab === 'watchlist') Lazy.loadAndInit('watchlist').then(() => Watchlist.load());
-                if (tab === 'portfolio') Lazy.loadAndInit('portfolio').then(() => { Portfolio.load(); Portfolio.loadAnalytics(); });
-                if (tab === 'screener') Lazy.loadAndInit('screener');
-                if (tab === 'journal') Lazy.loadAndInit('journal').then(() => Journal.load());
-                if (tab === 'strategies') Lazy.loadAndInit('strategies').then(() => Strategies.load());
-                if (tab === 'insights') Lazy.loadAndInit('insights').then(() => Insights.load());
+                if (tab === 'watchlist') Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
+                if (tab === 'portfolio') Lazy.loadAndInit('portfolio').then(() => { const m = Lazy._getGlobal('portfolio'); if (m) { m.load(); m.loadAnalytics(); } }).catch(() => {});
+                if (tab === 'screener') Lazy.loadAndInit('screener').catch(() => {});
+                if (tab === 'journal') Lazy.loadAndInit('journal').then(() => { const m = Lazy._getGlobal('journal'); if (m) m.load(); }).catch(() => {});
+                if (tab === 'strategies') Lazy.loadAndInit('strategies').then(() => { const m = Lazy._getGlobal('strategies'); if (m) m.load(); }).catch(() => {});
+                if (tab === 'insights') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
             }
         }
 
@@ -1072,10 +1080,10 @@ const App = {
                         if (target) target.classList.add('active');
                         // Trigger lazy loading for sub-tabs
                         if (subTab === 'predictions' && this.currentSymbol) {
-                            Lazy.loadAndInit('predictions').then(() => Predictions.loadPredictions(this.currentSymbol));
+                            Lazy.loadAndInit('predictions').then(() => { const m = Lazy._getGlobal('predictions'); if (m) m.loadPredictions(this.currentSymbol); }).catch(() => {});
                         }
                         if (subTab === 'mtf' && this.currentSymbol) {
-                            Lazy.loadAndInit('mtf').then(() => Mtf.load(this.currentSymbol));
+                            Lazy.loadAndInit('mtf').then(() => { const m = Lazy._getGlobal('mtf'); if (m) m.load(this.currentSymbol); }).catch(() => {});
                         }
                     }
                 }
@@ -1258,6 +1266,7 @@ const App = {
         const container = document.getElementById('toastContainer');
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
+        toast.setAttribute('role', 'alert');
         toast.textContent = message;
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 5000);
