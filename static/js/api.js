@@ -386,7 +386,23 @@ const API = {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'price_update' && this._wsOnPrice) this._wsOnPrice(msg.data);
                 if (msg.type === 'alert_triggered' && this._wsOnAlert) this._wsOnAlert(msg.data);
-                if (msg.type === 'signal_update' && this.onSignalUpdate) this.onSignalUpdate(msg.data);
+                if (msg.type === 'signal_update') {
+                    if (this.onSignalUpdate) this.onSignalUpdate(msg.data);
+                    // Toast for high-confidence signals from any stock (even if on different tab)
+                    if (msg.data && msg.data.direction !== 'NEUTRAL' && msg.data.confidence >= 60 && typeof App !== 'undefined') {
+                        const d = msg.data;
+                        const arrow = d.direction === 'BULLISH' ? '\u25B2' : '\u25BC';
+                        const color = d.direction === 'BULLISH' ? 'success' : 'error';
+                        App.showToast(`${arrow} ${d.symbol || ''} ${d.direction} ${d.confidence}% confidence`, color);
+                        if (typeof Notifications !== 'undefined' && Notifications.addNotification) {
+                            Notifications.addNotification({
+                                type: 'signal',
+                                symbol: d.symbol,
+                                message: `${d.symbol} ${d.direction} signal (${d.confidence}% confidence)`,
+                            });
+                        }
+                    }
+                }
                 if (msg.type === 'high_confidence_alert' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);
                 if (msg.type === 'market_mood_update' && this.onMarketMoodUpdate) this.onMarketMoodUpdate(msg.data);
                 if (msg.type === 'smart_alert_triggered' && this.onHighConfidenceAlert) this.onHighConfidenceAlert(msg.data);

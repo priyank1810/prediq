@@ -735,4 +735,142 @@ const Signals = {
             `;
         }).join('');
     },
+
+    // ─── AI Learning Profile Tab ────────────────────────────────────
+
+    async loadLearningProfile(symbol) {
+        const loading = document.getElementById('aiLearningLoading');
+        const empty = document.getElementById('aiLearningEmpty');
+        const content = document.getElementById('aiLearningContent');
+        if (!loading) return;
+
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        content.classList.add('hidden');
+
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/learning/${encodeURIComponent(symbol)}`);
+            if (!resp.ok) {
+                loading.classList.add('hidden');
+                empty.classList.remove('hidden');
+                return;
+            }
+            const profile = await resp.json();
+            loading.classList.add('hidden');
+            content.classList.remove('hidden');
+            this.renderLearningProfile(profile);
+        } catch (e) {
+            loading.classList.add('hidden');
+            empty.classList.remove('hidden');
+        }
+    },
+
+    renderLearningProfile(p) {
+        // Sample size
+        const sizeEl = document.getElementById('aiLearningSampleSize');
+        if (sizeEl) sizeEl.textContent = `Based on ${p.sample_size} signals`;
+
+        // Overall accuracy
+        const accEl = document.getElementById('aiOverallAccuracy');
+        const acc = p.overall_accuracy || 0;
+        accEl.textContent = `${acc}%`;
+        accEl.className = `text-xl font-bold ${acc >= 75 ? 'text-green-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400'}`;
+
+        // Best timeframe
+        const tfEl = document.getElementById('aiBestTimeframe');
+        const tfMap = { '15min': '15 Min', '30min': '30 Min', '1hr': '1 Hour' };
+        tfEl.textContent = tfMap[p.best_timeframe] || p.best_timeframe || '-';
+
+        // Trend
+        const trendEl = document.getElementById('aiTrend');
+        const trendIcons = { improving: '&#9650; Up', degrading: '&#9660; Down', stable: '&#9654; Stable' };
+        const trendColors = { improving: 'text-green-400', degrading: 'text-red-400', stable: 'text-yellow-400' };
+        trendEl.innerHTML = trendIcons[p.trend] || p.trend || '-';
+        trendEl.className = `text-xl font-bold ${trendColors[p.trend] || 'text-white'}`;
+
+        // Threshold
+        const threshEl = document.getElementById('aiThreshold');
+        threshEl.textContent = p.optimal_threshold || '-';
+
+        // Component accuracy bars
+        const barsEl = document.getElementById('aiComponentBars');
+        const comps = p.component_accuracies || {};
+        const compColors = { technical: '#2979ff', sentiment: '#ff9800', global: '#ab47bc', fundamental: '#26a69a' };
+        const compLabels = { technical: 'Technical', sentiment: 'Sentiment', global: 'Global Market', fundamental: 'Fundamental' };
+        barsEl.innerHTML = Object.entries(comps).map(([key, val]) => {
+            const color = compColors[key] || '#6b7280';
+            const width = Math.min(100, Math.max(5, val));
+            return `
+                <div>
+                    <div class="flex justify-between items-center mb-0.5">
+                        <span class="text-xs text-gray-400">${compLabels[key] || key}</span>
+                        <span class="text-xs font-mono ${val >= 60 ? 'text-green-400' : val >= 40 ? 'text-yellow-400' : 'text-red-400'}">${val}%</span>
+                    </div>
+                    <div class="h-2 bg-dark-600 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all" style="width:${width}%;background:${color}"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Weights comparison
+        const weightsEl = document.getElementById('aiWeightsComparison');
+        const defaults = { technical: 0.50, sentiment: 0.20, global: 0.10, fundamental: 0.15 };
+        const learned = p.weights || {};
+        weightsEl.innerHTML = Object.entries(learned).map(([key, val]) => {
+            const def = defaults[key] || 0;
+            const diff = ((val - def) * 100).toFixed(0);
+            const diffStr = diff > 0 ? `+${diff}%` : `${diff}%`;
+            const diffColor = diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-gray-400';
+            return `
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-gray-400">${compLabels[key] || key}</span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-gray-500">Default: ${(def * 100).toFixed(0)}%</span>
+                        <span class="text-xs font-medium text-white">Learned: ${(val * 100).toFixed(0)}%</span>
+                        <span class="text-xs font-mono ${diffColor}">${diffStr}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Time windows
+        const twEl = document.getElementById('aiTimeWindows');
+        const twa = p.time_window_accuracy || {};
+        twEl.innerHTML = Object.entries(twa).map(([window, accuracy]) => {
+            const isBest = window === p.best_timeframe;
+            const border = isBest ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-dark-600';
+            const label = tfMap[window] || window;
+            return `
+                <div class="rounded-lg p-3 text-center border ${border}">
+                    <div class="text-xs text-gray-400 mb-1">${label}</div>
+                    <div class="text-lg font-bold ${accuracy >= 75 ? 'text-green-400' : accuracy >= 60 ? 'text-yellow-400' : 'text-red-400'}">${accuracy}%</div>
+                    ${isBest ? '<div class="text-[10px] text-purple-400 mt-1">Best</div>' : ''}
+                </div>
+            `;
+        }).join('');
+
+        // Regime stats
+        const regEl = document.getElementById('aiRegimeStats');
+        const regimes = p.regime_stats || {};
+        if (Object.keys(regimes).length === 0) {
+            regEl.innerHTML = '<div class="text-xs text-gray-500">No regime data available yet</div>';
+        } else {
+            regEl.innerHTML = Object.entries(regimes).map(([regime, stats]) => {
+                const isBest = regime === p.best_regime;
+                return `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-300 capitalize">${regime}</span>
+                            ${isBest ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-300">Best</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs ${stats.accuracy >= 70 ? 'text-green-400' : stats.accuracy >= 50 ? 'text-yellow-400' : 'text-red-400'}">${stats.accuracy}%</span>
+                            <span class="text-[10px] text-gray-500">${stats.signals} signals</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    },
 };
