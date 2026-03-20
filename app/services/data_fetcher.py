@@ -105,15 +105,21 @@ class DataFetcher:
                 angel_breaker.record_failure()
                 logger.debug(f"Angel One batch failed: {e}")
 
-        # Fetch remaining symbols individually (yfinance fallback)
-        for symbol in symbols:
-            if symbol not in results:
+        # Fetch remaining symbols concurrently (yfinance fallback)
+        missing = [s for s in symbols if s not in results]
+        if missing:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            def _fetch_one(sym):
                 try:
-                    quote = self.get_live_quote(symbol)
-                    if quote:
-                        results[symbol] = quote
+                    return sym, self.get_live_quote(sym)
                 except Exception:
-                    pass
+                    return sym, None
+            with ThreadPoolExecutor(max_workers=min(len(missing), 5)) as pool:
+                futures = {pool.submit(_fetch_one, s): s for s in missing}
+                for fut in as_completed(futures):
+                    sym, quote = fut.result()
+                    if quote:
+                        results[sym] = quote
 
         return [results.get(s, {"symbol": s, "ltp": 0, "change": 0, "pct_change": 0}) for s in symbols]
 

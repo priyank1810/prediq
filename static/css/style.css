@@ -421,9 +421,10 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
         min-height: 32px;
     }
     .stock-tab {
-        padding: 0.5rem 0.6rem;
+        padding: 0.5rem 0.75rem;
         font-size: 0.7rem;
         min-height: 36px;
+        flex-shrink: 0;
     }
     .toast {
         max-width: calc(100vw - 2rem);
@@ -601,6 +602,10 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
     }
     .chart-mobile-toolbar {
         display: flex;
+    }
+    /* Hide desktop chart controls on mobile — mobile toolbar replaces them */
+    #chartControls {
+        display: none;
     }
 }
 @media (min-width: 640px) and (max-width: 1023px) {

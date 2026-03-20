@@ -294,14 +294,35 @@ class SignalService:
 
         composite = max(-100, min(100, round(composite, 2)))
 
-        # 6. Direction and confidence
-        if composite > SIGNAL_DIRECTION_THRESHOLD:
+        # 6. Direction and confidence — volatility-adaptive threshold
+        dir_threshold = SIGNAL_DIRECTION_THRESHOLD
+        if intraday_df is not None and not intraday_df.empty and "close" in intraday_df.columns:
+            try:
+                recent_returns = intraday_df["close"].pct_change().dropna().tail(50)
+                if len(recent_returns) > 10:
+                    vol = recent_returns.std() * 100  # as percentage
+                    # Low vol → tighter threshold (more signals), high vol → wider (fewer false signals)
+                    dir_threshold = max(5, min(20, SIGNAL_DIRECTION_THRESHOLD * (vol / 1.0)))
+            except Exception:
+                pass
+
+        if composite > dir_threshold:
             direction = "BULLISH"
-        elif composite < -SIGNAL_DIRECTION_THRESHOLD:
+        elif composite < -dir_threshold:
             direction = "BEARISH"
         else:
             direction = "NEUTRAL"
         confidence = min(100, round(abs(composite), 2))
+
+        # Calibrate confidence with historical accuracy (if adaptive weights available)
+        if adaptive_info["adapted"] and adaptive_info.get("component_accuracies"):
+            avg_accuracy = sum(adaptive_info["component_accuracies"].values()) / max(
+                len(adaptive_info["component_accuracies"]), 1
+            )
+            # Scale confidence: if avg accuracy is 60%, dampen confidence by 0.85
+            # If avg accuracy is 80%, boost slightly by 1.05
+            cal_factor = 0.5 + avg_accuracy / 200  # maps 0%→0.5, 100%→1.0
+            confidence = min(100, round(confidence * cal_factor, 2))
 
         # 7. Intraday candles for chart
         candles = []

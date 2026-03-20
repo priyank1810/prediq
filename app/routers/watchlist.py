@@ -5,6 +5,7 @@ from app.models import WatchlistItem, SignalLog
 from app.schemas import WatchlistItemCreate
 from app.services.data_fetcher import data_fetcher
 from app.utils.helpers import is_index
+from app.utils.cache import cache
 from app.auth import get_optional_user
 
 router = APIRouter()
@@ -76,12 +77,19 @@ def watchlist_overview(db: Session = Depends(get_db), user=Depends(get_optional_
     if not items:
         return []
 
-    # Batch-fetch all quotes in one call instead of N individual calls
     symbols = [item.symbol for item in items]
+
+    # Server-side cache: avoid re-fetching quotes within 10s
+    cache_key = f"watchlist_overview:{','.join(sorted(symbols))}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Batch-fetch all quotes in one call instead of N individual calls
     quotes = data_fetcher.get_bulk_quotes(symbols)
     quote_map = {q["symbol"]: q for q in quotes if q.get("symbol")}
 
-    # Batch-fetch latest signals for all symbols
+    # Batch-fetch latest signals in a single query using subquery
     from sqlalchemy import func
     latest_ids = (
         db.query(func.max(SignalLog.id))
@@ -119,4 +127,6 @@ def watchlist_overview(db: Session = Depends(get_db), user=Depends(get_optional_
             "signal_direction": latest_signal.direction if latest_signal else None,
             "signal_confidence": latest_signal.confidence if latest_signal else None,
         })
+
+    cache.set(cache_key, results, 10)  # Cache for 10 seconds
     return results

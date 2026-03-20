@@ -323,6 +323,13 @@ class XGBoostPredictor:
             feat_df["day_sin"] = np.sin(2 * np.pi * dates.dt.dayofweek / 5)
             feat_df["day_cos"] = np.cos(2 * np.pi * dates.dt.dayofweek / 5)
 
+        # Interaction features (capture cross-indicator relationships)
+        feat_df["rsi_vol_interact"] = feat_df["rsi"] * feat_df["volume_ratio"]
+        feat_df["macd_adx_interact"] = feat_df["macd_hist"] * feat_df["adx"]
+        feat_df["bb_rsi_interact"] = feat_df["bb_percent"] * feat_df["rsi"] / 100
+        feat_df["momentum_volume"] = feat_df.get("ret_5", 0) * feat_df["volume_ratio"]
+        feat_df["trend_strength"] = feat_df["adx"] * (feat_df["cross_20_50"] * 2 - 1)
+
         # Candlestick pattern one-hot features
         feat_df = self._add_candlestick_features(feat_df)
 

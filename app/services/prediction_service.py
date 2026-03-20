@@ -314,7 +314,7 @@ class PredictionService:
         meta_type = "ridge"
 
         # Try neural meta-learner when enough data
-        if min_len >= 100 and regime:
+        if min_len >= 50 and regime:
             try:
                 import tensorflow as tf
 

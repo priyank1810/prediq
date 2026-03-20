@@ -181,7 +181,7 @@
                         <div id="stockPrice" class="text-2xl sm:text-3xl font-bold text-white"></div>
                         <div id="stockChange" class="text-sm"></div>
                     </div>
-                    <div class="grid grid-cols-4 gap-3 sm:gap-6 text-sm">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 text-sm">
                         <div><span class="text-gray-500 text-xs sm:text-sm">Open</span><div id="stockOpen" class="text-white text-xs sm:text-sm"></div></div>
                         <div><span class="text-gray-500 text-xs sm:text-sm">High</span><div id="stockHigh" class="text-white text-xs sm:text-sm"></div></div>
                         <div><span class="text-gray-500 text-xs sm:text-sm">Low</span><div id="stockLow" class="text-white text-xs sm:text-sm"></div></div>
@@ -193,7 +193,7 @@
             <!-- Stock Detail Sub-Tabs (hidden until stock selected) -->
             <div id="stockDetailTabs" class="hidden">
                 <!-- Sub-tab navigation -->
-                <nav class="flex gap-0 overflow-x-auto border-b border-gray-700 mb-3 scrollbar-thin" role="tablist" aria-label="Stock detail tabs">
+                <nav class="flex gap-1 overflow-x-auto border-b border-gray-700 mb-3 scrollbar-thin" role="tablist" aria-label="Stock detail tabs">
                     <button class="stock-tab active" data-stock-tab="overview" role="tab" aria-selected="true" aria-controls="stockTab-overview">Overview</button>
                     <button class="stock-tab" data-stock-tab="technical" role="tab" aria-selected="false" aria-controls="stockTab-technical">Technical</button>
                     <button class="stock-tab" data-stock-tab="mtf" role="tab" aria-selected="false" aria-controls="stockTab-mtf">Multi-TF</button>
@@ -518,7 +518,7 @@
                                     <span class="text-xs text-gray-400 font-medium">Multi-Timeframe Confluence</span>
                                     <span id="confluenceBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">-</span>
                                 </div>
-                                <div id="mtfGrid" class="grid grid-cols-3 gap-2 text-center"></div>
+                                <div id="mtfGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center"></div>
                             </div>
                             <!-- OI Analysis Panel -->
                             <div id="oiPanel" class="hidden bg-dark-800 rounded-lg p-3 mb-4">
@@ -792,7 +792,7 @@
                 <div data-widget-id="sector-heatmap" class="mb-4">
                     <div id="sectorPanel" class="bg-dark-800 rounded-lg p-4">
                         <h3 class="text-xs text-gray-400 font-medium mb-2">Sector Heat Map</h3>
-                        <div id="sectorHeatmap" class="grid grid-cols-3 gap-1">
+                        <div id="sectorHeatmap" class="grid grid-cols-2 sm:grid-cols-3 gap-1">
                         </div>
                     </div>
                 </div>
@@ -940,21 +940,21 @@
             <!-- Add Holding Form -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <h3 class="text-sm font-semibold text-white mb-3">Add Holding</h3>
-                <form id="addHoldingForm" class="flex flex-wrap gap-2 items-end">
+                <form id="addHoldingForm" class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 items-end">
                     <div>
                         <label for="holdingSymbol" class="text-[10px] text-gray-500 block mb-0.5">Symbol</label>
                         <input type="text" id="holdingSymbol" name="symbol" required placeholder="RELIANCE"
-                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-28 placeholder-gray-500 uppercase">
+                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-full sm:w-28 placeholder-gray-500 uppercase">
                     </div>
                     <div>
                         <label for="holdingQuantity" class="text-[10px] text-gray-500 block mb-0.5">Qty</label>
                         <input type="number" id="holdingQuantity" name="quantity" required min="1" placeholder="10"
-                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-20 placeholder-gray-500">
+                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-full sm:w-20 placeholder-gray-500">
                     </div>
                     <div>
                         <label for="holdingBuyPrice" class="text-[10px] text-gray-500 block mb-0.5">Buy Price</label>
                         <input type="number" id="holdingBuyPrice" name="buy_price" required min="0.01" step="0.01" placeholder="2500.00"
-                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-28 placeholder-gray-500">
+                            class="bg-dark-700 border border-gray-600 rounded px-2 py-1 text-xs text-white w-full sm:w-28 placeholder-gray-500">
                     </div>
                     <div>
                         <label for="holdingBuyDate" class="text-[10px] text-gray-500 block mb-0.5">Buy Date</label>
@@ -1203,7 +1203,7 @@
             <!-- Backtest P&L -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <h3 class="text-sm font-semibold text-white mb-2">Backtest P&L Simulation</h3>
-                <div id="backtestPnL" class="grid grid-cols-4 gap-3 text-center">
+                <div id="backtestPnL" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                     <div><div class="text-[10px] text-gray-500">Trades</div><div id="pnlTrades" class="text-white font-bold">-</div></div>
                     <div><div class="text-[10px] text-gray-500">Win Rate</div><div id="pnlWinRate" class="text-white font-bold">-</div></div>
                     <div><div class="text-[10px] text-gray-500">Total P&L</div><div id="pnlTotal" class="text-white font-bold">-</div></div>
