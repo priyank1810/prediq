@@ -512,15 +512,51 @@ async def get_intraday_signal(symbol: str):
                     .first()
                 )
                 if last:
+                    # Build learning profile for closed-market response
+                    learning = {"available": False, "best_timeframe": None,
+                                "time_window_accuracy": None, "overall_accuracy": None,
+                                "trend": None, "optimal_threshold": None, "sample_size": 0}
+                    try:
+                        from app.services.stock_learner import stock_learner
+                        profile = stock_learner.get_profile(sym)
+                        if profile:
+                            learning = {
+                                "available": True,
+                                "best_timeframe": profile.get("best_timeframe"),
+                                "time_window_accuracy": profile.get("time_window_accuracy"),
+                                "overall_accuracy": profile.get("overall_accuracy"),
+                                "trend": profile.get("trend"),
+                                "optimal_threshold": profile.get("optimal_threshold"),
+                                "sample_size": profile.get("sample_size", 0),
+                            }
+                    except Exception:
+                        pass
+
                     return {
+                        "symbol": sym,
                         "direction": last.direction,
                         "confidence": last.confidence,
                         "composite_score": last.composite_score,
-                        "technical": {"score": last.technical_score},
-                        "sentiment": {"score": last.sentiment_score},
-                        "global_market": {"score": last.global_score},
+                        "timestamp": last.created_at.isoformat() if last.created_at else None,
+                        "market_open": False,
                         "market_closed": True,
                         "message": "Market is closed. Showing last signal from market hours.",
+                        "technical": {"score": last.technical_score, "weight": 0.5, "details": {}, "raw": {}},
+                        "sentiment": {"score": last.sentiment_score, "weight": 0.2,
+                                      "headline_count": 0, "positive_count": 0,
+                                      "negative_count": 0, "neutral_count": 0, "headlines": []},
+                        "global_market": {"score": last.global_score, "weight": 0.1,
+                                          "news_magnitude": 0, "markets": [], "headlines": []},
+                        "fundamental": {"score": 0, "weight": 0.15, "raw_score": 0,
+                                        "classification": "balanced", "details": {}},
+                        "intraday_candles": [],
+                        "support_resistance": {"levels": {}, "proximity_signal": 0, "trend": "up"},
+                        "mtf_confluence": {"level": "LOW", "boost": 0, "timeframes": [], "agreement_count": 0},
+                        "adaptive_weights": {"adapted": False, "sample_size": 0, "component_accuracies": {}},
+                        "oi_analysis": {"available": False, "score": 0, "weight": 0},
+                        "sector_strength": {"available": False},
+                        "sector_news_adjustment": None,
+                        "stock_learning": learning,
                     }
             finally:
                 db.close()
