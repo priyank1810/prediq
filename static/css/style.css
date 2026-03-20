@@ -408,11 +408,12 @@ html[data-theme="light"] .toast-alert { background: #fef3c7; color: #92400e; bor
 /* Ensure minimum touch target size (44px) for interactive elements */
 @media (max-width: 639px) {
     .nav-tab {
-        padding: 0.6rem 0.5rem;
+        padding: 0.6rem 0.75rem;
         font-size: 0.75rem;
         min-height: 40px;
         display: inline-flex;
         align-items: center;
+        flex-shrink: 0;
     }
     .period-btn, .chart-type-btn, .horizon-btn {
         padding: 0.35rem 0.6rem;
