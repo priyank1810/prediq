@@ -72,7 +72,12 @@ def get_fundamentals(symbol: str):
         from app.services.fundamental_service import fundamental_service
         data = fundamental_service.get_fundamentals(sym)
         if not data or not data.get("symbol"):
-            raise HTTPException(status_code=404, detail=f"No fundamental data for {symbol}")
+            # Return empty structure for indices/ETFs that lack fundamentals
+            return {"symbol": sym, "pe": None, "pb": None, "roe": None, "de": None,
+                    "dividend_yield": None, "market_cap": None, "revenue": None,
+                    "profit_margin": None, "operating_margin": None,
+                    "earnings_quarterly": [], "income_quarterly": [],
+                    "message": "Fundamental data not available for this symbol"}
         return data
     except HTTPException:
         raise
