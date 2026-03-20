@@ -72,6 +72,12 @@ const Search = {
         });
     },
 
+    _isNLQuery(query) {
+        if (!query || query.length < 4) return false;
+        const nlKeywords = /\b(oversold|overbought|bullish|bearish|above|below|sma|top|gainer|loser|undervalued|growth|dividend|momentum|volume|spike|strong|weak|52\s*week|cheap|trending|breakout|banking|pharma|auto|metal|energy|fmcg|it\s|tech)\b/i;
+        return nlKeywords.test(query) || (query.includes(' ') && query.split(' ').length >= 2 && !/^[A-Z0-9& ]+$/.test(query));
+    },
+
     async search() {
         const query = this.input.value.trim();
 
@@ -82,6 +88,18 @@ const Search = {
         this._abortController = new AbortController();
 
         try {
+            // Detect natural language queries
+            if (this._isNLQuery(query)) {
+                const resp = await fetch(`${API.baseUrl}/api/stocks/ai/search?q=${encodeURIComponent(query)}`, {
+                    signal: this._abortController.signal
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    this.showNLResults(data);
+                    return;
+                }
+            }
+
             const results = await API.searchStocks(query, this._abortController.signal);
             this.showResults(results);
         } catch (e) {
@@ -89,6 +107,51 @@ const Search = {
             this.resultsDiv.classList.add('hidden');
             this.input.setAttribute('aria-expanded', 'false');
         }
+    },
+
+    showNLResults(data) {
+        this._activeIndex = -1;
+        this.input.setAttribute('aria-activedescendant', '');
+
+        if (!data.results || data.results.length === 0) {
+            const suggestions = data.suggestions || [];
+            this.resultsDiv.innerHTML = `
+                <div class="px-4 py-2 text-xs text-gray-400 border-b border-gray-700">
+                    <span class="text-purple-400">AI Search:</span> ${data.interpreted_as || 'No results'}
+                </div>
+                ${suggestions.map(s => `<div class="px-4 py-1.5 text-xs text-gray-500 cursor-pointer hover:bg-dark-600" onclick="Search.input.value='${s.replace("Try: '","").replace("'","")}';Search.search()">${s}</div>`).join('')}
+            `;
+            this.resultsDiv.classList.remove('hidden');
+            this.input.setAttribute('aria-expanded', 'true');
+            return;
+        }
+
+        let html = `<div class="px-4 py-1.5 text-[10px] text-purple-400 border-b border-gray-700 bg-dark-800">
+            AI: ${data.interpreted_as} (${data.result_count} found)
+        </div>`;
+
+        html += data.results.slice(0, 12).map((r, i) => {
+            const changePct = r.change_pct != null ? r.change_pct.toFixed(1) : '0.0';
+            const changeColor = r.change_pct > 0 ? 'text-green-400' : (r.change_pct < 0 ? 'text-red-400' : 'text-gray-400');
+            const filters = (r.matched_filters || []).join(', ');
+            return `
+            <div id="search-option-${i}" role="option" aria-selected="false"
+                 class="px-4 py-2 hover:bg-dark-600 cursor-pointer border-b border-gray-800"
+                 onclick="Search.select('${r.symbol}', '')">
+                <div class="flex justify-between items-center">
+                    <span class="text-white font-medium text-sm">${r.symbol}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-400">${r.ltp ? '₹' + r.ltp.toFixed(2) : ''}</span>
+                        <span class="text-xs ${changeColor}">${changePct}%</span>
+                    </div>
+                </div>
+                ${filters ? `<div class="text-[10px] text-gray-500 mt-0.5">${filters}</div>` : ''}
+            </div>`;
+        }).join('');
+
+        this.resultsDiv.innerHTML = html;
+        this.resultsDiv.classList.remove('hidden');
+        this.input.setAttribute('aria-expanded', 'true');
     },
 
     showResults(results) {

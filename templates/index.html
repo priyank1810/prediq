@@ -57,7 +57,7 @@
             <!-- Search -->
             <div class="relative w-full sm:w-96 order-3 sm:order-2">
                 <label for="searchInput" class="sr-only">Search stocks</label>
-                <input type="text" id="searchInput" placeholder="Search stocks... (e.g. RELIANCE)"
+                <input type="text" id="searchInput" placeholder="Search stocks... (e.g. RELIANCE or 'oversold banking stocks')"
                     role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="searchResults" aria-activedescendant=""
                     class="w-full bg-dark-700 border border-gray-600 rounded-lg px-3 sm:px-4 py-2 text-sm focus:outline-none focus:border-accent-blue text-white placeholder-gray-500">
                 <div id="searchResults" class="absolute top-full left-0 w-full bg-dark-700 border border-gray-600 rounded-b-lg mt-1 hidden z-50 max-h-64 overflow-y-auto" role="listbox" aria-live="polite"></div>
@@ -549,6 +549,17 @@
                             </div>
                         </div>
                     </div>
+                    <!-- AI Summary Panel -->
+                    <div id="aiSummaryPanel" class="hidden bg-dark-800 rounded-lg p-3 sm:p-4 mt-3">
+                        <h4 class="text-sm font-semibold text-purple-400 mb-2 flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9v-2h2v2zm0-4H9V5h2v4z"/></svg>
+                            AI Analysis
+                        </h4>
+                        <div id="aiSummaryText" class="text-sm text-gray-300 leading-relaxed mb-3"></div>
+                        <div id="aiFactors" class="space-y-2"></div>
+                        <div id="aiRiskFactors" class="mt-3"></div>
+                        <div id="aiEarningsInsight" class="mt-3"></div>
+                    </div>
                 </div>
 
                 <!-- ═══════ MULTI-TIMEFRAME TAB ═══════ -->
@@ -741,7 +752,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
 
                 <!-- ═══════ AI LEARNING TAB ═══════ -->
                 <div id="stockTab-ailearning" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-ailearning">

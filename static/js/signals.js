@@ -187,6 +187,9 @@ const Signals = {
         // Stock learning insight badge
         this.renderLearningBadge(data.stock_learning);
 
+        // Load AI summary in background
+        if (data.symbol) this.loadAISummary(data.symbol);
+
         // Intraday chart
         if (data.intraday_candles && data.intraday_candles.length > 0) {
             this.renderIntradayChart(data.intraday_candles, data.support_resistance, data.technical && data.technical.raw);
@@ -734,6 +737,69 @@ const Signals = {
                 </tr>
             `;
         }).join('');
+    },
+
+    // ─── AI Summary ────────────────────────────────────────────────
+
+    async loadAISummary(symbol) {
+        const panel = document.getElementById('aiSummaryPanel');
+        if (!panel) return;
+
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/stocks/ai/summary/${encodeURIComponent(symbol)}`);
+            if (!resp.ok) { panel.classList.add('hidden'); return; }
+            const data = await resp.json();
+            panel.classList.remove('hidden');
+
+            // Summary text (supports **bold** markdown)
+            const textEl = document.getElementById('aiSummaryText');
+            textEl.innerHTML = (data.summary || '').replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
+
+            // Factors
+            const factorsEl = document.getElementById('aiFactors');
+            const factors = data.factors || [];
+            factorsEl.innerHTML = factors.map(f => {
+                const icon = f.impact === 'positive' ? '&#9650;' : (f.impact === 'negative' ? '&#9660;' : '&#9654;');
+                const color = f.impact === 'positive' ? 'text-green-400' : (f.impact === 'negative' ? 'text-red-400' : 'text-gray-400');
+                const bg = f.impact === 'positive' ? 'border-green-800/50' : (f.impact === 'negative' ? 'border-red-800/50' : 'border-gray-700');
+                return `
+                    <div class="flex items-start gap-2 p-2 rounded border ${bg}">
+                        <span class="${color} text-sm mt-0.5">${icon}</span>
+                        <div>
+                            <div class="text-xs font-medium text-white">${f.factor}</div>
+                            <div class="text-xs text-gray-400">${f.detail}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Risk factors
+            const riskEl = document.getElementById('aiRiskFactors');
+            const risks = data.risk_factors || [];
+            if (risks.length > 0) {
+                riskEl.innerHTML = `
+                    <div class="text-[10px] text-red-400 font-medium mb-1">Risk Factors</div>
+                    ${risks.map(r => `<div class="text-xs text-gray-400 flex items-start gap-1"><span class="text-red-500 mt-0.5">&#9888;</span> ${r}</div>`).join('')}
+                `;
+            } else {
+                riskEl.innerHTML = '';
+            }
+
+            // Earnings insight
+            const earningsEl = document.getElementById('aiEarningsInsight');
+            const earnings = data.earnings_analysis;
+            if (earnings && earnings.available && earnings.insights && earnings.insights.length > 0) {
+                const ratingColor = earnings.rating === 'positive' ? 'text-green-400' : (earnings.rating === 'negative' ? 'text-red-400' : 'text-yellow-400');
+                earningsEl.innerHTML = `
+                    <div class="text-[10px] text-purple-400 font-medium mb-1">Earnings Analysis</div>
+                    <div class="text-xs text-gray-300">${earnings.insights.slice(0, 3).map(i => `<span class="${ratingColor}">&#8226;</span> ${i}`).join('<br>')}</div>
+                `;
+            } else {
+                earningsEl.innerHTML = '';
+            }
+        } catch (e) {
+            panel.classList.add('hidden');
+        }
     },
 
     // ─── AI Learning Profile Tab ────────────────────────────────────
