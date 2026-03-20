@@ -436,6 +436,45 @@ async def news_alert_scanner():
         await asyncio.sleep(600)  # Run every 10 minutes
 
 
+async def daily_stock_learner():
+    """Daily learning task: rebuild per-stock profiles after market close.
+    Analyzes signal accuracy for each stock and learns optimal weights/thresholds."""
+    await asyncio.sleep(600)  # Let services warm up
+
+    while True:
+        try:
+            from app.utils.helpers import is_market_open, now_ist
+            current = now_ist()
+            # Run at 4:15 PM IST (after market close at 3:30 PM)
+            if current.hour == 16 and 15 <= current.minute <= 20:
+                from app.services.stock_learner import stock_learner
+                result = await asyncio.to_thread(stock_learner.rebuild_all_profiles)
+                if result:
+                    logging.getLogger(__name__).info(
+                        f"Daily stock learning complete: {result['profiles_built']} profiles, "
+                        f"{len(result['improvements'])} improved, "
+                        f"{len(result['degradations'])} degraded"
+                    )
+                    # Broadcast learning summary via WebSocket
+                    try:
+                        from app.routers.websocket import manager
+                        if manager.active_connections:
+                            await manager.broadcast_to_all("learning_update", {
+                                "profiles_built": result["profiles_built"],
+                                "improvements": result["improvements"][:5],
+                                "degradations": result["degradations"][:5],
+                            })
+                    except Exception:
+                        pass
+                # Sleep until next day (avoid running multiple times)
+                await asyncio.sleep(3600)
+            else:
+                await asyncio.sleep(300)  # Check every 5 minutes
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Daily learner error: {e}")
+            await asyncio.sleep(600)
+
+
 async def live_scanner():
     """Run screener filters every 5 minutes and broadcast new matches via WebSocket."""
     await asyncio.sleep(120)
@@ -538,6 +577,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(prediction_accuracy_backfiller()),
         asyncio.create_task(news_alert_scanner()),
         asyncio.create_task(live_scanner()),
+        asyncio.create_task(daily_stock_learner()),
     ]
     yield
     # Shutdown

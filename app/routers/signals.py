@@ -417,6 +417,35 @@ def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
         db.close()
 
 
+@router.post("/stats/learning/rebuild")
+def rebuild_all_learning_profiles():
+    """Manually trigger a rebuild of all stock learning profiles."""
+    try:
+        from app.services.stock_learner import stock_learner
+        result = stock_learner.rebuild_all_profiles()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stats/learning/{symbol}")
+def get_stock_learning_profile(symbol: str):
+    """Get the per-stock learning profile showing what the AI has learned about this stock."""
+    try:
+        from app.services.stock_learner import stock_learner
+        profile = stock_learner.get_profile(symbol.upper())
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Not enough signal history for {symbol.upper()} (need {10}+ validated signals)"
+            )
+        return profile
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/stats/accuracy")
 def signal_accuracy_stats():
     """Get signal accuracy stats grouped by symbol."""

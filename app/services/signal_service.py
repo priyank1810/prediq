@@ -197,28 +197,52 @@ class SignalService:
         except Exception as e:
             logger.debug(f"Sector news adjustment skipped: {e}")
 
-        # 5. Dynamic weights — adaptive or static
+        # 5. Dynamic weights — per-stock learning first, then sector adaptive, then static
         w_tech = SIGNAL_WEIGHT_TECHNICAL
         w_sent = SIGNAL_WEIGHT_SENTIMENT
         w_glob = SIGNAL_WEIGHT_GLOBAL
         w_fund = SIGNAL_WEIGHT_FUNDAMENTAL
         adaptive_info = {"adapted": False, "sample_size": 0, "component_accuracies": {}}
+        stock_profile = None
 
+        # Try per-stock learned weights first (most specific)
         try:
-            from app.services.adaptive_weights import adaptive_weight_service
-            adaptive = adaptive_weight_service.get_weights(symbol)
-            if adaptive["adapted"]:
-                w_tech = adaptive["weights"]["technical"]
-                w_sent = adaptive["weights"]["sentiment"]
-                w_glob = adaptive["weights"]["global"]
-                w_fund = adaptive["weights"].get("fundamental", SIGNAL_WEIGHT_FUNDAMENTAL)
+            from app.services.stock_learner import stock_learner
+            stock_profile = stock_learner.get_profile(symbol)
+            if stock_profile:
+                w_tech = stock_profile["weights"]["technical"]
+                w_sent = stock_profile["weights"]["sentiment"]
+                w_glob = stock_profile["weights"]["global"]
+                w_fund = stock_profile["weights"]["fundamental"]
                 adaptive_info = {
                     "adapted": True,
-                    "sample_size": adaptive["sample_size"],
-                    "component_accuracies": adaptive.get("component_accuracies", {}),
+                    "sample_size": stock_profile["sample_size"],
+                    "component_accuracies": stock_profile.get("component_accuracies", {}),
+                    "source": "per_stock",
+                    "trend": stock_profile.get("trend", "stable"),
+                    "overall_accuracy": stock_profile.get("overall_accuracy", 0),
                 }
         except Exception as e:
-            logger.debug(f"Adaptive weights not available: {e}")
+            logger.debug(f"Per-stock learning not available for {symbol}: {e}")
+
+        # Fall back to sector-level adaptive weights if no stock profile
+        if not stock_profile:
+            try:
+                from app.services.adaptive_weights import adaptive_weight_service
+                adaptive = adaptive_weight_service.get_weights(symbol)
+                if adaptive["adapted"]:
+                    w_tech = adaptive["weights"]["technical"]
+                    w_sent = adaptive["weights"]["sentiment"]
+                    w_glob = adaptive["weights"]["global"]
+                    w_fund = adaptive["weights"].get("fundamental", SIGNAL_WEIGHT_FUNDAMENTAL)
+                    adaptive_info = {
+                        "adapted": True,
+                        "sample_size": adaptive["sample_size"],
+                        "component_accuracies": adaptive.get("component_accuracies", {}),
+                        "source": "sector",
+                    }
+            except Exception as e:
+                logger.debug(f"Adaptive weights not available: {e}")
 
         # Fundamental score: scale from (-1,+1) to (-100,+100) to match other components
         fundamental_score = fund_result.get("score", 0) * 100
@@ -294,9 +318,11 @@ class SignalService:
 
         composite = max(-100, min(100, round(composite, 2)))
 
-        # 6. Direction and confidence — volatility-adaptive threshold
+        # 6. Direction and confidence — per-stock learned threshold, then volatility-adaptive
         dir_threshold = SIGNAL_DIRECTION_THRESHOLD
-        if intraday_df is not None and not intraday_df.empty and "close" in intraday_df.columns:
+        if stock_profile and stock_profile.get("optimal_threshold"):
+            dir_threshold = stock_profile["optimal_threshold"]
+        elif intraday_df is not None and not intraday_df.empty and "close" in intraday_df.columns:
             try:
                 recent_returns = intraday_df["close"].pct_change().dropna().tail(50)
                 if len(recent_returns) > 10:
