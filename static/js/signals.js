@@ -188,7 +188,8 @@ const Signals = {
         this.renderLearningBadge(data.stock_learning);
 
         // Load AI summary in background
-        if (data.symbol) this.loadAISummary(data.symbol);
+        const summarySymbol = data.symbol || (typeof App !== 'undefined' ? App.currentSymbol : null);
+        if (summarySymbol) this.loadAISummary(summarySymbol);
 
         // Intraday chart
         if (data.intraday_candles && data.intraday_candles.length > 0) {
