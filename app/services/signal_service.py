@@ -419,6 +419,15 @@ class SignalService:
             },
             "sector_strength": sector_result,
             "sector_news_adjustment": sector_news_adjustment,
+            "stock_learning": {
+                "available": stock_profile is not None,
+                "best_timeframe": stock_profile.get("best_timeframe") if stock_profile else None,
+                "time_window_accuracy": stock_profile.get("time_window_accuracy") if stock_profile else None,
+                "overall_accuracy": stock_profile.get("overall_accuracy") if stock_profile else None,
+                "trend": stock_profile.get("trend") if stock_profile else None,
+                "optimal_threshold": stock_profile.get("optimal_threshold") if stock_profile else None,
+                "sample_size": stock_profile.get("sample_size") if stock_profile else 0,
+            },
         }
 
     def _fetch_oi(self, symbol: str) -> dict:

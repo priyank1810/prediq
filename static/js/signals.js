@@ -184,6 +184,9 @@ const Signals = {
         // Adaptive weights badge
         this.renderAdaptiveBadge(data);
 
+        // Stock learning insight badge
+        this.renderLearningBadge(data.stock_learning);
+
         // Intraday chart
         if (data.intraday_candles && data.intraday_candles.length > 0) {
             this.renderIntradayChart(data.intraday_candles, data.support_resistance, data.technical && data.technical.raw);
@@ -428,6 +431,41 @@ const Signals = {
             const pct = ((data.sentiment.weight || 0) * 100).toFixed(0);
             sentLabel.textContent = `Sentiment (${pct}%)`;
         }
+    },
+
+    renderLearningBadge(learning) {
+        const el = document.getElementById('stockLearningBadge');
+        if (!el) return;
+        if (!learning || !learning.available) {
+            el.classList.add('hidden');
+            return;
+        }
+        el.classList.remove('hidden');
+
+        const acc = learning.overall_accuracy || 0;
+        const best = learning.best_timeframe || '15min';
+        const trend = learning.trend || 'stable';
+        const twa = learning.time_window_accuracy || {};
+
+        // Best timeframe label
+        const tfLabel = best === '15min' ? '15 Min' : best === '30min' ? '30 Min' : '1 Hour';
+        const bestAcc = twa[best] || acc;
+
+        // Trend icon
+        const trendIcon = trend === 'improving' ? '&#9650;' : trend === 'degrading' ? '&#9660;' : '&#9654;';
+        const trendColor = trend === 'improving' ? 'text-green-400' : trend === 'degrading' ? 'text-red-400' : 'text-gray-400';
+
+        // Accuracy color
+        const accColor = acc >= 75 ? 'text-green-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400';
+
+        el.innerHTML = `
+            <div class="text-[10px] text-gray-500 mb-0.5">AI Learned</div>
+            <div class="flex flex-wrap items-center gap-1">
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-300">Best: ${tfLabel} (${bestAcc.toFixed(0)}%)</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-dark-600 ${accColor}">${acc.toFixed(0)}% acc</span>
+                <span class="text-[10px] ${trendColor}">${trendIcon} ${trend}</span>
+            </div>
+        `;
     },
 
     renderSectorBadge(sector) {
