@@ -93,15 +93,6 @@ const App = {
                 if (tab.dataset.tab === 'portfolio') {
                     Lazy.loadAndInit('portfolio').then(() => { const m = Lazy._getGlobal('portfolio'); if (m) { m.load(); m.loadAnalytics(); } }).catch(() => {});
                 }
-                if (tab.dataset.tab === 'screener') {
-                    Lazy.loadAndInit('screener').catch(() => {});
-                }
-                if (tab.dataset.tab === 'journal') {
-                    Lazy.loadAndInit('journal').then(() => { const m = Lazy._getGlobal('journal'); if (m) m.load(); }).catch(() => {});
-                }
-                if (tab.dataset.tab === 'strategies') {
-                    Lazy.loadAndInit('strategies').then(() => { const m = Lazy._getGlobal('strategies'); if (m) m.load(); }).catch(() => {});
-                }
                 if (tab.dataset.tab === 'insights') {
                     Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
                 }
@@ -1057,7 +1048,7 @@ const App = {
         this._skipHashUpdate = true;
 
         // Activate the correct main tab
-        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'screener', 'journal', 'strategies', 'insights'];
+        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'insights'];
         if (validTabs.includes(tab)) {
             const tabBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
             if (tabBtn) {
@@ -1075,9 +1066,6 @@ const App = {
                 // Trigger lazy loading for the tab
                 if (tab === 'watchlist') Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
                 if (tab === 'portfolio') Lazy.loadAndInit('portfolio').then(() => { const m = Lazy._getGlobal('portfolio'); if (m) { m.load(); m.loadAnalytics(); } }).catch(() => {});
-                if (tab === 'screener') Lazy.loadAndInit('screener').catch(() => {});
-                if (tab === 'journal') Lazy.loadAndInit('journal').then(() => { const m = Lazy._getGlobal('journal'); if (m) m.load(); }).catch(() => {});
-                if (tab === 'strategies') Lazy.loadAndInit('strategies').then(() => { const m = Lazy._getGlobal('strategies'); if (m) m.load(); }).catch(() => {});
                 if (tab === 'insights') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
             }
         }
