@@ -756,6 +756,14 @@ const Signals = {
             const textEl = document.getElementById('aiSummaryText');
             textEl.innerHTML = (data.summary || '').replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
 
+            // Also set one-liner in Technical tab overview
+            const techLine = document.getElementById('techAISummaryLine');
+            if (techLine) {
+                // Strip markdown bold and truncate
+                const plain = (data.summary || '').replace(/\*\*/g, '');
+                techLine.textContent = plain.length > 120 ? plain.substring(0, 117) + '...' : plain;
+            }
+
             // Factors
             const factorsEl = document.getElementById('aiFactors');
             const factors = data.factors || [];

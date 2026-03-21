@@ -90,6 +90,11 @@ const Search = {
         try {
             // Detect natural language queries
             if (this._isNLQuery(query)) {
+                // Show loading state immediately
+                this.resultsDiv.innerHTML = '<div class="px-4 py-3 text-xs text-purple-400"><span class="animate-pulse">Searching with AI...</span></div>';
+                this.resultsDiv.classList.remove('hidden');
+                this.input.setAttribute('aria-expanded', 'true');
+
                 const resp = await fetch(`${API.baseUrl}/api/stocks/ai/search?q=${encodeURIComponent(query)}`, {
                     signal: this._abortController.signal
                 });

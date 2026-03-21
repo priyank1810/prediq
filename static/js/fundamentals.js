@@ -16,6 +16,13 @@ const Fundamentals = {
             ]);
             if (symbol !== this._currentSymbol) return;
             this.render(data, news);
+            // Populate 52W data in Technical tab overview
+            if (data) {
+                const h = document.getElementById('tech52H');
+                const l = document.getElementById('tech52L');
+                if (h && data['52_week_high']) h.textContent = '₹' + data['52_week_high'].toLocaleString('en-IN', { minimumFractionDigits: 2 });
+                if (l && data['52_week_low']) l.textContent = '₹' + data['52_week_low'].toLocaleString('en-IN', { minimumFractionDigits: 2 });
+            }
         } catch (e) {
             panel.innerHTML = '<div class="text-center py-4 text-gray-500 text-sm">Failed to load fundamentals</div>';
         }

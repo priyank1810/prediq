@@ -593,6 +593,28 @@ const App = {
         if (quote.low != null) document.getElementById('stockLow').textContent = `₹${quote.low.toFixed(2)}`;
         if (quote.volume != null) document.getElementById('stockVolume').textContent = quote.volume.toLocaleString('en-IN');
 
+        // Populate Technical tab stock overview
+        const techSym = document.getElementById('techSymbol');
+        if (techSym) {
+            techSym.textContent = this.currentSymbol || '';
+            const techPriceEl = document.getElementById('techPrice');
+            if (techPriceEl && quote.ltp != null) techPriceEl.textContent = `₹${quote.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+            const techChangeEl = document.getElementById('techChange');
+            if (techChangeEl && quote.change != null) {
+                const s = quote.change >= 0 ? '+' : '';
+                techChangeEl.textContent = `${s}${quote.change.toFixed(2)} (${s}${(quote.pct_change || 0).toFixed(2)}%)`;
+                techChangeEl.className = `text-sm font-medium ${quote.change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            }
+            if (quote.open != null) document.getElementById('techOpen').textContent = `₹${quote.open.toFixed(2)}`;
+            if (quote.high != null) document.getElementById('techHigh').textContent = `₹${quote.high.toFixed(2)}`;
+            if (quote.low != null) document.getElementById('techLow').textContent = `₹${quote.low.toFixed(2)}`;
+            const techVolEl = document.getElementById('techVol');
+            if (techVolEl && quote.volume != null) {
+                const v = quote.volume;
+                techVolEl.textContent = v >= 10000000 ? (v / 10000000).toFixed(1) + 'Cr' : v >= 100000 ? (v / 100000).toFixed(1) + 'L' : v.toLocaleString('en-IN');
+            }
+        }
+
         const volAvgEl = document.getElementById('stockVolAvg');
         if (volAvgEl && quote.volume && quote.avg_volume && quote.avg_volume > 0) {
             const ratio = (quote.volume / quote.avg_volume).toFixed(1);
