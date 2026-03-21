@@ -196,8 +196,8 @@ class Worker:
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
 
-            # 5s pause between stocks to stay gentle on resources
-            _time.sleep(5)
+            # 30s pause between stocks to stay gentle on resources
+            _time.sleep(30)
 
         return {"symbols_processed": logged, "total": len(symbols)}
 
