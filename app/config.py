@@ -183,8 +183,12 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 # Prediction horizons config
 PREDICTION_HORIZONS = {
+    "2m": {"label": "2 Min", "intraday": True, "bars": 1, "interval": "2m"},
+    "10m": {"label": "10 Min", "intraday": True, "bars": 5, "interval": "2m"},
     "15m": {"label": "15 Min", "intraday": True, "bars": 1, "interval": "15m"},
+    "30m": {"label": "30 Min", "intraday": True, "bars": 2, "interval": "15m"},
     "1h": {"label": "1 Hour", "intraday": True, "bars": 4, "interval": "15m"},
+    "4h": {"label": "4 Hours", "intraday": True, "bars": 16, "interval": "15m"},
     "1d": {"label": "1 Day", "intraday": False, "days": 1},
     "1w": {"label": "1 Week", "intraday": False, "days": 5},
     "1mo": {"label": "1 Month", "intraday": False, "days": 22},

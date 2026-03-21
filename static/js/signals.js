@@ -625,7 +625,6 @@ const Signals = {
             tsEl.textContent = ts.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) + ' IST';
         }
 
-        const timeframes = ['intraday', 'short_term', 'long_term'];
         const icons = { BULLISH: '&#9650;', BEARISH: '&#9660;', NEUTRAL: '&#9654;' };
         const colors = {
             BULLISH: { text: 'text-green-400', bg: 'bg-green-900/30', border: 'border-green-700/50' },
@@ -633,8 +632,38 @@ const Signals = {
             NEUTRAL: { text: 'text-yellow-400', bg: 'bg-yellow-900/30', border: 'border-yellow-700/50' },
         };
 
-        grid.innerHTML = timeframes.map(tf => {
-            const sig = data[tf];
+        // Build flat list of signals from nested structure
+        const allSignals = [];
+        const intraday = data.intraday || {};
+        const shortTerm = data.short_term || {};
+
+        // Support both old format (data.intraday is a signal) and new format (data.intraday is a group)
+        if (intraday.direction) {
+            // Old format
+            allSignals.push(intraday);
+            if (shortTerm.direction) allSignals.push(shortTerm);
+            if (data.long_term && data.long_term.direction) allSignals.push(data.long_term);
+        } else {
+            // New format: grouped
+            for (const key of ['2m', '10m', '30m']) {
+                if (intraday[key]) allSignals.push({ ...intraday[key], _group: 'Intraday' });
+            }
+            for (const key of ['15m', '1h', '4h']) {
+                if (shortTerm[key]) allSignals.push({ ...shortTerm[key], _group: 'Short-term' });
+            }
+        }
+
+        // Add group headers
+        let lastGroup = '';
+        grid.innerHTML = allSignals.map(sig => {
+            let groupHeader = '';
+            if (sig._group && sig._group !== lastGroup) {
+                lastGroup = sig._group;
+                groupHeader = `<div class="col-span-full text-xs font-semibold text-gray-400 mt-2 mb-1 first:mt-0">${sig._group}</div>`;
+            }
+
+            const tf = sig._group ? 'grouped' : 'legacy';
+            const _sig = sig;
             if (!sig) return '';
             const c = colors[sig.direction] || colors.NEUTRAL;
             const icon = icons[sig.direction] || icons.NEUTRAL;
@@ -681,7 +710,7 @@ const Signals = {
                 ? `<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/30 text-purple-300">AI conf:${sig.model_confidence}%</span>`
                 : '';
 
-            return `<div class="border ${c.border} ${c.bg} rounded-lg p-3">
+            return `${groupHeader}<div class="border ${c.border} ${c.bg} rounded-lg p-3">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-xs text-gray-400 font-medium">${sig.label}${modelBadge}</span>
                     <span class="text-xs font-bold ${c.text}">${icon} ${sig.direction}</span>
@@ -748,17 +777,30 @@ const Signals = {
         const tfBadge = document.getElementById('signalBestTimeframe');
         if (!targetPanel || !mtfData) return;
 
-        // Pick the best signal (highest confidence non-neutral)
-        const signals = [
-            { key: 'intraday', label: 'Intraday', data: mtfData.intraday },
-            { key: 'short_term', label: '1 Week', data: mtfData.short_term },
-            { key: 'long_term', label: '3 Months', data: mtfData.long_term },
-        ].filter(s => s.data && s.data.direction !== 'NEUTRAL');
+        // Collect all signals from nested structure
+        const signals = [];
+        const intraday = mtfData.intraday || {};
+        const shortTerm = mtfData.short_term || {};
 
-        // Sort by confidence descending
-        signals.sort((a, b) => (b.data.confidence || 0) - (a.data.confidence || 0));
+        // Support old and new format
+        if (intraday.direction) {
+            signals.push({ key: 'intraday', label: 'Intraday', data: intraday });
+            if (shortTerm.direction) signals.push({ key: 'short_term', label: 'Short-term', data: shortTerm });
+            if (mtfData.long_term && mtfData.long_term.direction) signals.push({ key: 'long_term', label: 'Long-term', data: mtfData.long_term });
+        } else {
+            for (const [k, v] of Object.entries(intraday)) {
+                if (v && v.direction) signals.push({ key: `intraday_${k}`, label: v.label || k, data: v });
+            }
+            for (const [k, v] of Object.entries(shortTerm)) {
+                if (v && v.direction) signals.push({ key: `short_${k}`, label: v.label || k, data: v });
+            }
+        }
 
-        const best = signals[0];
+        // Filter non-neutral and sort by confidence
+        const nonNeutral = signals.filter(s => s.data.direction !== 'NEUTRAL');
+        nonNeutral.sort((a, b) => (b.data.confidence || 0) - (a.data.confidence || 0));
+
+        const best = nonNeutral[0];
         if (!best) {
             targetPanel.classList.add('hidden');
             if (tfBadge) tfBadge.classList.add('hidden');
@@ -794,16 +836,14 @@ const Signals = {
 
         targetPanel.classList.remove('hidden');
 
-        // Best timeframe badge
+        // Timeframe direction summary
         if (tfBadge) {
-            // Also show all timeframe directions
-            const tfSummary = ['intraday', 'short_term', 'long_term'].map(key => {
-                const s = mtfData[key];
-                if (!s) return '';
-                const labels = { intraday: 'Intra', short_term: '1W', long_term: '3M' };
-                const color = s.direction === 'BULLISH' ? 'text-green-400' : (s.direction === 'BEARISH' ? 'text-red-400' : 'text-gray-500');
-                const arrow = s.direction === 'BULLISH' ? '▲' : (s.direction === 'BEARISH' ? '▼' : '▶');
-                return `<span class="${color} text-[10px]">${labels[key]} ${arrow}</span>`;
+            const tfSummary = signals.map(s => {
+                const color = s.data.direction === 'BULLISH' ? 'text-green-400' : (s.data.direction === 'BEARISH' ? 'text-red-400' : 'text-gray-500');
+                const arrow = s.data.direction === 'BULLISH' ? '▲' : (s.data.direction === 'BEARISH' ? '▼' : '▶');
+                // Shorten label
+                const short = (s.data.label || s.key).replace(/\s*\(.*\)/, '');
+                return `<span class="${color} text-[10px]">${short} ${arrow}</span>`;
             }).filter(Boolean).join(' <span class="text-gray-700">|</span> ');
 
             tfBadge.innerHTML = `<div class="flex items-center justify-center gap-1 flex-wrap">${tfSummary}</div>`;

@@ -468,10 +468,15 @@ class SignalService:
 
     # ── Multi-Timeframe Signals with Entry/Exit Levels ──
 
+    # Intraday: 2m (entry/exit), 10m (trend confirmation), 30m (trend direction)
+    # Short-term: 15m (triggers), 1h (entry/exit), 4h (trend direction + confirmation)
     _TIMEFRAME_HORIZON_MAP = {
-        "intraday": "1d",
-        "short_term": "1w",
-        "long_term": "3mo",
+        "intraday_2m": "2m",
+        "intraday_10m": "10m",
+        "intraday_30m": "30m",
+        "short_15m": "15m",
+        "short_1h": "1h",
+        "short_4h": "4h",
     }
 
     def _run_prediction_for_horizon(self, symbol: str, horizon: str,
@@ -639,54 +644,71 @@ class SignalService:
         elif daily_df is not None and not daily_df.empty:
             current_price = float(daily_df["close"].iloc[-1])
 
-        # ── 1. INTRADAY SIGNAL ──
-        intraday_signal = self._compute_timeframe_signal(
-            label="Intraday",
-            df=intraday_df,
-            current_price=current_price,
-            sentiment_score=sentiment_score,
-            global_score=global_score,
-            fundamental_score=fundamental_score,
-            news_magnitude=news_magnitude,
-            timeframe="intraday",
-            symbol=symbol,
-            prediction=pred_results.get("intraday", {}),
+        # ── INTRADAY SIGNALS ──
+        # 2 min — entry/exit
+        intraday_2m = self._compute_timeframe_signal(
+            label="2 Min (Entry/Exit)", df=intraday_df, current_price=current_price,
+            sentiment_score=sentiment_score, global_score=global_score,
+            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
+            timeframe="intraday", symbol=symbol,
+            prediction=pred_results.get("intraday_2m", {}),
+        )
+        # 10 min — trend confirmation
+        intraday_10m = self._compute_timeframe_signal(
+            label="10 Min (Trend Confirm)", df=intraday_df, current_price=current_price,
+            sentiment_score=sentiment_score, global_score=global_score,
+            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
+            timeframe="intraday", symbol=symbol,
+            prediction=pred_results.get("intraday_10m", {}),
+        )
+        # 30 min — trend direction
+        intraday_30m = self._compute_timeframe_signal(
+            label="30 Min (Direction)", df=intraday_df, current_price=current_price,
+            sentiment_score=sentiment_score, global_score=global_score,
+            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
+            timeframe="intraday", symbol=symbol,
+            prediction=pred_results.get("intraday_30m", {}),
         )
 
-        # ── 2. SHORT-TERM (1 Week) SIGNAL ──
-        short_term_signal = self._compute_timeframe_signal(
-            label="Short Term (1 Week)",
-            df=daily_df,
-            current_price=current_price,
-            sentiment_score=sentiment_score,
-            global_score=global_score,
-            fundamental_score=fundamental_score,
-            news_magnitude=news_magnitude,
-            timeframe="short_term",
-            symbol=symbol,
-            prediction=pred_results.get("short_term", {}),
+        # ── SHORT-TERM SIGNALS ──
+        # 15 min — triggers
+        short_15m = self._compute_timeframe_signal(
+            label="15 Min (Triggers)", df=intraday_df, current_price=current_price,
+            sentiment_score=sentiment_score, global_score=global_score,
+            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
+            timeframe="short_term", symbol=symbol,
+            prediction=pred_results.get("short_15m", {}),
+        )
+        # 1 hour — entry/exit
+        short_1h = self._compute_timeframe_signal(
+            label="1 Hour (Entry/Exit)", df=intraday_df, current_price=current_price,
+            sentiment_score=sentiment_score, global_score=global_score,
+            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
+            timeframe="short_term", symbol=symbol,
+            prediction=pred_results.get("short_1h", {}),
+        )
+        # 4 hours — trend direction + confirmation
+        short_4h = self._compute_timeframe_signal(
+            label="4 Hours (Trend+Confirm)", df=daily_df, current_price=current_price,
+            sentiment_score=sentiment_score, global_score=global_score,
+            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
+            timeframe="short_term", symbol=symbol,
+            prediction=pred_results.get("short_4h", {}),
         )
 
-        # ── 3. LONG-TERM SIGNAL (3 Months) ──
-        long_term_signal = self._compute_timeframe_signal(
-            label="Long Term (3 Months)",
-            df=weekly_df,
-            current_price=current_price,
-            sentiment_score=sentiment_score,
-            global_score=global_score,
-            fundamental_score=fundamental_score,
-            news_magnitude=news_magnitude,
-            timeframe="long_term",
-            symbol=symbol,
-            prediction=pred_results.get("long_term", {}),
-        )
+        all_signals = {
+            "intraday_2m": intraday_2m,
+            "intraday_10m": intraday_10m,
+            "intraday_30m": intraday_30m,
+            "short_15m": short_15m,
+            "short_1h": short_1h,
+            "short_4h": short_4h,
+        }
 
-        # Log trade predictions for tracking
+        # Log trade predictions for tracking (best signal per group)
         try:
             from app.services.trade_tracker import trade_tracker
-            for tf_key, tf_signal in [("intraday", intraday_signal),
-                                       ("short_term", short_term_signal),
-                                       ("long_term", long_term_signal)]:
+            for tf_key, tf_signal in all_signals.items():
                 trade_tracker.log_signal(symbol, tf_key, tf_signal, current_price)
         except Exception as e:
             logger.debug(f"Trade logging failed: {e}")
@@ -696,9 +718,16 @@ class SignalService:
             "current_price": round(current_price, 2),
             "timestamp": now_ist().isoformat(),
             "market_open": is_market_open(),
-            "intraday": intraday_signal,
-            "short_term": short_term_signal,
-            "long_term": long_term_signal,
+            "intraday": {
+                "2m": intraday_2m,
+                "10m": intraday_10m,
+                "30m": intraday_30m,
+            },
+            "short_term": {
+                "15m": short_15m,
+                "1h": short_1h,
+                "4h": short_4h,
+            },
         }
 
     def _compute_timeframe_signal(self, label, df, current_price, sentiment_score,
