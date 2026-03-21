@@ -25,6 +25,18 @@ class LiveCandleBuilder:
 
     def on_tick(self, symbol: str, ltp: float, volume: int = 0, bid: float = 0.0, ask: float = 0.0):
         """Called from WebSocket price_streamer when Angel One provides a quote."""
+        if ltp <= 0:
+            return
+
+        # Reject obvious bad ticks: >10% move from last known price
+        ticks = self._ticks.get(symbol, [])
+        if ticks:
+            last_ltp = ticks[-1][1]
+            if last_ltp > 0:
+                change_pct = abs(ltp - last_ltp) / last_ltp
+                if change_pct > 0.10:  # >10% move in a single tick is suspect
+                    return
+
         now = now_ist()
         self._ticks[symbol].append((now, ltp, volume, bid, ask))
 

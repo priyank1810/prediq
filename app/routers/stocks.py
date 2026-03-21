@@ -232,6 +232,14 @@ def get_history(symbol: str, period: str = Query("1y")):
             # add IST offset so chart axis shows IST time instead of UTC
             if dt_col.dt.tz is not None:
                 df["date"] = df["date"] + 19800  # +5h30m IST offset
+            # Filter out bad candles: >8% move from previous close is suspect
+            if len(df) > 1 and "close" in df.columns:
+                prev_close = df["close"].shift(1)
+                pct_change = ((df["close"] - prev_close) / prev_close).abs()
+                # Keep first row (NaN) and rows with <8% move
+                valid = pct_change.isna() | (pct_change < 0.08)
+                df = df[valid].reset_index(drop=True)
+
             cols = ["date", "open", "high", "low", "close", "volume"]
             df = df[[c for c in cols if c in df.columns]]
             return df.to_dict(orient="records")
