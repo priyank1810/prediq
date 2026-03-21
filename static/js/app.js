@@ -90,9 +90,6 @@ const App = {
                 if (tab.dataset.tab === 'watchlist') {
                     Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
                 }
-                if (tab.dataset.tab === 'portfolio') {
-                    Lazy.loadAndInit('portfolio').then(() => { const m = Lazy._getGlobal('portfolio'); if (m) { m.load(); m.loadAnalytics(); } }).catch(() => {});
-                }
                 if (tab.dataset.tab === 'insights') {
                     Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
                 }
@@ -1048,7 +1045,7 @@ const App = {
         this._skipHashUpdate = true;
 
         // Activate the correct main tab
-        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'insights'];
+        const validTabs = ['dashboard', 'watchlist', 'insights'];
         if (validTabs.includes(tab)) {
             const tabBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
             if (tabBtn) {
