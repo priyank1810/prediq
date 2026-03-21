@@ -680,9 +680,7 @@ const Signals = {
                 ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-800 text-gray-400">R:R 1:${sig.risk_reward.toFixed(1)}</span>`
                 : '';
 
-            const predPrice = sig.predicted_price != null
-                ? `<div class="text-[10px] text-purple-400 mt-1">AI Price: ₹${sig.predicted_price.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>`
-                : '';
+            const predPrice = '';
 
             const modelBadge = sig.weights && sig.weights.prediction > 0
                 ? '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/50 text-purple-300 ml-1">AI+Tech</span>'
@@ -720,13 +718,13 @@ const Signals = {
                     <div class="text-[10px] text-gray-500">confidence</div>
                     ${predPrice}
                 </div>
-                <div class="border-t border-gray-700/50 pt-2 space-y-0.5">
+                <div class="border-t border-gray-700/50 pt-2 space-y-1">
                     ${sig.direction === 'BEARISH'
-                        ? `${levelRow('Exit', sig.entry, 'text-white')}
-                           ${levelRow('Downside', sig.target, 'text-red-400')}
+                        ? `${levelRow('Exit', sig.entry, 'text-white font-bold text-sm')}
+                           ${levelRow('Downside', sig.target, 'text-red-400 font-bold text-sm')}
                            ${levelRow('Stop Loss', sig.stop_loss, 'text-yellow-400')}`
-                        : `${levelRow('Entry', sig.entry, 'text-white')}
-                           ${levelRow('Target', sig.target, 'text-green-400')}
+                        : `${levelRow('Entry', sig.entry, 'text-white font-bold text-sm')}
+                           ${levelRow('Target', sig.target, 'text-green-400 font-bold text-sm')}
                            ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}`
                     }
                 </div>
