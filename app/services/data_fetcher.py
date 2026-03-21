@@ -136,9 +136,12 @@ class DataFetcher:
         if (df is None or df.empty) and yahoo_breaker.allow_request():
             yf_symbol = yfinance_symbol(symbol)
             df = yahoo_chart(yf_symbol, period=period, interval=interval)
-            if not df.empty:
+            if df is not None and not df.empty:
                 df = df.rename(columns={"date": "datetime"})
                 df["datetime_str"] = pd.to_datetime(df["datetime"]).dt.strftime("%Y-%m-%d %H:%M")
+
+        if df is None:
+            df = pd.DataFrame()
 
         # 3. Append live candles from Angel One when available
         try:
@@ -180,7 +183,9 @@ class DataFetcher:
                 yahoo_breaker.record_failure()
                 df = pd.DataFrame()
 
-        if df is not None and not df.empty:
+        if df is None:
+            df = pd.DataFrame()
+        if not df.empty:
             cache.set(cache_key, df, CACHE_TTL_HISTORY)
         return df
 
