@@ -37,7 +37,6 @@ const Fundamentals = {
         }
 
         panel.innerHTML = `
-            ${this._renderKeyMetrics(data)}
             ${this._renderFinancials(data)}
             ${this._renderQuarterlyResults(data)}
             ${this._renderBalanceSheet(data)}
