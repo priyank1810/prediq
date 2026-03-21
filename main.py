@@ -436,85 +436,45 @@ async def news_alert_scanner():
         await asyncio.sleep(600)  # Run every 10 minutes
 
 
-async def watchlist_trade_scanner():
-    """Auto-compute MTF signals for watchlist stocks and log trade predictions.
-    Runs twice daily (10:30 AM, 2:30 PM IST) to avoid overloading the server.
-    Processes stocks sequentially with 10s delays between each."""
+async def trade_job_enqueuer():
+    """Enqueue trade scan and validation jobs to the worker process.
+    - Trade scan: twice daily (10:30 AM, 2:30 PM IST)
+    - Validation: every 10 minutes during market hours
+    All heavy work runs on the worker, keeping the main app lightweight."""
     await asyncio.sleep(300)  # Let services warm up
 
-    _ran_today = set()  # Track which windows we've run today
+    _ran_today = set()
 
     while True:
         try:
             from app.utils.helpers import is_market_open, now_ist
+            from app.services.job_service import job_service
+
             current = now_ist()
-            hour, minute = current.hour, current.minute
 
-            # Run at 10:30 and 14:30 — two windows per day
-            window = None
-            if hour == 10 and 28 <= minute <= 35:
-                window = f"{current.date()}_morning"
-            elif hour == 14 and 28 <= minute <= 35:
-                window = f"{current.date()}_afternoon"
-
-            if window and window not in _ran_today and is_market_open():
-                _ran_today.add(window)
-                # Clean old entries (keep last 2 days)
-                _ran_today = {w for w in _ran_today if current.date().isoformat() in w}
-
-                # Get watchlist symbols
-                from app.database import SessionLocal
-                from app.models import WatchlistItem
-                db = SessionLocal()
-                try:
-                    symbols = [item.symbol for item in db.query(WatchlistItem.symbol).distinct().all()]
-                finally:
-                    db.close()
-
-                if symbols:
-                    from app.services.signal_service import signal_service
-                    log = logging.getLogger(__name__)
-                    log.info(f"Trade scanner: processing {len(symbols)} watchlist stocks")
-
-                    for i, symbol in enumerate(symbols):
-                        try:
-                            # Sequential + delay to avoid CPU/memory spike
-                            await asyncio.to_thread(
-                                signal_service.get_multi_timeframe_signals, symbol
-                            )
-                            log.debug(f"Trade scanner: {symbol} ({i+1}/{len(symbols)})")
-                        except Exception as e:
-                            log.debug(f"Trade scanner: {symbol} failed: {e}")
-
-                        # 10s delay between stocks — gentle on the server
-                        await asyncio.sleep(10)
-
-                    log.info(f"Trade scanner: completed {len(symbols)} stocks")
-
-        except Exception as e:
-            logging.getLogger(__name__).debug(f"Trade scanner error: {e}")
-
-        await asyncio.sleep(120)  # Check every 2 minutes
-
-
-async def trade_prediction_validator():
-    """Background task: validate open trade predictions every 5 minutes during market hours."""
-    await asyncio.sleep(120)  # Let services warm up
-    while True:
-        try:
-            from app.utils.helpers import is_market_open
             if is_market_open():
-                from app.services.trade_tracker import trade_tracker
-                result = await asyncio.to_thread(trade_tracker.validate_open_signals)
-                if result and result.get("resolved", 0) > 0:
-                    logging.getLogger(__name__).info(
-                        f"Trade validator: checked {result['checked']}, resolved {result['resolved']}"
-                    )
-                    # Learn from resolved trades
-                    await asyncio.to_thread(trade_tracker.learn_from_trades)
+                # Validate open trades every 10 min
+                if not job_service.has_pending("trade_validate"):
+                    job_service.enqueue("trade_validate", {}, priority=0)
+
+                # Trade scan at 10:30 and 14:30
+                window = None
+                if current.hour == 10 and 28 <= current.minute <= 35:
+                    window = f"{current.date()}_morning"
+                elif current.hour == 14 and 28 <= current.minute <= 35:
+                    window = f"{current.date()}_afternoon"
+
+                if window and window not in _ran_today:
+                    if not job_service.has_pending("watchlist_trade_scan"):
+                        job_service.enqueue("watchlist_trade_scan", {}, priority=0)
+                        _ran_today.add(window)
+                        # Clean old entries
+                        _ran_today = {w for w in _ran_today if current.date().isoformat() in w}
+
         except Exception:
             pass
-        await asyncio.sleep(300)  # Every 5 minutes
+
+        await asyncio.sleep(600)  # Check every 10 minutes
 
 
 async def daily_stock_learner():
@@ -659,8 +619,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(news_alert_scanner()),
         asyncio.create_task(live_scanner()),
         asyncio.create_task(daily_stock_learner()),
-        asyncio.create_task(trade_prediction_validator()),
-        asyncio.create_task(watchlist_trade_scanner()),
+        asyncio.create_task(trade_job_enqueuer()),
     ]
     yield
     # Shutdown

@@ -172,6 +172,43 @@ class Worker:
 
         return {"symbols_processed": len(results), "mtf_data": results}
 
+    def handle_watchlist_trade_scan(self, params: dict) -> dict:
+        """Compute MTF signals for all watchlist stocks and log trade predictions.
+        Runs in the worker process to keep the main app lightweight."""
+        from app.models import WatchlistItem
+        import time as _time
+
+        db = SessionLocal()
+        try:
+            symbols = [row.symbol for row in db.query(WatchlistItem.symbol).distinct().all()]
+        finally:
+            db.close()
+
+        if not symbols:
+            return {"symbols_processed": 0}
+
+        logged = 0
+        for sym in symbols:
+            try:
+                # get_multi_timeframe_signals already calls trade_tracker.log_signal internally
+                self.signal_service.get_multi_timeframe_signals(sym)
+                logged += 1
+            except Exception as e:
+                log.debug("Trade scan failed for %s: %s", sym, e)
+
+            # 5s pause between stocks to stay gentle on resources
+            _time.sleep(5)
+
+        return {"symbols_processed": logged, "total": len(symbols)}
+
+    def handle_trade_validate(self, params: dict) -> dict:
+        """Validate open trade predictions and learn from results."""
+        from app.services.trade_tracker import trade_tracker
+        result = trade_tracker.validate_open_signals()
+        if result.get("resolved", 0) > 0:
+            trade_tracker.learn_from_trades()
+        return result
+
     def handle_oi_stream(self, params: dict) -> dict:
         """Compute OI analysis for subscribed symbols."""
         symbols = params.get("symbols", [])
@@ -299,6 +336,8 @@ class Worker:
         "watchlist_signals": "handle_watchlist_signals",
         "mtf_stream": "handle_mtf_stream",
         "oi_stream": "handle_oi_stream",
+        "watchlist_trade_scan": "handle_watchlist_trade_scan",
+        "trade_validate": "handle_trade_validate",
     }
 
     def run(self, once: bool = False):
