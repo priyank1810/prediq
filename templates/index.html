@@ -1319,6 +1319,56 @@
                 </div>
             </div>
 
+            <!-- Trade Prediction Track Record -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-base sm:text-lg font-semibold text-white">Trade Prediction Track Record</h3>
+                    <span id="tradeTrackOpenCount" class="text-xs text-gray-500"></span>
+                </div>
+                <!-- Summary cards -->
+                <div id="tradeTrackSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    <div class="bg-dark-700 rounded-lg p-3 text-center">
+                        <div class="text-[10px] text-gray-500">Win Rate</div>
+                        <div id="tradeWinRate" class="text-xl font-bold text-white">-</div>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-3 text-center">
+                        <div class="text-[10px] text-gray-500">Target Hit</div>
+                        <div id="tradeTargetHits" class="text-xl font-bold text-green-400">-</div>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-3 text-center">
+                        <div class="text-[10px] text-gray-500">Stop Loss Hit</div>
+                        <div id="tradeSLHits" class="text-xl font-bold text-red-400">-</div>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-3 text-center">
+                        <div class="text-[10px] text-gray-500">Avg Win / Loss</div>
+                        <div id="tradeAvgPnl" class="text-sm font-bold text-white">-</div>
+                    </div>
+                </div>
+                <!-- By timeframe -->
+                <div id="tradeByTimeframe" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4"></div>
+                <!-- Recent trades -->
+                <h4 class="text-sm font-medium text-white mb-2">Recent Predictions</h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="text-gray-500 border-b border-gray-700">
+                                <th class="text-left px-2 py-1.5">Symbol</th>
+                                <th class="text-left px-2 py-1.5">TF</th>
+                                <th class="text-center px-2 py-1.5">Dir</th>
+                                <th class="text-right px-2 py-1.5">Entry</th>
+                                <th class="text-right px-2 py-1.5">Target</th>
+                                <th class="text-right px-2 py-1.5">SL</th>
+                                <th class="text-center px-2 py-1.5">Result</th>
+                                <th class="text-right px-2 py-1.5">P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeRecentTable">
+                            <tr><td colspan="8" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Backtest P&L -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <h3 class="text-sm font-semibold text-white mb-2">Backtest P&L Simulation</h3>

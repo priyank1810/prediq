@@ -32,6 +32,7 @@ const Insights = {
             this.loadSmartAlerts(),
             this.loadPredictionLeaderboard(),
             this.loadCorrelation(),
+            this.loadTradeTrackRecord(),
         ]);
     },
 
@@ -1006,5 +1007,102 @@ const Insights = {
         }
 
         container.innerHTML = html;
+    },
+
+    // ─── Trade Prediction Track Record ──────────────────────────
+
+    async loadTradeTrackRecord() {
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/trades`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            this.renderTradeTrackRecord(data);
+        } catch (e) {
+            // Silently fail if no trade data yet
+        }
+    },
+
+    renderTradeTrackRecord(data) {
+        if (!data || data.total === 0) {
+            document.getElementById('tradeRecentTable').innerHTML =
+                '<tr><td colspan="8" class="text-center py-4 text-gray-500">No trade predictions resolved yet. Predictions are tracked automatically from your watchlist.</td></tr>';
+            return;
+        }
+
+        // Summary cards
+        const winRateEl = document.getElementById('tradeWinRate');
+        const wr = data.win_rate || 0;
+        winRateEl.textContent = `${wr}%`;
+        winRateEl.className = `text-xl font-bold ${wr >= 60 ? 'text-green-400' : wr >= 45 ? 'text-yellow-400' : 'text-red-400'}`;
+
+        document.getElementById('tradeTargetHits').textContent = data.target_hit || 0;
+        document.getElementById('tradeSLHits').textContent = data.sl_hit || 0;
+
+        const avgPnlEl = document.getElementById('tradeAvgPnl');
+        avgPnlEl.innerHTML = `<span class="text-green-400">+${data.avg_win_pct || 0}%</span> / <span class="text-red-400">${data.avg_loss_pct || 0}%</span>`;
+
+        const openEl = document.getElementById('tradeTrackOpenCount');
+        if (openEl) openEl.textContent = `${data.open_trades || 0} open predictions | ${data.total} resolved`;
+
+        // By timeframe
+        const tfEl = document.getElementById('tradeByTimeframe');
+        const tfLabels = { intraday: 'Intraday', short_term: '1 Week', long_term: '3 Months' };
+        const bt = data.by_timeframe || {};
+
+        tfEl.innerHTML = Object.entries(tfLabels).map(([key, label]) => {
+            const tf = bt[key];
+            if (!tf) return `<div class="bg-dark-700 rounded-lg p-3 text-center">
+                <div class="text-xs text-gray-500 mb-1">${label}</div>
+                <div class="text-sm text-gray-600">No data</div>
+            </div>`;
+
+            const wrColor = tf.win_rate >= 60 ? 'text-green-400' : tf.win_rate >= 45 ? 'text-yellow-400' : 'text-red-400';
+            return `<div class="bg-dark-700 rounded-lg p-3 text-center">
+                <div class="text-xs text-gray-500 mb-1">${label}</div>
+                <div class="text-lg font-bold ${wrColor}">${tf.win_rate}%</div>
+                <div class="text-[10px] text-gray-500 mt-1">${tf.target_hit} wins · ${tf.sl_hit} losses · ${tf.expired} expired</div>
+                <div class="text-[10px] text-gray-600">${tf.total} trades</div>
+            </div>`;
+        }).join('');
+
+        // Recent trades table
+        const trades = data.recent_trades || [];
+        const tbody = document.getElementById('tradeRecentTable');
+
+        if (trades.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">No resolved trades yet</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = trades.map(t => {
+            const dirColor = t.direction === 'BULLISH' ? 'text-green-400' : 'text-red-400';
+            const dirArrow = t.direction === 'BULLISH' ? '▲' : '▼';
+
+            let statusBadge = '';
+            if (t.status === 'target_hit') {
+                statusBadge = '<span class="px-1.5 py-0.5 rounded bg-green-900 text-green-400">Target ✓</span>';
+            } else if (t.status === 'sl_hit') {
+                statusBadge = '<span class="px-1.5 py-0.5 rounded bg-red-900 text-red-400">SL Hit ✗</span>';
+            } else {
+                const expPnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
+                statusBadge = `<span class="px-1.5 py-0.5 rounded bg-gray-800 ${expPnlColor}">Expired</span>`;
+            }
+
+            const pnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
+            const pnlSign = (t.outcome_pct || 0) >= 0 ? '+' : '';
+
+            const tfShort = { intraday: 'Intra', short_term: '1W', long_term: '3M' };
+
+            return `<tr class="border-b border-gray-800 hover:bg-dark-700/50">
+                <td class="px-2 py-1.5 font-medium text-white cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
+                <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
+                <td class="px-2 py-1.5 text-center ${dirColor}">${dirArrow}</td>
+                <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry ? t.entry.toFixed(2) : '-'}</td>
+                <td class="px-2 py-1.5 text-right text-gray-300">₹${t.target ? t.target.toFixed(2) : '-'}</td>
+                <td class="px-2 py-1.5 text-right text-gray-300">₹${t.stop_loss ? t.stop_loss.toFixed(2) : '-'}</td>
+                <td class="px-2 py-1.5 text-center">${statusBadge}</td>
+                <td class="px-2 py-1.5 text-right ${pnlColor} font-medium">${pnlSign}${(t.outcome_pct || 0).toFixed(2)}%</td>
+            </tr>`;
+        }).join('');
     }
 };
