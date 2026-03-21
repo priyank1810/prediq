@@ -72,8 +72,13 @@ const Signals = {
     },
 
     displaySignal(data) {
-        document.getElementById('signalLoading').classList.add('hidden');
-        document.getElementById('signalResults').classList.remove('hidden');
+        const loadingEl = document.getElementById('signalLoading');
+        const resultsEl = document.getElementById('signalResults');
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (resultsEl) resultsEl.classList.remove('hidden');
+
+        // Populate Technical tab signal breakdown
+        this._renderTechSignal(data);
 
         // Market closed notice
         const closedNotice = document.getElementById('marketClosedNotice');
@@ -740,16 +745,20 @@ const Signals = {
     },
 
     displaySignalHistory(history) {
-        const el = document.getElementById('signalHistoryTable');
-        if (!el) return;
+        const tables = [
+            document.getElementById('signalHistoryTable'),
+            document.getElementById('techSignalHistoryTable'),
+        ].filter(Boolean);
+        if (tables.length === 0) return;
         if (!history || history.length === 0) {
-            el.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-4">No signal history yet</td></tr>';
+            const empty = '<tr><td colspan="7" class="text-center text-gray-500 py-4">No signal history yet</td></tr>';
+            tables.forEach(t => { t.innerHTML = empty; });
             return;
         }
         const checkIcon = (val) => val === true ? '<span class="text-green-400">&#10003;</span>' :
                            (val === false ? '<span class="text-red-400">&#10007;</span>' :
                            '<span class="text-gray-500">&#8987;</span>');
-        el.innerHTML = history.map(h => {
+        const html = history.map(h => {
             const c = h.direction === 'BULLISH' ? 'text-green-400' :
                       (h.direction === 'BEARISH' ? 'text-red-400' : 'text-yellow-400');
             const time = h.created_at ? new Date(h.created_at + '+05:30').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
@@ -766,6 +775,89 @@ const Signals = {
                 </tr>
             `;
         }).join('');
+        tables.forEach(t => { t.innerHTML = html; });
+    },
+
+    // ─── Technical Tab Signal Breakdown ──────────────────────────
+
+    _renderTechSignal(data) {
+        const panel = document.getElementById('techSignalPanel');
+        if (!panel) return;
+
+        // Direction
+        const arrowEl = document.getElementById('techSignalArrow');
+        const dirEl = document.getElementById('techSignalDir');
+        const confEl = document.getElementById('techSignalConf');
+
+        if (arrowEl && dirEl) {
+            if (data.direction === 'BULLISH') {
+                arrowEl.innerHTML = '&#9650;'; arrowEl.className = 'text-3xl text-green-400';
+                dirEl.textContent = 'BULLISH'; dirEl.className = 'text-lg font-bold text-green-400';
+            } else if (data.direction === 'BEARISH') {
+                arrowEl.innerHTML = '&#9660;'; arrowEl.className = 'text-3xl text-red-400';
+                dirEl.textContent = 'BEARISH'; dirEl.className = 'text-lg font-bold text-red-400';
+            } else {
+                arrowEl.innerHTML = '&#9654;'; arrowEl.className = 'text-3xl text-yellow-400';
+                dirEl.textContent = 'NEUTRAL'; dirEl.className = 'text-lg font-bold text-yellow-400';
+            }
+        }
+        if (confEl) confEl.textContent = `${data.confidence}% conf`;
+
+        // Timestamp
+        const tsEl = document.getElementById('techSignalTimestamp');
+        if (tsEl && data.timestamp) {
+            const ts = new Date(data.timestamp);
+            tsEl.textContent = ts.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) + ' IST';
+        }
+
+        // Market badge
+        const badge = document.getElementById('techMarketBadge');
+        if (badge) {
+            if (data.market_open) {
+                badge.textContent = 'LIVE'; badge.className = 'text-xs px-2 py-0.5 rounded-full bg-green-900 text-green-400';
+            } else {
+                badge.textContent = 'CLOSED'; badge.className = 'text-xs px-2 py-0.5 rounded-full bg-red-900 text-red-400';
+            }
+        }
+
+        // Score bars
+        const renderBar = (barId, valId, score, weight) => {
+            const bar = document.getElementById(barId);
+            const val = document.getElementById(valId);
+            if (!bar || !val) return;
+            score = score || 0; weight = weight || 0;
+            const abs = Math.min(100, Math.abs(score));
+            const color = score > 0 ? '#00c853' : (score < 0 ? '#ff1744' : '#6b7280');
+            if (score >= 0) {
+                bar.style.background = `linear-gradient(to right, #1e2a4a 50%, ${color} 50%, ${color} ${50 + abs / 2}%, #1e2a4a ${50 + abs / 2}%)`;
+            } else {
+                bar.style.background = `linear-gradient(to right, #1e2a4a ${50 - abs / 2}%, ${color} ${50 - abs / 2}%, ${color} 50%, #1e2a4a 50%)`;
+            }
+            const sign = score > 0 ? '+' : '';
+            val.textContent = `${sign}${score.toFixed(1)} (${(weight * 100).toFixed(0)}%)`;
+            val.className = `text-xs font-mono ${score > 0 ? 'text-green-400' : (score < 0 ? 'text-red-400' : 'text-gray-400')}`;
+        };
+
+        renderBar('techScoreBar', 'techScoreVal', data.technical?.score, data.technical?.weight);
+        renderBar('techSentBar', 'techSentVal', data.sentiment?.score, data.sentiment?.weight);
+        renderBar('techGlobBar', 'techGlobVal', data.global_market?.score, data.global_market?.weight);
+
+        // Technical indicator details (RSI, Vol, BB, VWAP, MA)
+        const detailsEl = document.getElementById('techIndicatorDetails');
+        if (detailsEl && data.technical?.details) {
+            const d = data.technical.details;
+            const maCrossColor = d.ma_cross === 'bullish' ? 'text-green-400' : (d.ma_cross === 'bearish' ? 'text-red-400' : 'text-gray-500');
+            const volColor = d.volume_ratio > 1.5 ? 'text-yellow-400' : 'text-gray-500';
+            detailsEl.innerHTML = `
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="text-gray-500">RSI: <span class="text-white">${d.rsi || '-'}</span></span>
+                    <span class="${volColor}">Vol: ${d.volume_ratio ? d.volume_ratio.toFixed(1) + 'x' : '-'}</span>
+                    <span class="text-gray-500">BB: ${d.bb_position != null ? (d.bb_position * 100).toFixed(0) + '%' : '-'}</span>
+                    <span class="text-gray-500">VWAP: ₹${d.vwap || '-'}</span>
+                    <span class="${maCrossColor}">MA: ${d.ma_cross || '-'}</span>
+                </div>
+            `;
+        }
     },
 
     // ─── Overview Targets & Timeframe ─────────────────────────────
