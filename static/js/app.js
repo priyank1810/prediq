@@ -181,9 +181,6 @@ const App = {
                 if (tab.dataset.stockTab === 'mtf' && this.currentSymbol) {
                     Lazy.loadAndInit('mtf').then(() => { const m = Lazy._getGlobal('mtf'); if (m) m.load(this.currentSymbol); }).catch(() => {});
                 }
-                if (tab.dataset.stockTab === 'options' && this.currentSymbol) {
-                    Lazy.loadAndInit('options').then(() => { const m = Lazy._getGlobal('options'); if (m) m.loadChain(this.currentSymbol); }).catch(() => {});
-                }
                 if (tab.dataset.stockTab === 'ailearning' && this.currentSymbol) {
                     const _sig = Lazy._getGlobal('signals');
                     if (_sig) _sig.loadLearningProfile(this.currentSymbol);

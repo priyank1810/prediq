@@ -200,7 +200,6 @@
                     <button class="stock-tab" data-stock-tab="fundamentals" role="tab" aria-selected="false" aria-controls="stockTab-fundamentals">Fundamentals</button>
                     <button class="stock-tab" data-stock-tab="news" role="tab" aria-selected="false" aria-controls="stockTab-news">News & Events</button>
                     <button class="stock-tab" data-stock-tab="predictions" role="tab" aria-selected="false" aria-controls="stockTab-predictions">Predictions</button>
-                    <button class="stock-tab" data-stock-tab="options" role="tab" aria-selected="false" aria-controls="stockTab-options">Options</button>
                     <button class="stock-tab" data-stock-tab="ailearning" role="tab" aria-selected="false" aria-controls="stockTab-ailearning">AI Learning</button>
                 </nav>
 
@@ -753,51 +752,6 @@
                     </div>
                 </div>
 
-                <!-- ═══════ OPTIONS TAB ═══════ -->
-                <div id="stockTab-options" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-options">
-                    <div id="optionsPanel" class="bg-dark-800 rounded-lg p-3 sm:p-4">
-                        <!-- Header row: title + expiry selector + max pain badge -->
-                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-                            <h3 class="text-base sm:text-lg font-semibold text-white">Options Chain</h3>
-                            <div class="flex items-center gap-3">
-                                <div id="optionsMaxPainBadge" class="hidden text-xs px-2 py-1 rounded bg-purple-900/40 border border-purple-700/50 text-purple-300 font-medium"></div>
-                                <select id="optionsExpirySelect" class="bg-dark-700 border border-gray-600 text-gray-300 text-xs rounded px-2 py-1 focus:outline-none focus:border-accent-blue">
-                                    <option value="">Loading...</option>
-                                </select>
-                            </div>
-                        </div>
-                        <!-- Summary cards -->
-                        <div id="optionsSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-                            <div class="bg-dark-700 rounded p-2 text-center">
-                                <div class="text-[10px] text-gray-400">Total Call OI</div>
-                                <div id="optTotalCallOI" class="text-sm font-bold text-red-400">-</div>
-                            </div>
-                            <div class="bg-dark-700 rounded p-2 text-center">
-                                <div class="text-[10px] text-gray-400">Total Put OI</div>
-                                <div id="optTotalPutOI" class="text-sm font-bold text-green-400">-</div>
-                            </div>
-                            <div class="bg-dark-700 rounded p-2 text-center">
-                                <div class="text-[10px] text-gray-400">PCR</div>
-                                <div id="optPCR" class="text-sm font-bold text-white">-</div>
-                            </div>
-                            <div class="bg-dark-700 rounded p-2 text-center">
-                                <div class="text-[10px] text-gray-400">Max Pain</div>
-                                <div id="optMaxPain" class="text-sm font-bold text-purple-400">-</div>
-                            </div>
-                        </div>
-                        <!-- Loading spinner -->
-                        <div id="optionsLoading" class="hidden text-center py-8">
-                            <div class="animate-spin w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto"></div>
-                            <p class="text-gray-400 text-sm mt-2">Loading options chain...</p>
-                        </div>
-                        <!-- Chain table -->
-                        <div id="optionsChainTable" class="overflow-x-auto"></div>
-                        <!-- Empty state -->
-                        <div id="optionsEmpty" class="hidden text-center py-8 text-gray-500 text-sm">
-                            Options data not available for this symbol. Options are typically available for F&amp;O stocks and indices (NIFTY, BANKNIFTY).
-                        </div>
-                    </div>
-                </div>
 
                 <!-- ═══════ AI LEARNING TAB ═══════ -->
                 <div id="stockTab-ailearning" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-ailearning">
