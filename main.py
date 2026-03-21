@@ -457,18 +457,22 @@ async def trade_job_enqueuer():
                 if not job_service.has_pending("trade_validate"):
                     job_service.enqueue("trade_validate", {}, priority=0)
 
-                # Trade scan at 10:30 and 14:30
+                # Short-term scan: 3x daily (10:00, 12:30, 14:30)
+                # Full scan (includes long-term): 1x daily (10:00)
                 window = None
-                if current.hour == 10 and 28 <= current.minute <= 35:
+                scan_type = "short"
+                if current.hour == 10 and 0 <= current.minute <= 10:
                     window = f"{current.date()}_morning"
-                elif current.hour == 14 and 28 <= current.minute <= 35:
+                    scan_type = "full"  # Morning scan includes long-term
+                elif current.hour == 12 and 28 <= current.minute <= 38:
+                    window = f"{current.date()}_midday"
+                elif current.hour == 14 and 28 <= current.minute <= 38:
                     window = f"{current.date()}_afternoon"
 
                 if window and window not in _ran_today:
                     if not job_service.has_pending("watchlist_trade_scan"):
-                        job_service.enqueue("watchlist_trade_scan", {}, priority=0)
+                        job_service.enqueue("watchlist_trade_scan", {"scan_type": scan_type}, priority=0)
                         _ran_today.add(window)
-                        # Clean old entries
                         _ran_today = {w for w in _ran_today if current.date().isoformat() in w}
 
         except Exception:

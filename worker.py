@@ -174,9 +174,12 @@ class Worker:
 
     def handle_watchlist_trade_scan(self, params: dict) -> dict:
         """Compute MTF signals for all watchlist stocks and log trade predictions.
-        Runs in the worker process to keep the main app lightweight."""
+        scan_type: "full" (all timeframes) or "short" (intraday + short_term only)."""
         from app.models import WatchlistItem
+        from app.services.trade_tracker import trade_tracker
         import time as _time
+
+        scan_type = params.get("scan_type", "full")
 
         db = SessionLocal()
         try:
@@ -190,8 +193,17 @@ class Worker:
         logged = 0
         for sym in symbols:
             try:
-                # get_multi_timeframe_signals already calls trade_tracker.log_signal internally
-                self.signal_service.get_multi_timeframe_signals(sym)
+                result = self.signal_service.get_multi_timeframe_signals(sym)
+                current_price = result.get("current_price", 0)
+
+                if scan_type == "short":
+                    # Only log intraday and short_term, skip long_term
+                    for tf_key in ("intraday", "short_term"):
+                        sig = result.get(tf_key)
+                        if sig:
+                            trade_tracker.log_signal(sym, tf_key, sig, current_price)
+                # "full" scan logs all via the internal call in get_multi_timeframe_signals
+
                 logged += 1
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
@@ -199,7 +211,7 @@ class Worker:
             # 30s pause between stocks to stay gentle on resources
             _time.sleep(30)
 
-        return {"symbols_processed": logged, "total": len(symbols)}
+        return {"symbols_processed": logged, "total": len(symbols), "scan_type": scan_type}
 
     def handle_trade_validate(self, params: dict) -> dict:
         """Validate open trade predictions and learn from results."""
