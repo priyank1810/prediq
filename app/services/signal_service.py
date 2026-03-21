@@ -831,6 +831,19 @@ class SignalService:
         else:
             direction = "NEUTRAL"
 
+        # Override: if AI predicted price strongly disagrees with composite direction,
+        # and model confidence is high, trust the prediction over technical noise.
+        if predicted_price and current_price > 0 and pred_confidence and pred_confidence >= 80:
+            price_change_pct = ((predicted_price - current_price) / current_price) * 100
+            if price_change_pct > 1.0 and direction == "BEARISH":
+                # AI predicts price will rise significantly but composite says bearish
+                direction = "BULLISH"
+                composite = abs(composite)  # Flip to positive
+            elif price_change_pct < -1.0 and direction == "BULLISH":
+                # AI predicts price will fall significantly but composite says bullish
+                direction = "BEARISH"
+                composite = -abs(composite)
+
         # Confidence: blend composite magnitude with model confidence
         base_confidence = abs(composite)
         if pred_confidence is not None and w_pred > 0:
