@@ -107,6 +107,47 @@ class SignalLog(Base):
     created_at = Column(DateTime, default=now_ist, index=True)
 
 
+class TradeSignalLog(Base):
+    """Tracks every entry/target/stop-loss prediction for validation and learning."""
+    __tablename__ = "trade_signal_logs"
+    __table_args__ = (
+        Index("ix_trade_signal_logs_symbol", "symbol"),
+        Index("ix_trade_signal_logs_status", "status"),
+        Index("ix_trade_signal_logs_expires", "expires_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, nullable=False)
+    timeframe = Column(String, nullable=False)  # "intraday", "short_term", "long_term"
+    direction = Column(String, nullable=False)  # "BULLISH", "BEARISH"
+    confidence = Column(Float, nullable=False)
+
+    # Price levels at signal time
+    current_price = Column(Float, nullable=False)
+    predicted_price = Column(Float, nullable=True)  # AI model prediction
+    entry = Column(Float, nullable=True)
+    target = Column(Float, nullable=True)
+    stop_loss = Column(Float, nullable=True)
+    risk_reward = Column(Float, nullable=True)
+
+    # Model info
+    model_confidence = Column(Float, nullable=True)
+    regime = Column(String, nullable=True)
+    volume_conviction = Column(String, nullable=True)
+
+    # Outcome tracking
+    status = Column(String, default="open")  # "open", "target_hit", "sl_hit", "expired"
+    outcome_price = Column(Float, nullable=True)  # price when resolved
+    outcome_pct = Column(Float, nullable=True)  # % P&L
+    highest_price = Column(Float, nullable=True)  # highest price seen during window
+    lowest_price = Column(Float, nullable=True)  # lowest price seen during window
+    resolved_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=now_ist, index=True)
+    expires_at = Column(DateTime, nullable=True)  # when the signal window closes
+
+
 class SmartAlert(Base):
     __tablename__ = "smart_alerts"
 

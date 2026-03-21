@@ -681,6 +681,16 @@ class SignalService:
             prediction=pred_results.get("long_term", {}),
         )
 
+        # Log trade predictions for tracking
+        try:
+            from app.services.trade_tracker import trade_tracker
+            for tf_key, tf_signal in [("intraday", intraday_signal),
+                                       ("short_term", short_term_signal),
+                                       ("long_term", long_term_signal)]:
+                trade_tracker.log_signal(symbol, tf_key, tf_signal, current_price)
+        except Exception as e:
+            logger.debug(f"Trade logging failed: {e}")
+
         return {
             "symbol": symbol,
             "current_price": round(current_price, 2),

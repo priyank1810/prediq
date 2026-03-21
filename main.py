@@ -436,6 +436,26 @@ async def news_alert_scanner():
         await asyncio.sleep(600)  # Run every 10 minutes
 
 
+async def trade_prediction_validator():
+    """Background task: validate open trade predictions every 5 minutes during market hours."""
+    await asyncio.sleep(120)  # Let services warm up
+    while True:
+        try:
+            from app.utils.helpers import is_market_open
+            if is_market_open():
+                from app.services.trade_tracker import trade_tracker
+                result = await asyncio.to_thread(trade_tracker.validate_open_signals)
+                if result and result.get("resolved", 0) > 0:
+                    logging.getLogger(__name__).info(
+                        f"Trade validator: checked {result['checked']}, resolved {result['resolved']}"
+                    )
+                    # Learn from resolved trades
+                    await asyncio.to_thread(trade_tracker.learn_from_trades)
+        except Exception:
+            pass
+        await asyncio.sleep(300)  # Every 5 minutes
+
+
 async def daily_stock_learner():
     """Daily learning task: rebuild per-stock profiles after market close.
     Analyzes signal accuracy for each stock and learns optimal weights/thresholds."""
@@ -578,6 +598,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(news_alert_scanner()),
         asyncio.create_task(live_scanner()),
         asyncio.create_task(daily_stock_learner()),
+        asyncio.create_task(trade_prediction_validator()),
     ]
     yield
     # Shutdown

@@ -417,6 +417,62 @@ def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
         db.close()
 
 
+@router.get("/stats/trades")
+def trade_prediction_stats(symbol: str = Query(None)):
+    """Get trade prediction accuracy stats (target hit vs stop-loss hit vs expired)."""
+    try:
+        from app.services.trade_tracker import trade_tracker
+        return trade_tracker.get_accuracy_stats(symbol=symbol.upper() if symbol else None)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stats/trades/open")
+def open_trade_predictions():
+    """Get all currently open trade predictions being tracked."""
+    db = SessionLocal()
+    try:
+        from app.models import TradeSignalLog
+        open_trades = (
+            db.query(TradeSignalLog)
+            .filter(TradeSignalLog.status == "open")
+            .order_by(TradeSignalLog.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        return [{
+            "id": t.id,
+            "symbol": t.symbol,
+            "timeframe": t.timeframe,
+            "direction": t.direction,
+            "confidence": t.confidence,
+            "current_price": t.current_price,
+            "predicted_price": t.predicted_price,
+            "entry": t.entry,
+            "target": t.target,
+            "stop_loss": t.stop_loss,
+            "risk_reward": t.risk_reward,
+            "highest_price": t.highest_price,
+            "lowest_price": t.lowest_price,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "expires_at": t.expires_at.isoformat() if t.expires_at else None,
+        } for t in open_trades]
+    finally:
+        db.close()
+
+
+@router.post("/stats/trades/validate")
+def manually_validate_trades():
+    """Manually trigger validation of open trade predictions."""
+    try:
+        from app.services.trade_tracker import trade_tracker
+        result = trade_tracker.validate_open_signals()
+        learn_result = trade_tracker.learn_from_trades()
+        return {**result, "learning": learn_result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/stats/learning/rebuild")
 def rebuild_all_learning_profiles():
     """Manually trigger a rebuild of all stock learning profiles."""
