@@ -53,6 +53,7 @@ const Signals = {
             // Load multi-timeframe signals in background (non-blocking)
             API.getMultiTimeframeSignals(symbol).then(mtfData => {
                 this.displayMultiTimeframeSignals(mtfData);
+                this.displayOverviewTargets(mtfData);
             }).catch(() => {});
         } catch (e) {
             loading.classList.add('hidden');
@@ -738,6 +739,76 @@ const Signals = {
                 </tr>
             `;
         }).join('');
+    },
+
+    // ─── Overview Targets & Timeframe ─────────────────────────────
+
+    displayOverviewTargets(mtfData) {
+        const targetPanel = document.getElementById('signalTargetInfo');
+        const tfBadge = document.getElementById('signalBestTimeframe');
+        if (!targetPanel || !mtfData) return;
+
+        // Pick the best signal (highest confidence non-neutral)
+        const signals = [
+            { key: 'intraday', label: 'Intraday', data: mtfData.intraday },
+            { key: 'short_term', label: '1 Week', data: mtfData.short_term },
+            { key: 'long_term', label: '3 Months', data: mtfData.long_term },
+        ].filter(s => s.data && s.data.direction !== 'NEUTRAL');
+
+        // Sort by confidence descending
+        signals.sort((a, b) => (b.data.confidence || 0) - (a.data.confidence || 0));
+
+        const best = signals[0];
+        if (!best) {
+            targetPanel.classList.add('hidden');
+            if (tfBadge) tfBadge.classList.add('hidden');
+            return;
+        }
+
+        const sig = best.data;
+        const currentPrice = mtfData.current_price;
+
+        // AI Price
+        const aiPriceEl = document.getElementById('signalAIPrice');
+        if (sig.predicted_price) {
+            const pctChange = currentPrice > 0 ? ((sig.predicted_price - currentPrice) / currentPrice * 100).toFixed(1) : 0;
+            const sign = pctChange >= 0 ? '+' : '';
+            const color = pctChange >= 0 ? 'text-green-400' : 'text-red-400';
+            aiPriceEl.innerHTML = `AI Target: <span class="${color}">₹${sig.predicted_price.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span> <span class="text-xs ${color}">(${sign}${pctChange}%)</span>`;
+        } else {
+            aiPriceEl.textContent = '';
+        }
+
+        // Target / Entry / SL
+        const targetEl = document.getElementById('signalTarget');
+        const slEl = document.getElementById('signalStopLoss');
+        const rrEl = document.getElementById('signalRR');
+
+        if (sig.direction === 'BULLISH') {
+            targetEl.innerHTML = sig.entry ? `Entry: ₹${sig.entry.toFixed(2)} → Target: ₹${sig.target ? sig.target.toFixed(2) : '-'}` : '';
+        } else {
+            targetEl.innerHTML = sig.target ? `Downside: ₹${sig.target.toFixed(2)}` : '';
+        }
+        slEl.innerHTML = sig.stop_loss ? `Stop Loss: ₹${sig.stop_loss.toFixed(2)}` : '';
+        rrEl.textContent = sig.risk_reward ? `R:R ${sig.risk_reward}` : '';
+
+        targetPanel.classList.remove('hidden');
+
+        // Best timeframe badge
+        if (tfBadge) {
+            // Also show all timeframe directions
+            const tfSummary = ['intraday', 'short_term', 'long_term'].map(key => {
+                const s = mtfData[key];
+                if (!s) return '';
+                const labels = { intraday: 'Intra', short_term: '1W', long_term: '3M' };
+                const color = s.direction === 'BULLISH' ? 'text-green-400' : (s.direction === 'BEARISH' ? 'text-red-400' : 'text-gray-500');
+                const arrow = s.direction === 'BULLISH' ? '▲' : (s.direction === 'BEARISH' ? '▼' : '▶');
+                return `<span class="${color} text-[10px]">${labels[key]} ${arrow}</span>`;
+            }).filter(Boolean).join(' <span class="text-gray-700">|</span> ');
+
+            tfBadge.innerHTML = `<div class="flex items-center justify-center gap-1 flex-wrap">${tfSummary}</div>`;
+            tfBadge.classList.remove('hidden');
+        }
     },
 
     // ─── AI Summary ────────────────────────────────────────────────
