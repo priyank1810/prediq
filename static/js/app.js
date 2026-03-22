@@ -34,7 +34,7 @@ const App = {
 
         this.loadMarketStatus();
         this.loadDataSource();
-        this.loadMarketOverview();
+        this._dashboardLoaded = false;
 
         // Back to Overview button
         const btnBack = document.getElementById('btnBackToOverview');
@@ -86,6 +86,10 @@ const App = {
                 // Update URL hash
                 this._updateHash(tab.dataset.tab);
 
+                if (tab.dataset.tab === 'dashboard' && !this._dashboardLoaded) {
+                    this._dashboardLoaded = true;
+                    this.loadMarketOverview();
+                }
                 if (tab.dataset.tab === 'watchlist') {
                     Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
                 }
@@ -1025,7 +1029,14 @@ const App = {
 
     _handleHashChange() {
         const hash = location.hash.replace(/^#/, '');
-        if (!hash) return; // No hash = default dashboard, already loaded
+        if (!hash) {
+            // No hash = default dashboard
+            if (!this._dashboardLoaded) {
+                this._dashboardLoaded = true;
+                this.loadMarketOverview();
+            }
+            return;
+        }
 
         const parts = hash.split('/');
         const tab = parts[0];
@@ -1051,8 +1062,11 @@ const App = {
                 if (tabContent) tabContent.classList.remove('hidden');
 
                 // Trigger lazy loading for the tab
+                if (tab === 'dashboard' && !this._dashboardLoaded) {
+                    this._dashboardLoaded = true;
+                    this.loadMarketOverview();
+                }
                 if (tab === 'watchlist') Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
-                if (tab === 'portfolio') Lazy.loadAndInit('portfolio').then(() => { const m = Lazy._getGlobal('portfolio'); if (m) { m.load(); m.loadAnalytics(); } }).catch(() => {});
                 if (tab === 'insights') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
             }
         }
