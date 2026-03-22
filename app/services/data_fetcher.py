@@ -105,8 +105,15 @@ class DataFetcher:
                 angel_breaker.record_failure()
                 logger.debug(f"Angel One batch failed: {e}")
 
-        # Fetch remaining symbols concurrently (yfinance fallback)
+        # Check cache for missing symbols before fetching
         missing = [s for s in symbols if s not in results]
+        for sym in list(missing):
+            cached = cache.get(f"quote:{sym}")
+            if cached:
+                results[sym] = cached
+                missing.remove(sym)
+
+        # Fetch remaining concurrently with 8s timeout per stock
         if missing:
             from concurrent.futures import ThreadPoolExecutor, as_completed
             def _fetch_one(sym):
@@ -116,10 +123,13 @@ class DataFetcher:
                     return sym, None
             with ThreadPoolExecutor(max_workers=min(len(missing), 5)) as pool:
                 futures = {pool.submit(_fetch_one, s): s for s in missing}
-                for fut in as_completed(futures):
-                    sym, quote = fut.result()
-                    if quote:
-                        results[sym] = quote
+                for fut in as_completed(futures, timeout=8):
+                    try:
+                        sym, quote = fut.result(timeout=1)
+                        if quote:
+                            results[sym] = quote
+                    except Exception:
+                        pass
 
         return [results.get(s, {"symbol": s, "ltp": 0, "change": 0, "pct_change": 0}) for s in symbols]
 

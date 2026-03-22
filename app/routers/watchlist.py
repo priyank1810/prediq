@@ -79,7 +79,7 @@ def watchlist_overview(db: Session = Depends(get_db), user=Depends(get_optional_
 
     symbols = [item.symbol for item in items]
 
-    # Server-side cache: avoid re-fetching quotes within 10s
+    # Server-side cache: avoid re-fetching quotes within 60s
     cache_key = f"watchlist_overview:{','.join(sorted(symbols))}"
     cached = cache.get(cache_key)
     if cached is not None:
@@ -128,5 +128,5 @@ def watchlist_overview(db: Session = Depends(get_db), user=Depends(get_optional_
             "signal_confidence": latest_signal.confidence if latest_signal else None,
         })
 
-    cache.set(cache_key, results, 10)  # Cache for 10 seconds
+    cache.set(cache_key, results, 60)  # Cache for 60 seconds
     return results
