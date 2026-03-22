@@ -14,7 +14,7 @@ const API = {
         '/history': 60000,              // history: 60s
         '/api/fii-dii/': 120000,        // FII/DII: 2min (changes infrequently)
         '/api/sectors/': 120000,        // sectors: 2min (changes infrequently)
-        '/api/watchlist/overview': 15000, // watchlist overview: 15s
+        '/api/watchlist/overview': 60000, // watchlist overview: 60s (cached until changed)
     },
     _cacheMaxEntries: 200,
 

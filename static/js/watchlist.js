@@ -6,6 +6,7 @@ const Watchlist = {
     _searchTimer: null,
     _searchAbort: null,
     _lastLoadTime: 0,
+    _dirty: true,
     _dragSrcSymbol: null,
 
     init() {
@@ -86,10 +87,11 @@ const Watchlist = {
     },
 
     async load(force = false) {
-        // Skip if data is fresh (loaded within last 15s) unless forced
-        if (!force && this._items.length > 0 && Date.now() - this._lastLoadTime < 15000) {
+        // Skip if already loaded unless forced (add/remove invalidates via _dirty flag)
+        if (!force && !this._dirty && this._items.length > 0) {
             return;
         }
+        this._dirty = false;
         // Show shimmer while loading
         if (this._items.length === 0) {
             Shimmer.show('watchlistCards', 'grid', 8);
