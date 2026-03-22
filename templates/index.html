@@ -293,6 +293,31 @@
                         <div id="aiEarningsInsight" class="mt-3"></div>
                     </div>
 
+                    <!-- AI Accuracy Summary for this stock -->
+                    <div id="stockAccuracyPanel" class="hidden bg-dark-800 rounded-lg p-3 sm:p-4 mt-3">
+                        <h4 class="text-sm font-semibold text-white mb-3">AI Track Record</h4>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                                <div class="text-[10px] text-gray-500 mb-0.5">Prediction Accuracy</div>
+                                <div id="stockPredAccuracy" class="text-lg font-bold text-white">-</div>
+                                <div id="stockPredCount" class="text-[10px] text-gray-500"></div>
+                            </div>
+                            <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                                <div class="text-[10px] text-gray-500 mb-0.5">Avg Error (MAPE)</div>
+                                <div id="stockPredMAPE" class="text-lg font-bold text-white">-</div>
+                            </div>
+                            <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                                <div class="text-[10px] text-gray-500 mb-0.5">Trade Win Rate</div>
+                                <div id="stockTradeWinRate" class="text-lg font-bold text-white">-</div>
+                                <div id="stockTradeCount" class="text-[10px] text-gray-500"></div>
+                            </div>
+                            <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                                <div class="text-[10px] text-gray-500 mb-0.5">Avg P&L</div>
+                                <div id="stockTradeAvgPnl" class="text-lg font-bold text-white">-</div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
 

@@ -194,9 +194,12 @@ const Signals = {
         // Stock learning insight badge
         this.renderLearningBadge(data.stock_learning);
 
-        // Load AI summary in background
+        // Load AI summary and accuracy in background
         const summarySymbol = data.symbol || (typeof App !== 'undefined' ? App.currentSymbol : null);
-        if (summarySymbol) this.loadAISummary(summarySymbol);
+        if (summarySymbol) {
+            this.loadAISummary(summarySymbol);
+            this.loadStockAccuracy(summarySymbol);
+        }
 
         // Intraday chart
         if (data.intraday_candles && data.intraday_candles.length > 0) {
@@ -1007,6 +1010,75 @@ const Signals = {
                 `;
             } else {
                 earningsEl.innerHTML = '';
+            }
+        } catch (e) {
+            panel.classList.add('hidden');
+        }
+    },
+
+    // ─── Stock Accuracy Summary ────────────────────────────────────
+
+    async loadStockAccuracy(symbol) {
+        const panel = document.getElementById('stockAccuracyPanel');
+        if (!panel) return;
+
+        try {
+            // Fetch prediction accuracy and trade accuracy in parallel
+            const [predResp, tradeResp] = await Promise.all([
+                fetch(`${API.baseUrl}/api/signals/stats/prediction-leaderboard`).catch(() => null),
+                fetch(`${API.baseUrl}/api/signals/stats/trades?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
+            ]);
+
+            let hasPredData = false;
+            let hasTradeData = false;
+
+            // Prediction accuracy for this symbol
+            if (predResp && predResp.ok) {
+                const predData = await predResp.json();
+                const bySymbol = (predData.by_symbol || []).filter(s => s.symbol === symbol);
+                if (bySymbol.length > 0) {
+                    // Pick best model for this symbol
+                    const best = bySymbol.sort((a, b) => a.avg_mape - b.avg_mape)[0];
+                    const accEl = document.getElementById('stockPredAccuracy');
+                    const mapeEl = document.getElementById('stockPredMAPE');
+                    const countEl = document.getElementById('stockPredCount');
+
+                    const winRate = best.avg_mape <= 2 ? 100 : best.avg_mape <= 5 ? 90 : best.avg_mape <= 10 ? 70 : 50;
+                    const accColor = winRate >= 80 ? 'text-green-400' : winRate >= 60 ? 'text-yellow-400' : 'text-red-400';
+                    accEl.textContent = `${winRate}%`;
+                    accEl.className = `text-lg font-bold ${accColor}`;
+                    mapeEl.textContent = `${best.avg_mape.toFixed(1)}%`;
+                    mapeEl.className = `text-lg font-bold ${best.avg_mape <= 3 ? 'text-green-400' : best.avg_mape <= 6 ? 'text-yellow-400' : 'text-red-400'}`;
+                    countEl.textContent = `${best.total} predictions`;
+                    hasPredData = true;
+                }
+            }
+
+            // Trade signal accuracy for this symbol
+            if (tradeResp && tradeResp.ok) {
+                const tradeData = await tradeResp.json();
+                if (tradeData.total > 0) {
+                    const wrEl = document.getElementById('stockTradeWinRate');
+                    const countEl = document.getElementById('stockTradeCount');
+                    const pnlEl = document.getElementById('stockTradeAvgPnl');
+
+                    const wr = tradeData.win_rate || 0;
+                    const wrColor = wr >= 60 ? 'text-green-400' : wr >= 45 ? 'text-yellow-400' : 'text-red-400';
+                    wrEl.textContent = `${wr}%`;
+                    wrEl.className = `text-lg font-bold ${wrColor}`;
+                    countEl.textContent = `${tradeData.total} trades`;
+
+                    const avgPnl = tradeData.avg_win_pct || 0;
+                    const avgLoss = tradeData.avg_loss_pct || 0;
+                    pnlEl.innerHTML = `<span class="text-green-400 text-sm">+${avgPnl}%</span> <span class="text-gray-600">/</span> <span class="text-red-400 text-sm">${avgLoss}%</span>`;
+                    hasTradeData = true;
+                }
+            }
+
+            if (hasPredData || hasTradeData) {
+                panel.classList.remove('hidden');
+            } else {
+                panel.classList.add('hidden');
             }
         } catch (e) {
             panel.classList.add('hidden');
