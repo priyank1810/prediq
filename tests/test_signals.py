@@ -9,24 +9,20 @@ from app.models import SignalLog
 
 
 class TestGetSignal:
-    def test_get_signal_returns_data(self, client, db):
-        """Signal endpoint should compute and return signal data regardless of market hours."""
-        resp = client.get("/api/signals/RELIANCE")
-        # Should return 200 (computed fresh) or 500 (if data sources unavailable)
+    def test_mtf_signal_returns_data(self, client, db):
+        """Multi-timeframe signal endpoint should return data."""
+        resp = client.get("/api/signals/multi-timeframe/RELIANCE")
         assert resp.status_code in (200, 500)
         if resp.status_code == 200:
             data = resp.json()
-            assert "direction" in data
-            assert data["direction"] in ("BULLISH", "BEARISH", "NEUTRAL")
+            assert "symbol" in data
+            assert "intraday" in data
+            assert "short_term" in data
 
-    def test_get_signal_has_required_fields(self, client, db):
-        """Signal response should have all required fields."""
-        resp = client.get("/api/signals/SBIN")
-        if resp.status_code == 200:
-            data = resp.json()
-            assert "direction" in data
-            assert "confidence" in data
-            assert "composite_score" in data
+    def test_old_signal_endpoint_removed(self, client, db):
+        """Old single signal endpoint should be removed (404)."""
+        resp = client.get("/api/signals/RELIANCE")
+        assert resp.status_code == 404
 
 
 class TestSignalHistory:
