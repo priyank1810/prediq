@@ -92,10 +92,30 @@ const Watchlist = {
             return;
         }
         this._dirty = false;
-        // Show shimmer while loading
+
+        // Step 1: Show symbol list immediately (fast DB query)
         if (this._items.length === 0) {
-            Shimmer.show('watchlistCards', 'grid', 8);
+            try {
+                const list = await API.getWatchlist();
+                if (list && list.length > 0) {
+                    // Create placeholder items with just symbols
+                    this._items = list.map(item => ({
+                        symbol: item.symbol,
+                        item_type: item.item_type,
+                        ltp: null, change: null, pct_change: null,
+                    }));
+                    this.renderCards();
+
+                    // Subscribe to WebSocket for live prices immediately
+                    const symbols = this._items.map(i => i.symbol).filter(Boolean);
+                    if (symbols.length > 0) API.subscribeTo(symbols);
+                }
+            } catch (e) {
+                Shimmer.show('watchlistCards', 'grid', 8);
+            }
         }
+
+        // Step 2: Load full overview with prices in background
         try {
             const [items, alerts] = await Promise.all([
                 API.getWatchlistOverview(),
@@ -108,11 +128,10 @@ const Watchlist = {
             this.renderAlerts();
             this._startAutoRefresh();
 
-            // Subscribe watchlist symbols to WebSocket for live price ticks
             const symbols = this._items.map(i => i.symbol).filter(Boolean);
             if (symbols.length > 0) API.subscribeTo(symbols);
         } catch (e) {
-            console.error('Failed to load watchlist:', e);
+            console.error('Failed to load watchlist overview:', e);
         }
     },
 
@@ -165,8 +184,9 @@ const Watchlist = {
         const sorted = this._getSorted();
 
         container.innerHTML = sorted.map(item => {
-            const pct = item.pct_change || 0;
-            const up = pct >= 0;
+            const pct = item.pct_change;
+            const hasPct = pct != null;
+            const up = (pct || 0) >= 0;
             const sign = up ? '+' : '';
             const borderColor = item.signal_direction === 'BULLISH' ? 'border-green-600'
                 : (item.signal_direction === 'BEARISH' ? 'border-red-600' : 'border-gray-700');
@@ -228,7 +248,7 @@ const Watchlist = {
                     <!-- Price + Change -->
                     <div class="flex items-baseline justify-between">
                         <span data-wl-price class="text-white font-bold text-lg">${item.ltp ? '₹' + item.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</span>
-                        <span data-wl-change class="${changeColor} font-semibold text-sm">${sign}${pct.toFixed(2)}%</span>
+                        <span data-wl-change class="${changeColor} font-semibold text-sm">${hasPct ? sign + pct.toFixed(2) + '%' : ''}</span>
                     </div>
                     <!-- Day Range -->
                     ${hasRange ? `
