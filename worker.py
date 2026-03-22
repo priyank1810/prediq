@@ -343,7 +343,6 @@ class Worker:
     # --- Main loop ---
 
     DISPATCH = {
-        "prediction": "handle_prediction",
         "watchlist_trade_scan": "handle_watchlist_trade_scan",
         "trade_validate": "handle_trade_validate",
     }
