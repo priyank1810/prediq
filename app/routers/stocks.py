@@ -223,8 +223,12 @@ def get_history(symbol: str, period: str = Query("1y")):
         if period in ("1d", "5d"):
             import pandas as pd
             df = data_fetcher.get_intraday_data(sym, period=period, interval="15m")
+            # Fallback to daily data if intraday unavailable (weekends/holidays)
             if df is None or df.empty:
-                raise HTTPException(status_code=404, detail=f"No intraday data for {symbol}")
+                df = data_fetcher.get_historical_data(sym, "1mo")
+                if df is not None and not df.empty:
+                    return df.to_dict(orient="records")
+                raise HTTPException(status_code=404, detail=f"No data available for {symbol}")
             # Convert datetime to Unix timestamp (seconds) for LightweightCharts
             dt_col = pd.to_datetime(df["datetime"])
             df["date"] = dt_col.astype("int64") // 10**9
