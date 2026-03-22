@@ -35,7 +35,6 @@ const Signals = {
             // Load MTF signals (the main data source now) + AI summary + accuracy in parallel
             const [mtfData] = await Promise.all([
                 API.getMultiTimeframeSignals(symbol),
-                this.loadAISummary(symbol),
                 this.loadStockAccuracy(symbol),
             ]);
 
