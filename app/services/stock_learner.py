@@ -1,72 +1,45 @@
 """Per-stock learning service.
 
-Analyzes historical signal accuracy for each individual stock and builds
-a learning profile that captures:
-- Which signal components (technical, sentiment, global, fundamental) work best
-- Optimal direction threshold based on the stock's volatility and past accuracy
-- Which market regimes the stock responds best to
-- Component accuracy trends over time
+Analyzes AI prediction accuracy and trade signal outcomes for each stock
+to build a learning profile. Uses PredictionLog (price predictions) and
+TradeSignalLog (entry/target/SL outcomes) — NOT the old SignalLog.
 
-Profiles are stored as JSON in data/stock_profiles/ and loaded at signal time
-to customize weights and thresholds per stock.
+Profiles are stored as JSON in data/stock_profiles/.
 """
 
 import json
 import logging
-import math
-import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-
-import numpy as np
-
-from app.config import (
-    SIGNAL_WEIGHT_TECHNICAL,
-    SIGNAL_WEIGHT_SENTIMENT,
-    SIGNAL_WEIGHT_FUNDAMENTAL,
-    SIGNAL_WEIGHT_GLOBAL,
-)
 
 logger = logging.getLogger(__name__)
 
 PROFILES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "stock_profiles"
 PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 
-# Minimum signals before a stock profile becomes active
-MIN_SIGNALS_FOR_PROFILE = 10
-# How many recent signals to analyze
-MAX_SIGNALS_TO_ANALYZE = 200
-# Exponential decay half-life for weighting recent signals more
-DECAY_HALFLIFE_DAYS = 14
-# Profile refresh interval (seconds)
+MIN_DATA_FOR_PROFILE = 5
 PROFILE_CACHE_TTL = 1800  # 30 minutes
 
 
 class StockLearner:
-    """Learns per-stock signal characteristics from historical data."""
-
     def __init__(self):
-        self._cache = {}  # symbol -> (timestamp, profile)
+        self._cache = {}
 
     def _profile_path(self, symbol: str) -> Path:
         safe = symbol.replace(" ", "_").replace("^", "")
         return PROFILES_DIR / f"{safe}.json"
 
     def get_profile(self, symbol: str) -> dict | None:
-        """Get the learning profile for a stock. Returns None if insufficient data."""
-        # Check memory cache
         if symbol in self._cache:
             ts, profile = self._cache[symbol]
             if time.time() - ts < PROFILE_CACHE_TTL:
                 return profile
 
-        # Check disk cache
         path = self._profile_path(symbol)
         if path.exists():
             try:
                 profile = json.loads(path.read_text())
-                # Check freshness (profiles older than 24h should be rebuilt)
                 updated = profile.get("updated_at", "")
                 if updated:
                     updated_dt = datetime.fromisoformat(updated)
@@ -76,37 +49,32 @@ class StockLearner:
             except Exception:
                 pass
 
-        # Build fresh profile
         profile = self._build_profile(symbol)
         if profile:
             self._cache[symbol] = (time.time(), profile)
         return profile
 
     def _build_profile(self, symbol: str) -> dict | None:
-        """Analyze signal history and build a learning profile for the stock."""
         try:
             from app.database import SessionLocal
-            from app.models import SignalLog
-
             db = SessionLocal()
             try:
-                signals = (
-                    db.query(SignalLog)
-                    .filter(
-                        SignalLog.symbol == symbol,
-                        SignalLog.was_correct.isnot(None),
-                    )
-                    .order_by(SignalLog.created_at.desc())
-                    .limit(MAX_SIGNALS_TO_ANALYZE)
-                    .all()
-                )
+                pred_data = self._analyze_predictions(db, symbol)
+                trade_data = self._analyze_trades(db, symbol)
 
-                if len(signals) < MIN_SIGNALS_FOR_PROFILE:
+                if not pred_data and not trade_data:
                     return None
 
-                profile = self._analyze_signals(symbol, signals)
+                profile = {
+                    "symbol": symbol,
+                    "predictions": pred_data,
+                    "trades": trade_data,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
 
-                # Save to disk
+                # Compute overall summary
+                profile["summary"] = self._compute_summary(pred_data, trade_data)
+
                 try:
                     self._profile_path(symbol).write_text(
                         json.dumps(profile, indent=2, default=str)
@@ -121,270 +89,246 @@ class StockLearner:
             logger.warning(f"Failed to build profile for {symbol}: {e}")
             return None
 
-    def _analyze_signals(self, symbol: str, signals: list) -> dict:
-        """Core analysis: compute per-component accuracy and optimal thresholds."""
-        now = time.time()
-        halflife_sec = DECAY_HALFLIFE_DAYS * 86400
-        ln2 = math.log(2)
+    def _analyze_predictions(self, db, symbol: str) -> dict | None:
+        """Analyze AI price prediction accuracy from PredictionLog."""
+        from app.models import PredictionLog
 
-        # Accumulators
-        tech_correct = 0.0
-        sent_correct = 0.0
-        glob_correct = 0.0
-        fund_correct = 0.0
-        total_weight = 0.0
-
-        # Direction threshold analysis
-        correct_composites = []
-        incorrect_composites = []
-
-        # Regime analysis
-        regime_stats = {}
-
-        # Time-window accuracy (15min, 30min, 1hr)
-        accuracy_15m = {"correct": 0, "total": 0}
-        accuracy_30m = {"correct": 0, "total": 0}
-        accuracy_1hr = {"correct": 0, "total": 0}
-
-        # Trend: split signals into halves to detect improvement/degradation
-        mid = len(signals) // 2
-        recent_correct = 0
-        recent_total = 0
-        older_correct = 0
-        older_total = 0
-
-        for i, sig in enumerate(signals):
-            try:
-                age_seconds = now - sig.created_at.timestamp()
-            except Exception:
-                age_seconds = 0
-            w = math.exp(-ln2 / halflife_sec * max(0, age_seconds))
-
-            correct = sig.was_correct
-            total_weight += w
-
-            # Track composites for threshold optimization
-            if correct:
-                correct_composites.append(abs(sig.composite_score))
-            else:
-                incorrect_composites.append(abs(sig.composite_score))
-
-            # Per-component directional agreement when signal was correct
-            if correct:
-                # Technical: did it agree with the final direction?
-                if (sig.technical_score > 0 and sig.composite_score > 0) or \
-                   (sig.technical_score < 0 and sig.composite_score < 0):
-                    tech_correct += w
-                elif abs(sig.technical_score) < 5:
-                    tech_correct += 0.5 * w
-
-                if (sig.sentiment_score > 0 and sig.composite_score > 0) or \
-                   (sig.sentiment_score < 0 and sig.composite_score < 0):
-                    sent_correct += w
-                elif abs(sig.sentiment_score) < 5:
-                    sent_correct += 0.5 * w
-
-                if (sig.global_score > 0 and sig.composite_score > 0) or \
-                   (sig.global_score < 0 and sig.composite_score < 0):
-                    glob_correct += w
-                elif abs(sig.global_score) < 5:
-                    glob_correct += 0.5 * w
-
-                # Fundamental: infer from residual (composite - tech - sent - global)
-                fund_residual = sig.composite_score - sig.technical_score * 0.5 - \
-                    sig.sentiment_score * 0.2 - sig.global_score * 0.1
-                if (fund_residual > 0 and sig.composite_score > 0) or \
-                   (fund_residual < 0 and sig.composite_score < 0):
-                    fund_correct += w
-                elif abs(fund_residual) < 5:
-                    fund_correct += 0.5 * w
-
-            # Regime tracking
-            regime = sig.regime or "unknown"
-            if regime not in regime_stats:
-                regime_stats[regime] = {"correct": 0, "total": 0}
-            regime_stats[regime]["total"] += 1
-            if correct:
-                regime_stats[regime]["correct"] += 1
-
-            # Time-window accuracy
-            if sig.was_correct is not None:
-                accuracy_15m["total"] += 1
-                if sig.was_correct:
-                    accuracy_15m["correct"] += 1
-            if getattr(sig, "was_correct_30min", None) is not None:
-                accuracy_30m["total"] += 1
-                if sig.was_correct_30min:
-                    accuracy_30m["correct"] += 1
-            if getattr(sig, "was_correct_1hr", None) is not None:
-                accuracy_1hr["total"] += 1
-                if sig.was_correct_1hr:
-                    accuracy_1hr["correct"] += 1
-
-            # Trend tracking
-            if i < mid:
-                recent_total += 1
-                if correct:
-                    recent_correct += 1
-            else:
-                older_total += 1
-                if correct:
-                    older_correct += 1
-
-        # Compute component accuracies
-        if total_weight < 1:
-            return None
-
-        tech_acc = tech_correct / total_weight
-        sent_acc = sent_correct / total_weight
-        glob_acc = glob_correct / total_weight
-        fund_acc = fund_correct / total_weight
-
-        # Compute optimal weights using softmax with temperature
-        temp = 2.0
-        accs = np.array([tech_acc, sent_acc, glob_acc, fund_acc])
-        exp_accs = np.exp(accs / temp)
-        raw_weights = exp_accs / exp_accs.sum()
-
-        # Apply floors
-        weights = {
-            "technical": max(0.20, float(raw_weights[0])),
-            "sentiment": max(0.08, float(raw_weights[1])),
-            "global": max(0.05, float(raw_weights[2])),
-            "fundamental": max(0.05, float(raw_weights[3])),
-        }
-        # Renormalize
-        total_w = sum(weights.values())
-        weights = {k: round(v / total_w, 4) for k, v in weights.items()}
-
-        # Optimal direction threshold: find threshold that maximizes accuracy
-        optimal_threshold = self._find_optimal_threshold(
-            correct_composites, incorrect_composites
+        logs = (
+            db.query(PredictionLog)
+            .filter(
+                PredictionLog.symbol == symbol,
+                PredictionLog.actual_price.isnot(None),
+                PredictionLog.actual_price > 0,
+            )
+            .order_by(PredictionLog.prediction_date.desc())
+            .limit(200)
+            .all()
         )
 
-        # Best regime
-        best_regime = None
-        best_regime_acc = 0
-        for regime, stats in regime_stats.items():
-            if stats["total"] >= 5:
-                acc = stats["correct"] / stats["total"]
-                if acc > best_regime_acc:
-                    best_regime_acc = acc
-                    best_regime = regime
+        if len(logs) < MIN_DATA_FOR_PROFILE:
+            return None
 
-        # Trend: is accuracy improving or degrading?
-        recent_acc = recent_correct / max(recent_total, 1)
-        older_acc = older_correct / max(older_total, 1)
-        trend = "improving" if recent_acc > older_acc + 0.05 else \
-                "degrading" if recent_acc < older_acc - 0.05 else "stable"
+        # Per-model stats
+        model_stats = {}
+        for log in logs:
+            m = log.model_type or "unknown"
+            if m not in model_stats:
+                model_stats[m] = {"mape_sum": 0, "within_2pct": 0, "within_5pct": 0,
+                                  "correct_dir": 0, "total": 0}
+            s = model_stats[m]
+            s["total"] += 1
+            mape = abs(log.predicted_price - log.actual_price) / log.actual_price * 100
+            s["mape_sum"] += mape
+            if mape <= 2:
+                s["within_2pct"] += 1
+            if mape <= 5:
+                s["within_5pct"] += 1
+                s["correct_dir"] += 1
 
-        # Best time window
-        time_accuracies = {}
-        if accuracy_15m["total"] > 0:
-            time_accuracies["15min"] = round(accuracy_15m["correct"] / accuracy_15m["total"] * 100, 1)
-        if accuracy_30m["total"] > 0:
-            time_accuracies["30min"] = round(accuracy_30m["correct"] / accuracy_30m["total"] * 100, 1)
-        if accuracy_1hr["total"] > 0:
-            time_accuracies["1hr"] = round(accuracy_1hr["correct"] / accuracy_1hr["total"] * 100, 1)
+        models = {}
+        best_model = None
+        best_mape = 999
+        for model, s in model_stats.items():
+            if s["total"] == 0:
+                continue
+            avg_mape = round(s["mape_sum"] / s["total"], 2)
+            models[model] = {
+                "total": s["total"],
+                "avg_mape": avg_mape,
+                "accuracy_2pct": round(s["within_2pct"] / s["total"] * 100, 1),
+                "accuracy_5pct": round(s["within_5pct"] / s["total"] * 100, 1),
+            }
+            if avg_mape < best_mape:
+                best_mape = avg_mape
+                best_model = model
 
-        best_timeframe = max(time_accuracies, key=time_accuracies.get) if time_accuracies else "15min"
+        # Trend: compare recent vs older predictions
+        mid = len(logs) // 2
+        recent_mapes = []
+        older_mapes = []
+        for i, log in enumerate(logs):
+            mape = abs(log.predicted_price - log.actual_price) / log.actual_price * 100
+            if i < mid:
+                recent_mapes.append(mape)
+            else:
+                older_mapes.append(mape)
+
+        recent_avg = sum(recent_mapes) / len(recent_mapes) if recent_mapes else 0
+        older_avg = sum(older_mapes) / len(older_mapes) if older_mapes else 0
+        trend = "improving" if recent_avg < older_avg - 0.5 else \
+                "degrading" if recent_avg > older_avg + 0.5 else "stable"
+
+        overall_mape = round(sum(m["mape_sum"] for m in model_stats.values()) /
+                            max(sum(m["total"] for m in model_stats.values()), 1), 2)
 
         return {
-            "symbol": symbol,
-            "sample_size": len(signals),
-            "weights": weights,
-            "component_accuracies": {
-                "technical": round(tech_acc * 100, 1),
-                "sentiment": round(sent_acc * 100, 1),
-                "global": round(glob_acc * 100, 1),
-                "fundamental": round(fund_acc * 100, 1),
-            },
-            "optimal_threshold": round(optimal_threshold, 1),
-            "regime_stats": {
-                k: {
-                    "accuracy": round(v["correct"] / v["total"] * 100, 1),
-                    "signals": v["total"],
-                }
-                for k, v in regime_stats.items()
-                if v["total"] >= 3
-            },
-            "best_regime": best_regime,
-            "time_window_accuracy": time_accuracies,
-            "best_timeframe": best_timeframe,
+            "total_predictions": len(logs),
+            "overall_mape": overall_mape,
+            "overall_accuracy": round(100 - overall_mape, 1),
+            "models": models,
+            "best_model": best_model,
             "trend": trend,
-            "recent_accuracy": round(recent_acc * 100, 1),
-            "overall_accuracy": round(
-                sum(1 for s in signals if s.was_correct) / len(signals) * 100, 1
-            ),
-            "updated_at": datetime.utcnow().isoformat(),
+            "recent_mape": round(recent_avg, 2),
         }
 
-    @staticmethod
-    def _find_optimal_threshold(correct_composites: list, incorrect_composites: list) -> float:
-        """Find the direction threshold that maximizes signal accuracy.
+    def _analyze_trades(self, db, symbol: str) -> dict | None:
+        """Analyze trade signal outcomes from TradeSignalLog."""
+        from app.models import TradeSignalLog
 
-        Tests thresholds from 5 to 25 and picks the one that gives
-        the best ratio of correct signals above threshold vs incorrect ones.
-        """
-        if not correct_composites and not incorrect_composites:
-            return 10.0
+        trades = (
+            db.query(TradeSignalLog)
+            .filter(
+                TradeSignalLog.symbol == symbol,
+                TradeSignalLog.status != "open",
+            )
+            .order_by(TradeSignalLog.created_at.desc())
+            .limit(100)
+            .all()
+        )
 
-        best_threshold = 10.0
-        best_score = 0
+        if len(trades) < MIN_DATA_FOR_PROFILE:
+            return None
 
-        for threshold in range(5, 26):
-            correct_above = sum(1 for c in correct_composites if c >= threshold)
-            incorrect_above = sum(1 for c in incorrect_composites if c >= threshold)
-            total_above = correct_above + incorrect_above
+        target_hits = sum(1 for t in trades if t.status == "target_hit")
+        sl_hits = sum(1 for t in trades if t.status == "sl_hit")
+        expired = sum(1 for t in trades if t.status == "expired")
+        expired_profit = sum(1 for t in trades if t.status == "expired" and (t.outcome_pct or 0) > 0)
 
-            if total_above < 3:
-                continue
+        wins = target_hits + expired_profit
+        win_rate = round(wins / len(trades) * 100, 1) if trades else 0
 
-            accuracy = correct_above / total_above
-            # Penalize too-high thresholds (too few signals generated)
-            coverage = total_above / max(len(correct_composites) + len(incorrect_composites), 1)
-            # Score: accuracy * sqrt(coverage) — balance quality with quantity
-            score = accuracy * math.sqrt(coverage)
+        # Average P&L
+        pnls = [t.outcome_pct for t in trades if t.outcome_pct is not None]
+        avg_pnl = round(sum(pnls) / len(pnls), 2) if pnls else 0
+        win_pnls = [p for p in pnls if p > 0]
+        loss_pnls = [p for p in pnls if p < 0]
+        avg_win = round(sum(win_pnls) / len(win_pnls), 2) if win_pnls else 0
+        avg_loss = round(sum(loss_pnls) / len(loss_pnls), 2) if loss_pnls else 0
 
-            if score > best_score:
-                best_score = score
-                best_threshold = threshold
+        # By timeframe
+        by_timeframe = {}
+        for t in trades:
+            tf = t.timeframe or "unknown"
+            if tf not in by_timeframe:
+                by_timeframe[tf] = {"wins": 0, "total": 0, "pnl_sum": 0}
+            by_timeframe[tf]["total"] += 1
+            if t.status == "target_hit" or (t.status == "expired" and (t.outcome_pct or 0) > 0):
+                by_timeframe[tf]["wins"] += 1
+            by_timeframe[tf]["pnl_sum"] += t.outcome_pct or 0
 
-        return float(best_threshold)
+        tf_stats = {}
+        best_tf = None
+        best_tf_wr = 0
+        for tf, s in by_timeframe.items():
+            if s["total"] >= 3:
+                wr = round(s["wins"] / s["total"] * 100, 1)
+                tf_stats[tf] = {
+                    "win_rate": wr,
+                    "trades": s["total"],
+                    "avg_pnl": round(s["pnl_sum"] / s["total"], 2),
+                }
+                if wr > best_tf_wr:
+                    best_tf_wr = wr
+                    best_tf = tf
+
+        # Trend
+        mid = len(trades) // 2
+        recent_wins = sum(1 for t in trades[:mid]
+                         if t.status == "target_hit" or (t.status == "expired" and (t.outcome_pct or 0) > 0))
+        older_wins = sum(1 for t in trades[mid:]
+                        if t.status == "target_hit" or (t.status == "expired" and (t.outcome_pct or 0) > 0))
+        recent_wr = recent_wins / max(mid, 1) * 100
+        older_wr = older_wins / max(len(trades) - mid, 1) * 100
+        trend = "improving" if recent_wr > older_wr + 5 else \
+                "degrading" if recent_wr < older_wr - 5 else "stable"
+
+        return {
+            "total_trades": len(trades),
+            "win_rate": win_rate,
+            "target_hits": target_hits,
+            "sl_hits": sl_hits,
+            "expired": expired,
+            "avg_pnl": avg_pnl,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "by_timeframe": tf_stats,
+            "best_timeframe": best_tf,
+            "trend": trend,
+        }
+
+    def _compute_summary(self, pred_data: dict | None, trade_data: dict | None) -> dict:
+        """Compute a unified summary from prediction and trade data."""
+        summary = {
+            "has_predictions": pred_data is not None,
+            "has_trades": trade_data is not None,
+        }
+
+        if pred_data:
+            summary["prediction_accuracy"] = pred_data.get("overall_accuracy", 0)
+            summary["prediction_mape"] = pred_data.get("overall_mape", 0)
+            summary["prediction_trend"] = pred_data.get("trend", "stable")
+            summary["best_model"] = pred_data.get("best_model")
+            summary["total_predictions"] = pred_data.get("total_predictions", 0)
+
+        if trade_data:
+            summary["trade_win_rate"] = trade_data.get("win_rate", 0)
+            summary["trade_avg_pnl"] = trade_data.get("avg_pnl", 0)
+            summary["trade_trend"] = trade_data.get("trend", "stable")
+            summary["best_timeframe"] = trade_data.get("best_timeframe")
+            summary["total_trades"] = trade_data.get("total_trades", 0)
+
+        # Overall trend
+        trends = []
+        if pred_data:
+            trends.append(pred_data.get("trend", "stable"))
+        if trade_data:
+            trends.append(trade_data.get("trend", "stable"))
+
+        if "improving" in trends and "degrading" not in trends:
+            summary["overall_trend"] = "improving"
+        elif "degrading" in trends and "improving" not in trends:
+            summary["overall_trend"] = "degrading"
+        else:
+            summary["overall_trend"] = "stable"
+
+        return summary
 
     def rebuild_all_profiles(self) -> dict:
-        """Rebuild profiles for all stocks with sufficient signal history.
-
-        Called by the daily learning task after market close.
-        Returns summary of what was learned.
-        """
         from app.database import SessionLocal
-        from app.models import SignalLog
+        from app.models import PredictionLog, TradeSignalLog
         from sqlalchemy import func
 
         db = SessionLocal()
         try:
-            # Find all symbols with enough validated signals
-            symbols_with_signals = (
-                db.query(SignalLog.symbol, func.count(SignalLog.id).label("cnt"))
-                .filter(SignalLog.was_correct.isnot(None))
-                .group_by(SignalLog.symbol)
-                .having(func.count(SignalLog.id) >= MIN_SIGNALS_FOR_PROFILE)
+            # Get symbols from both tables
+            pred_symbols = set(
+                row.symbol for row in
+                db.query(PredictionLog.symbol)
+                .filter(PredictionLog.actual_price.isnot(None))
+                .group_by(PredictionLog.symbol)
+                .having(func.count(PredictionLog.id) >= MIN_DATA_FOR_PROFILE)
                 .all()
             )
+            trade_symbols = set(
+                row.symbol for row in
+                db.query(TradeSignalLog.symbol)
+                .filter(TradeSignalLog.status != "open")
+                .group_by(TradeSignalLog.symbol)
+                .having(func.count(TradeSignalLog.id) >= MIN_DATA_FOR_PROFILE)
+                .all()
+            )
+            all_symbols = pred_symbols | trade_symbols
 
             results = {
-                "total_symbols": len(symbols_with_signals),
+                "total_symbols": len(all_symbols),
                 "profiles_built": 0,
                 "profiles_failed": 0,
                 "improvements": [],
                 "degradations": [],
             }
 
-            for row in symbols_with_signals:
-                symbol = row.symbol
+            for symbol in all_symbols:
                 try:
-                    # Load old profile for comparison
                     old_profile = None
                     path = self._profile_path(symbol)
                     if path.exists():
@@ -393,44 +337,28 @@ class StockLearner:
                         except Exception:
                             pass
 
-                    # Clear cache to force rebuild
                     self._cache.pop(symbol, None)
                     profile = self._build_profile(symbol)
 
                     if profile:
                         results["profiles_built"] += 1
-
-                        # Detect accuracy changes
-                        if old_profile:
-                            old_acc = old_profile.get("overall_accuracy", 0)
-                            new_acc = profile.get("overall_accuracy", 0)
-                            if new_acc > old_acc + 3:
-                                results["improvements"].append({
-                                    "symbol": symbol,
-                                    "old_accuracy": old_acc,
-                                    "new_accuracy": new_acc,
-                                })
-                            elif new_acc < old_acc - 3:
-                                results["degradations"].append({
-                                    "symbol": symbol,
-                                    "old_accuracy": old_acc,
-                                    "new_accuracy": new_acc,
-                                })
+                        if old_profile and old_profile.get("summary"):
+                            old_acc = old_profile["summary"].get("prediction_accuracy", 0)
+                            new_acc = profile["summary"].get("prediction_accuracy", 0)
+                            if new_acc > old_acc + 2:
+                                results["improvements"].append({"symbol": symbol, "old": old_acc, "new": new_acc})
+                            elif new_acc < old_acc - 2:
+                                results["degradations"].append({"symbol": symbol, "old": old_acc, "new": new_acc})
                     else:
                         results["profiles_failed"] += 1
                 except Exception as e:
                     logger.warning(f"Failed to rebuild profile for {symbol}: {e}")
                     results["profiles_failed"] += 1
 
-            logger.info(
-                f"Stock learner: rebuilt {results['profiles_built']} profiles, "
-                f"{len(results['improvements'])} improved, "
-                f"{len(results['degradations'])} degraded"
-            )
+            logger.info(f"Stock learner: rebuilt {results['profiles_built']} profiles")
             return results
         finally:
             db.close()
 
 
-# Singleton
 stock_learner = StockLearner()

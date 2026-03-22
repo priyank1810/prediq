@@ -1115,111 +1115,117 @@ const Signals = {
     },
 
     renderLearningProfile(p) {
-        // Sample size
-        const sizeEl = document.getElementById('aiLearningSampleSize');
-        if (sizeEl) sizeEl.textContent = `Based on ${p.sample_size} signals`;
-
-        // Overall accuracy
-        const accEl = document.getElementById('aiOverallAccuracy');
-        const acc = p.overall_accuracy || 0;
-        accEl.textContent = `${acc}%`;
-        accEl.className = `text-xl font-bold ${acc >= 75 ? 'text-green-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400'}`;
-
-        // Best timeframe
-        const tfEl = document.getElementById('aiBestTimeframe');
-        const tfMap = { '15min': '15 Min', '30min': '30 Min', '1hr': '1 Hour' };
-        tfEl.textContent = tfMap[p.best_timeframe] || p.best_timeframe || '-';
-
-        // Trend
-        const trendEl = document.getElementById('aiTrend');
         const trendIcons = { improving: '&#9650; Up', degrading: '&#9660; Down', stable: '&#9654; Stable' };
         const trendColors = { improving: 'text-green-400', degrading: 'text-red-400', stable: 'text-yellow-400' };
-        trendEl.innerHTML = trendIcons[p.trend] || p.trend || '-';
-        trendEl.className = `text-xl font-bold ${trendColors[p.trend] || 'text-white'}`;
+        const summary = p.summary || {};
+        const pred = p.predictions;
+        const trades = p.trades;
 
-        // Threshold
-        const threshEl = document.getElementById('aiThreshold');
-        threshEl.textContent = p.optimal_threshold || '-';
+        // Sample size
+        const sizeEl = document.getElementById('aiLearningSampleSize');
+        if (sizeEl) {
+            const parts = [];
+            if (summary.total_predictions) parts.push(`${summary.total_predictions} predictions`);
+            if (summary.total_trades) parts.push(`${summary.total_trades} trades`);
+            sizeEl.textContent = parts.length ? `Based on ${parts.join(' + ')}` : '';
+        }
 
-        // Component accuracy bars
-        const barsEl = document.getElementById('aiComponentBars');
-        const comps = p.component_accuracies || {};
-        const compColors = { technical: '#2979ff', sentiment: '#ff9800', global: '#ab47bc', fundamental: '#26a69a' };
-        const compLabels = { technical: 'Technical', sentiment: 'Sentiment', global: 'Global Market', fundamental: 'Fundamental' };
-        barsEl.innerHTML = Object.entries(comps).map(([key, val]) => {
-            const color = compColors[key] || '#6b7280';
-            const width = Math.min(100, Math.max(5, val));
-            return `
-                <div>
-                    <div class="flex justify-between items-center mb-0.5">
-                        <span class="text-xs text-gray-400">${compLabels[key] || key}</span>
-                        <span class="text-xs font-mono ${val >= 60 ? 'text-green-400' : val >= 40 ? 'text-yellow-400' : 'text-red-400'}">${val}%</span>
-                    </div>
-                    <div class="h-2 bg-dark-600 rounded-full overflow-hidden">
-                        <div class="h-full rounded-full transition-all" style="width:${width}%;background:${color}"></div>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        // Summary cards
+        const cardsEl = document.getElementById('aiLearningSummaryCards');
+        const card = (label, value, color, sub) => `
+            <div class="bg-dark-700 rounded-lg p-3 text-center">
+                <div class="text-[10px] text-gray-500 mb-1">${label}</div>
+                <div class="text-xl font-bold ${color}">${value}</div>
+                ${sub ? `<div class="text-[10px] text-gray-500 mt-0.5">${sub}</div>` : ''}
+            </div>`;
 
-        // Weights comparison
-        const weightsEl = document.getElementById('aiWeightsComparison');
-        const defaults = { technical: 0.50, sentiment: 0.20, global: 0.10, fundamental: 0.15 };
-        const learned = p.weights || {};
-        weightsEl.innerHTML = Object.entries(learned).map(([key, val]) => {
-            const def = defaults[key] || 0;
-            const diff = ((val - def) * 100).toFixed(0);
-            const diffStr = diff > 0 ? `+${diff}%` : `${diff}%`;
-            const diffColor = diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-gray-400';
-            return `
-                <div class="flex items-center justify-between">
-                    <span class="text-xs text-gray-400">${compLabels[key] || key}</span>
-                    <div class="flex items-center gap-3">
-                        <span class="text-xs text-gray-500">Default: ${(def * 100).toFixed(0)}%</span>
-                        <span class="text-xs font-medium text-white">Learned: ${(val * 100).toFixed(0)}%</span>
-                        <span class="text-xs font-mono ${diffColor}">${diffStr}</span>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        let cards = '';
+        if (summary.prediction_accuracy != null) {
+            const acc = summary.prediction_accuracy;
+            const accColor = acc >= 95 ? 'text-green-400' : acc >= 90 ? 'text-yellow-400' : 'text-red-400';
+            cards += card('Prediction Accuracy', `${acc}%`, accColor, `MAPE: ${summary.prediction_mape || 0}%`);
+        }
+        if (summary.trade_win_rate != null) {
+            const wr = summary.trade_win_rate;
+            const wrColor = wr >= 60 ? 'text-green-400' : wr >= 45 ? 'text-yellow-400' : 'text-red-400';
+            cards += card('Trade Win Rate', `${wr}%`, wrColor, `Avg P&L: ${summary.trade_avg_pnl || 0}%`);
+        }
+        if (summary.best_model) {
+            cards += card('Best Model', summary.best_model, 'text-purple-400', '');
+        }
+        if (summary.overall_trend) {
+            const t = summary.overall_trend;
+            cards += card('Trend', trendIcons[t] || t, trendColors[t] || 'text-white', '');
+        }
+        cardsEl.innerHTML = cards || '<div class="col-span-full text-center text-gray-500 text-sm">No data yet</div>';
 
-        // Time windows
-        const twEl = document.getElementById('aiTimeWindows');
-        const twa = p.time_window_accuracy || {};
-        twEl.innerHTML = Object.entries(twa).map(([window, accuracy]) => {
-            const isBest = window === p.best_timeframe;
-            const border = isBest ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-dark-600';
-            const label = tfMap[window] || window;
-            return `
-                <div class="rounded-lg p-3 text-center border ${border}">
-                    <div class="text-xs text-gray-400 mb-1">${label}</div>
-                    <div class="text-lg font-bold ${accuracy >= 75 ? 'text-green-400' : accuracy >= 60 ? 'text-yellow-400' : 'text-red-400'}">${accuracy}%</div>
-                    ${isBest ? '<div class="text-[10px] text-purple-400 mt-1">Best</div>' : ''}
-                </div>
-            `;
-        }).join('');
-
-        // Regime stats
-        const regEl = document.getElementById('aiRegimeStats');
-        const regimes = p.regime_stats || {};
-        if (Object.keys(regimes).length === 0) {
-            regEl.innerHTML = '<div class="text-xs text-gray-500">No regime data available yet</div>';
-        } else {
-            regEl.innerHTML = Object.entries(regimes).map(([regime, stats]) => {
-                const isBest = regime === p.best_regime;
+        // Prediction section
+        const predSection = document.getElementById('aiPredictionSection');
+        if (pred && predSection) {
+            predSection.classList.remove('hidden');
+            const modelCards = document.getElementById('aiPredModelCards');
+            modelCards.innerHTML = Object.entries(pred.models || {}).map(([name, m]) => {
+                const isBest = name === pred.best_model;
+                const border = isBest ? 'border-purple-500' : 'border-gray-700';
                 return `
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-gray-300 capitalize">${regime}</span>
-                            ${isBest ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-300">Best</span>' : ''}
+                    <div class="rounded-lg p-2.5 border ${border} bg-dark-600">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-medium text-white capitalize">${name}</span>
+                            ${isBest ? '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/50 text-purple-300">Best</span>' : ''}
                         </div>
-                        <div class="flex items-center gap-3">
-                            <span class="text-xs ${stats.accuracy >= 70 ? 'text-green-400' : stats.accuracy >= 50 ? 'text-yellow-400' : 'text-red-400'}">${stats.accuracy}%</span>
-                            <span class="text-[10px] text-gray-500">${stats.signals} signals</span>
-                        </div>
-                    </div>
-                `;
+                        <div class="text-lg font-bold ${m.avg_mape <= 3 ? 'text-green-400' : m.avg_mape <= 6 ? 'text-yellow-400' : 'text-red-400'}">${m.avg_mape}% MAPE</div>
+                        <div class="text-[10px] text-gray-500">${m.total} predictions | ${m.accuracy_2pct}% within 2%</div>
+                    </div>`;
             }).join('');
+
+            const trendEl = document.getElementById('aiPredTrend');
+            const t = pred.trend || 'stable';
+            trendEl.innerHTML = `Trend: <span class="${trendColors[t] || 'text-white'}">${trendIcons[t] || t}</span> | Recent MAPE: ${pred.recent_mape || 0}%`;
+        } else if (predSection) {
+            predSection.classList.add('hidden');
+        }
+
+        // Trade section
+        const tradeSection = document.getElementById('aiTradeSection');
+        if (trades && tradeSection) {
+            tradeSection.classList.remove('hidden');
+            const statsEl = document.getElementById('aiTradeStats');
+            const wr = trades.win_rate || 0;
+            const wrColor = wr >= 60 ? 'text-green-400' : wr >= 45 ? 'text-yellow-400' : 'text-red-400';
+            statsEl.innerHTML = `
+                <div class="bg-dark-600 rounded p-2 text-center">
+                    <div class="text-[10px] text-gray-500">Win Rate</div>
+                    <div class="text-lg font-bold ${wrColor}">${wr}%</div>
+                </div>
+                <div class="bg-dark-600 rounded p-2 text-center">
+                    <div class="text-[10px] text-gray-500">Target Hit</div>
+                    <div class="text-lg font-bold text-green-400">${trades.target_hits || 0}</div>
+                </div>
+                <div class="bg-dark-600 rounded p-2 text-center">
+                    <div class="text-[10px] text-gray-500">SL Hit</div>
+                    <div class="text-lg font-bold text-red-400">${trades.sl_hits || 0}</div>
+                </div>
+                <div class="bg-dark-600 rounded p-2 text-center">
+                    <div class="text-[10px] text-gray-500">Avg P&L</div>
+                    <div class="text-sm font-bold"><span class="text-green-400">+${trades.avg_win || 0}%</span> / <span class="text-red-400">${trades.avg_loss || 0}%</span></div>
+                </div>`;
+
+            const tfEl = document.getElementById('aiTradeByTF');
+            const tfData = trades.by_timeframe || {};
+            tfEl.innerHTML = Object.entries(tfData).map(([tf, s]) => {
+                const isBest = tf === trades.best_timeframe;
+                const border = isBest ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-dark-600';
+                const twrColor = s.win_rate >= 60 ? 'text-green-400' : s.win_rate >= 45 ? 'text-yellow-400' : 'text-red-400';
+                return `
+                    <div class="rounded-lg p-2.5 text-center border ${border}">
+                        <div class="text-xs text-gray-400 mb-1">${tf}</div>
+                        <div class="text-lg font-bold ${twrColor}">${s.win_rate}%</div>
+                        <div class="text-[10px] text-gray-500">${s.trades} trades</div>
+                        ${isBest ? '<div class="text-[10px] text-purple-400">Best</div>' : ''}
+                    </div>`;
+            }).join('') || '<div class="col-span-full text-center text-gray-500 text-xs">No timeframe data yet</div>';
+        } else if (tradeSection) {
+            tradeSection.classList.add('hidden');
         }
     },
 };

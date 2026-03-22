@@ -476,48 +476,24 @@
                         </div>
                         <div id="aiLearningEmpty" class="hidden text-center py-8">
                             <div class="text-gray-500 text-4xl mb-3">&#129302;</div>
-                            <p class="text-gray-400 text-sm">Not enough signal history yet.</p>
-                            <p class="text-gray-500 text-xs mt-1">The AI needs at least 10 validated signals to build a profile.</p>
+                            <p class="text-gray-400 text-sm">Not enough data yet.</p>
+                            <p class="text-gray-500 text-xs mt-1">The AI needs at least 5 validated predictions or trades to build a profile.</p>
                         </div>
                         <div id="aiLearningContent" class="hidden space-y-4">
-                            <!-- Overall Stats -->
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                <div class="bg-dark-700 rounded-lg p-3 text-center">
-                                    <div class="text-[10px] text-gray-500 mb-1">Overall Accuracy</div>
-                                    <div id="aiOverallAccuracy" class="text-xl font-bold text-white">-</div>
-                                </div>
-                                <div class="bg-dark-700 rounded-lg p-3 text-center">
-                                    <div class="text-[10px] text-gray-500 mb-1">Best Timeframe</div>
-                                    <div id="aiBestTimeframe" class="text-xl font-bold text-purple-400">-</div>
-                                </div>
-                                <div class="bg-dark-700 rounded-lg p-3 text-center">
-                                    <div class="text-[10px] text-gray-500 mb-1">Accuracy Trend</div>
-                                    <div id="aiTrend" class="text-xl font-bold text-white">-</div>
-                                </div>
-                                <div class="bg-dark-700 rounded-lg p-3 text-center">
-                                    <div class="text-[10px] text-gray-500 mb-1">Signal Threshold</div>
-                                    <div id="aiThreshold" class="text-xl font-bold text-white">-</div>
-                                </div>
+                            <!-- Summary -->
+                            <div id="aiLearningSummaryCards" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+                            <!-- Prediction Accuracy -->
+                            <div id="aiPredictionSection" class="hidden bg-dark-700 rounded-lg p-3">
+                                <h4 class="text-sm font-medium text-white mb-3">Price Prediction Accuracy</h4>
+                                <div id="aiPredModelCards" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2"></div>
+                                <div id="aiPredTrend" class="text-xs text-gray-400"></div>
                             </div>
-                            <!-- Component Accuracy -->
-                            <div class="bg-dark-700 rounded-lg p-3">
-                                <h4 class="text-sm font-medium text-white mb-3">Component Accuracy</h4>
-                                <div id="aiComponentBars" class="space-y-2"></div>
-                            </div>
-                            <!-- Learned Weights -->
-                            <div class="bg-dark-700 rounded-lg p-3">
-                                <h4 class="text-sm font-medium text-white mb-3">Learned Weights vs Default</h4>
-                                <div id="aiWeightsComparison" class="space-y-2"></div>
-                            </div>
-                            <!-- Time Window Accuracy -->
-                            <div class="bg-dark-700 rounded-lg p-3">
-                                <h4 class="text-sm font-medium text-white mb-3">Accuracy by Time Window</h4>
-                                <div id="aiTimeWindows" class="grid grid-cols-3 gap-2"></div>
-                            </div>
-                            <!-- Regime Performance -->
-                            <div class="bg-dark-700 rounded-lg p-3">
-                                <h4 class="text-sm font-medium text-white mb-3">Performance by Market Regime</h4>
-                                <div id="aiRegimeStats" class="space-y-2"></div>
+                            <!-- Trade Outcomes -->
+                            <div id="aiTradeSection" class="hidden bg-dark-700 rounded-lg p-3">
+                                <h4 class="text-sm font-medium text-white mb-3">Trade Signal Outcomes</h4>
+                                <div id="aiTradeStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3"></div>
+                                <h5 class="text-xs text-gray-400 mb-2">By Timeframe</h5>
+                                <div id="aiTradeByTF" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
                             </div>
                         </div>
                     </div>
