@@ -166,6 +166,15 @@ const App = {
                 }
 
                 // Lazy-load content on tab switch
+                if (tab.dataset.stockTab === 'fundamentals' && this.currentSymbol && !this._fundamentalsLoaded) {
+                    this._fundamentalsLoaded = true;
+                    Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
+                }
+                if (tab.dataset.stockTab === 'news' && this.currentSymbol && !this._fundamentalsLoaded) {
+                    // News tab also needs fundamentals data for stock news
+                    this._fundamentalsLoaded = true;
+                    Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
+                }
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
                     Lazy.loadAndInit('predictions').then(() => { const m = Lazy._getGlobal('predictions'); if (m) m.loadPredictions(this.currentSymbol); }).catch(() => {});
                 }
@@ -459,8 +468,6 @@ const App = {
 
         // Show shimmer placeholders while data loads
         Shimmer.showStockDetail();
-        Shimmer.show('fundamentalsPanel', 'fundamentals');
-        Shimmer.show('newsTabFundNews', 'news', 4);
 
         try {
             const [quote, history] = await Promise.all([
@@ -476,22 +483,24 @@ const App = {
             // Subscribe to live updates
             API.subscribeTo([symbol]);
 
-            // Load indicators data (for Technical tab), but keep Overview toggle off by default
+            // Reset indicators toggle
             this.showIndicators = false;
             const indBtn = document.getElementById('btnIndicators');
             const indPanels = document.getElementById('indicatorPanelsOverview');
-            indBtn.classList.remove('bg-accent-blue', 'text-white');
-            indBtn.classList.add('bg-dark-600', 'text-gray-300');
-            indPanels.classList.add('hidden');
-            this.loadIndicators(symbol);
+            if (indBtn) {
+                indBtn.classList.remove('bg-accent-blue', 'text-white');
+                indBtn.classList.add('bg-dark-600', 'text-gray-300');
+            }
+            if (indPanels) indPanels.classList.add('hidden');
 
-            // Auto-load fundamentals, news & 15-min signal
-            Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(symbol); }).catch(() => {});
+            // Load MTF signals (shown on Overview tab)
             const _signals = Lazy._getGlobal('signals');
             if (_signals) {
-                _signals.loadSignal(symbol).then(() => {
-                }).catch(() => {});
+                _signals.loadSignal(symbol).catch(() => {});
             }
+
+            // Mark fundamentals as not loaded — load only when tab is clicked
+            this._fundamentalsLoaded = false;
 
 
             // Update watchlist star button
@@ -1086,11 +1095,20 @@ const App = {
                         const target = document.getElementById('stockTab-' + subTab);
                         if (target) target.classList.add('active');
                         // Trigger lazy loading for sub-tabs
+                        if (subTab === 'fundamentals' && this.currentSymbol && !this._fundamentalsLoaded) {
+                            this._fundamentalsLoaded = true;
+                            Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
+                        }
+                        if (subTab === 'news' && this.currentSymbol && !this._fundamentalsLoaded) {
+                            this._fundamentalsLoaded = true;
+                            Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
+                        }
                         if (subTab === 'predictions' && this.currentSymbol) {
                             Lazy.loadAndInit('predictions').then(() => { const m = Lazy._getGlobal('predictions'); if (m) m.loadPredictions(this.currentSymbol); }).catch(() => {});
                         }
-                        if (subTab === 'mtf' && this.currentSymbol) {
-                            Lazy.loadAndInit('mtf').then(() => { const m = Lazy._getGlobal('mtf'); if (m) m.load(this.currentSymbol); }).catch(() => {});
+                        if (subTab === 'ailearning' && this.currentSymbol) {
+                            const _sig = Lazy._getGlobal('signals');
+                            if (_sig) _sig.loadLearningProfile(this.currentSymbol);
                         }
                     }
                 }
