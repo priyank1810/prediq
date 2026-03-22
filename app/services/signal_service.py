@@ -566,39 +566,44 @@ class SignalService:
             return empty
 
     def get_multi_timeframe_signals(self, symbol: str) -> dict:
-        """Compute separate buy/sell signals for Intraday, Short-term (2 weeks),
-        and Long-term horizons using ML prediction models + technical analysis."""
+        """Compute separate buy/sell signals for multiple timeframes.
+        Each timeframe uses its own interval candle data for accurate indicators."""
 
-        intraday_df = None
-        daily_df = None
-        weekly_df = None
+        df_2m = None    # 2-minute candles for 2m signal
+        df_15m = None   # 15-minute candles for 10m, 30m, 15m signals
+        df_1h = None    # 1-hour candles for 1h signal
+        daily_df = None  # daily candles for 4h signal
         sent_result = {"score": 0, "headline_count": 0}
         global_result = {"score": 0, "news_magnitude": 0}
         fund_result = {"score": 0, "classification": "balanced", "details": {}}
-        pred_results = {}  # horizon -> (score, predicted_price, confidence)
+        pred_results = {}
 
         with ThreadPoolExecutor(max_workers=10) as executor:
-            # Data fetches
-            f_intraday = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "15m")
+            # Fetch different interval data for each timeframe group
+            f_2m = executor.submit(data_fetcher.get_intraday_data, symbol, "1d", "2m")
+            f_15m = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "15m")
+            f_1h = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "1h")
             f_daily = executor.submit(data_fetcher.get_historical_data, symbol, period="6mo")
-            f_weekly = executor.submit(data_fetcher.get_historical_data, symbol, period="2y")
             f_sent = executor.submit(sentiment_service.get_sentiment, symbol)
             f_global = executor.submit(global_market_service.get_global_signal)
             f_fund = executor.submit(self._fetch_fundamental_score, symbol)
 
-            # Wait for data first (predictions need it)
             try:
-                intraday_df = f_intraday.result(timeout=15)
+                df_2m = f_2m.result(timeout=15)
             except Exception as e:
-                logger.warning(f"MTF intraday failed for {symbol}: {e}")
+                logger.debug(f"MTF 2m data failed for {symbol}: {e}")
+            try:
+                df_15m = f_15m.result(timeout=15)
+            except Exception as e:
+                logger.warning(f"MTF 15m data failed for {symbol}: {e}")
+            try:
+                df_1h = f_1h.result(timeout=15)
+            except Exception as e:
+                logger.debug(f"MTF 1h data failed for {symbol}: {e}")
             try:
                 daily_df = f_daily.result(timeout=15)
             except Exception as e:
                 logger.warning(f"MTF daily failed for {symbol}: {e}")
-            try:
-                weekly_df = f_weekly.result(timeout=15)
-            except Exception as e:
-                logger.warning(f"MTF weekly failed for {symbol}: {e}")
             try:
                 sent_result = f_sent.result(timeout=15)
             except Exception:
@@ -611,6 +616,9 @@ class SignalService:
                 fund_result = f_fund.result(timeout=15)
             except Exception:
                 pass
+
+        # Use best available data as fallback
+        intraday_df = df_15m  # default for predictions
 
         # Run ML predictions for each horizon (in parallel)
         with ThreadPoolExecutor(max_workers=3) as pred_executor:
@@ -639,31 +647,31 @@ class SignalService:
         fundamental_score = fund_result.get("score", 0) * 100
 
         current_price = 0
-        if intraday_df is not None and not intraday_df.empty:
-            current_price = float(intraday_df["close"].iloc[-1])
+        if df_15m is not None and not df_15m.empty:
+            current_price = float(df_15m["close"].iloc[-1])
         elif daily_df is not None and not daily_df.empty:
             current_price = float(daily_df["close"].iloc[-1])
 
-        # ── INTRADAY SIGNALS ──
-        # 2 min — entry/exit
+        # ── INTRADAY SIGNALS (each uses its own interval data) ──
+        # 2 min — entry/exit (uses 2-minute candles)
         intraday_2m = self._compute_timeframe_signal(
-            label="2 Min (Entry/Exit)", df=intraday_df, current_price=current_price,
+            label="2 Min (Entry/Exit)", df=df_2m or df_15m, current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="intraday", symbol=symbol,
             prediction=pred_results.get("intraday_2m", {}),
         )
-        # 10 min — trend confirmation
+        # 10 min — trend confirmation (uses 15-minute candles, ~10 min perspective)
         intraday_10m = self._compute_timeframe_signal(
-            label="10 Min (Trend Confirm)", df=intraday_df, current_price=current_price,
+            label="10 Min (Trend Confirm)", df=df_15m, current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="intraday", symbol=symbol,
             prediction=pred_results.get("intraday_10m", {}),
         )
-        # 30 min — trend direction
+        # 30 min — trend direction (uses 1-hour candles for broader view)
         intraday_30m = self._compute_timeframe_signal(
-            label="30 Min (Direction)", df=intraday_df, current_price=current_price,
+            label="30 Min (Direction)", df=df_1h or df_15m, current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="intraday", symbol=symbol,
@@ -671,23 +679,23 @@ class SignalService:
         )
 
         # ── SHORT-TERM SIGNALS ──
-        # 15 min — triggers
+        # 15 min — triggers (uses 15-minute candles)
         short_15m = self._compute_timeframe_signal(
-            label="15 Min (Triggers)", df=intraday_df, current_price=current_price,
+            label="15 Min (Triggers)", df=df_15m, current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="short_term", symbol=symbol,
             prediction=pred_results.get("short_15m", {}),
         )
-        # 1 hour — entry/exit
+        # 1 hour — entry/exit (uses 1-hour candles)
         short_1h = self._compute_timeframe_signal(
-            label="1 Hour (Entry/Exit)", df=intraday_df, current_price=current_price,
+            label="1 Hour (Entry/Exit)", df=df_1h or df_15m, current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="short_term", symbol=symbol,
             prediction=pred_results.get("short_1h", {}),
         )
-        # 4 hours — trend direction + confirmation
+        # 4 hours — trend direction + confirmation (uses daily candles)
         short_4h = self._compute_timeframe_signal(
             label="4 Hours (Trend+Confirm)", df=daily_df, current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
