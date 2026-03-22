@@ -191,7 +191,6 @@
                 <!-- Sub-tab navigation -->
                 <nav class="flex gap-1 overflow-x-auto border-b border-gray-700 mb-3 scrollbar-thin" role="tablist" aria-label="Stock detail tabs">
                     <button class="stock-tab active" data-stock-tab="overview" role="tab" aria-selected="true" aria-controls="stockTab-overview">Overview</button>
-                    <button class="stock-tab" data-stock-tab="technical" role="tab" aria-selected="false" aria-controls="stockTab-technical">Technical</button>
                     <button class="stock-tab" data-stock-tab="fundamentals" role="tab" aria-selected="false" aria-controls="stockTab-fundamentals">Fundamentals</button>
                     <button class="stock-tab" data-stock-tab="news" role="tab" aria-selected="false" aria-controls="stockTab-news">News & Events</button>
                     <button class="stock-tab" data-stock-tab="predictions" role="tab" aria-selected="false" aria-controls="stockTab-predictions">Predictions</button>
@@ -282,76 +281,6 @@
                     <!-- Key Metrics Summary (populated by fundamentals.js) -->
                     <div id="overviewKeyMetrics" class="mt-3"></div>
 
-
-                </div>
-
-                <!-- ═══════ TECHNICAL TAB ═══════ -->
-                <div id="stockTab-technical" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-technical">
-                    <!-- Signal Component Scores -->
-                    <div id="techSignalPanel" class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <h4 class="text-sm font-semibold text-white">Signal Breakdown</h4>
-                            <div class="flex items-center gap-2">
-                                <span id="techMarketBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400"></span>
-                                <span id="techSignalTimestamp" class="text-xs text-gray-500"></span>
-                            </div>
-                        </div>
-                        <!-- Compact signal direction + scores -->
-                        <div class="flex flex-col sm:flex-row gap-4 items-start">
-                            <div class="flex items-center gap-3 min-w-[140px]">
-                                <span id="techSignalArrow" class="text-3xl text-gray-500">&#9654;</span>
-                                <div>
-                                    <div id="techSignalDir" class="text-lg font-bold text-gray-400">-</div>
-                                    <div id="techSignalConf" class="text-xs text-gray-500">-</div>
-                                </div>
-                            </div>
-                            <div class="flex-1 w-full space-y-2">
-                                <div>
-                                    <div class="flex justify-between items-center mb-0.5">
-                                        <span class="text-[10px] text-gray-500">Technical</span>
-                                        <span id="techScoreVal" class="text-xs font-mono text-gray-400">-</span>
-                                    </div>
-                                    <div id="techScoreBar" class="h-1.5 bg-dark-600 rounded-full"></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between items-center mb-0.5">
-                                        <span class="text-[10px] text-gray-500">Sentiment</span>
-                                        <span id="techSentVal" class="text-xs font-mono text-gray-400">-</span>
-                                    </div>
-                                    <div id="techSentBar" class="h-1.5 bg-dark-600 rounded-full"></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between items-center mb-0.5">
-                                        <span class="text-[10px] text-gray-500">Global</span>
-                                        <span id="techGlobVal" class="text-xs font-mono text-gray-400">-</span>
-                                    </div>
-                                    <div id="techGlobBar" class="h-1.5 bg-dark-600 rounded-full"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Technical details (RSI, Vol, BB, VWAP, MA) -->
-                        <div id="techIndicatorDetails" class="mt-3"></div>
-                    </div>
-
-                    <!-- Signal History -->
-                    <div class="bg-dark-800 rounded-lg overflow-x-auto mb-3">
-                        <div class="px-3 py-2 text-xs text-gray-400 border-b border-gray-700">Signal History</div>
-                        <table class="w-full text-sm min-w-[420px]">
-                            <thead>
-                                <tr class="text-gray-400 border-b border-gray-700">
-                                    <th class="text-left px-3 py-2 text-xs">Time</th>
-                                    <th class="text-left px-3 py-2 text-xs">Direction</th>
-                                    <th class="text-right px-3 py-2 text-xs">Conf</th>
-                                    <th class="text-right px-3 py-2 text-xs">Signal Price</th>
-                                    <th class="text-center px-3 py-2 text-xs">15m</th>
-                                    <th class="text-center px-3 py-2 text-xs">30m</th>
-                                    <th class="text-center px-3 py-2 text-xs">1hr</th>
-                                </tr>
-                            </thead>
-                            <tbody id="techSignalHistoryTable"></tbody>
-                        </table>
-                    </div>
-
                     <!-- AI Summary Panel -->
                     <div id="aiSummaryPanel" class="hidden bg-dark-800 rounded-lg p-3 sm:p-4 mt-3">
                         <h4 class="text-sm font-semibold text-purple-400 mb-2 flex items-center gap-1.5">
@@ -363,7 +292,9 @@
                         <div id="aiRiskFactors" class="mt-3"></div>
                         <div id="aiEarningsInsight" class="mt-3"></div>
                     </div>
+
                 </div>
+
 
 
                 <!-- ═══════ FUNDAMENTALS TAB ═══════ -->
