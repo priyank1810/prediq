@@ -30,12 +30,13 @@ const Signals = {
 
         const loading = document.getElementById('signalLoading');
         const results = document.getElementById('signalResults');
-        if (!loading || !results) { this.isLoading = false; return; }
 
-        // Show shimmer placeholders instead of spinner
-        Shimmer.show('signalLoading', 'signal');
-        loading.classList.remove('hidden');
-        results.classList.add('hidden');
+        // Show shimmer placeholders if elements exist
+        if (loading) {
+            Shimmer.show('signalLoading', 'signal');
+            loading.classList.remove('hidden');
+        }
+        if (results) results.classList.add('hidden');
 
         // Show shimmer for MTF signals while loading
         Shimmer.show('mtfSignalsGrid', 'mtfSignals', 3);
