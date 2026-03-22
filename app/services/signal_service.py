@@ -569,37 +569,25 @@ class SignalService:
         """Compute separate buy/sell signals for multiple timeframes.
         Each timeframe uses its own interval candle data for accurate indicators."""
 
-        df_2m = None    # 2-minute candles for 2m signal
-        df_15m = None   # 15-minute candles for 10m, 30m, 15m signals
-        df_1h = None    # 1-hour candles for 1h signal
-        daily_df = None  # daily candles for 4h signal
+        intraday_df = None  # 15-minute candles (primary)
+        daily_df = None
         sent_result = {"score": 0, "headline_count": 0}
         global_result = {"score": 0, "news_magnitude": 0}
         fund_result = {"score": 0, "classification": "balanced", "details": {}}
         pred_results = {}
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            # Fetch different interval data for each timeframe group
-            f_2m = executor.submit(data_fetcher.get_intraday_data, symbol, "1d", "2m")
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            # Fetch only 2 intervals (15m + daily) — resample for others
             f_15m = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "15m")
-            f_1h = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "1h")
             f_daily = executor.submit(data_fetcher.get_historical_data, symbol, period="6mo")
             f_sent = executor.submit(sentiment_service.get_sentiment, symbol)
             f_global = executor.submit(global_market_service.get_global_signal)
             f_fund = executor.submit(self._fetch_fundamental_score, symbol)
 
             try:
-                df_2m = f_2m.result(timeout=15)
-            except Exception as e:
-                logger.debug(f"MTF 2m data failed for {symbol}: {e}")
-            try:
-                df_15m = f_15m.result(timeout=15)
+                intraday_df = f_15m.result(timeout=15)
             except Exception as e:
                 logger.warning(f"MTF 15m data failed for {symbol}: {e}")
-            try:
-                df_1h = f_1h.result(timeout=15)
-            except Exception as e:
-                logger.debug(f"MTF 1h data failed for {symbol}: {e}")
             try:
                 daily_df = f_daily.result(timeout=15)
             except Exception as e:
@@ -617,8 +605,29 @@ class SignalService:
             except Exception:
                 pass
 
-        # Use best available data as fallback
-        intraday_df = df_15m  # default for predictions
+        # Resample 15m data to create different timeframe views
+        df_15m = intraday_df
+        df_short = None  # last ~10 candles (short-term view for 2m signal)
+        df_1h = None     # 1-hour resampled
+
+        if df_15m is not None and not df_15m.empty:
+            # Short view: last 10 candles only (most recent price action)
+            df_short = df_15m.tail(10).reset_index(drop=True) if len(df_15m) > 10 else df_15m
+
+            # Resample 15m → 1h for broader perspective
+            try:
+                tmp = df_15m.copy()
+                tmp["_dt"] = pd.to_datetime(tmp["datetime"])
+                tmp = tmp.set_index("_dt")
+                hourly = tmp[["open", "high", "low", "close", "volume"]].resample("1h").agg({
+                    "open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"
+                }).dropna(subset=["open"]).reset_index()
+                hourly = hourly.rename(columns={"_dt": "datetime"})
+                hourly["datetime_str"] = hourly["datetime"].dt.strftime("%Y-%m-%d %H:%M")
+                if len(hourly) >= 20:
+                    df_1h = hourly
+            except Exception:
+                pass
 
         # Run ML predictions for each horizon (in parallel)
         with ThreadPoolExecutor(max_workers=3) as pred_executor:
@@ -652,26 +661,36 @@ class SignalService:
         elif daily_df is not None and not daily_df.empty:
             current_price = float(daily_df["close"].iloc[-1])
 
-        # ── INTRADAY SIGNALS (each uses its own interval data) ──
-        # 2 min — entry/exit (uses 2-minute candles)
+        def _pick_df(*dfs):
+            """Pick first non-None, non-empty DataFrame."""
+            for d in dfs:
+                if d is not None and not d.empty:
+                    return d
+            return None
+
+        # ── INTRADAY SIGNALS (each uses different data window) ──
+        # 2 min — entry/exit (recent candles only for micro price action)
         intraday_2m = self._compute_timeframe_signal(
-            label="2 Min (Entry/Exit)", df=df_2m or df_15m, current_price=current_price,
+            label="2 Min (Entry/Exit)", df=_pick_df(df_short, df_15m),
+            current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="intraday", symbol=symbol,
             prediction=pred_results.get("intraday_2m", {}),
         )
-        # 10 min — trend confirmation (uses 15-minute candles, ~10 min perspective)
+        # 10 min — trend confirmation (full 15m candles)
         intraday_10m = self._compute_timeframe_signal(
-            label="10 Min (Trend Confirm)", df=df_15m, current_price=current_price,
+            label="10 Min (Trend Confirm)", df=df_15m,
+            current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="intraday", symbol=symbol,
             prediction=pred_results.get("intraday_10m", {}),
         )
-        # 30 min — trend direction (uses 1-hour candles for broader view)
+        # 30 min — trend direction (1-hour resampled for broader view)
         intraday_30m = self._compute_timeframe_signal(
-            label="30 Min (Direction)", df=df_1h or df_15m, current_price=current_price,
+            label="30 Min (Direction)", df=_pick_df(df_1h, df_15m),
+            current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="intraday", symbol=symbol,
@@ -679,25 +698,28 @@ class SignalService:
         )
 
         # ── SHORT-TERM SIGNALS ──
-        # 15 min — triggers (uses 15-minute candles)
+        # 15 min — triggers (15m candles)
         short_15m = self._compute_timeframe_signal(
-            label="15 Min (Triggers)", df=df_15m, current_price=current_price,
+            label="15 Min (Triggers)", df=df_15m,
+            current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="short_term", symbol=symbol,
             prediction=pred_results.get("short_15m", {}),
         )
-        # 1 hour — entry/exit (uses 1-hour candles)
+        # 1 hour — entry/exit (1-hour resampled)
         short_1h = self._compute_timeframe_signal(
-            label="1 Hour (Entry/Exit)", df=df_1h or df_15m, current_price=current_price,
+            label="1 Hour (Entry/Exit)", df=_pick_df(df_1h, df_15m),
+            current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="short_term", symbol=symbol,
             prediction=pred_results.get("short_1h", {}),
         )
-        # 4 hours — trend direction + confirmation (uses daily candles)
+        # 4 hours — trend direction + confirmation (daily candles)
         short_4h = self._compute_timeframe_signal(
-            label="4 Hours (Trend+Confirm)", df=daily_df, current_price=current_price,
+            label="4 Hours (Trend+Confirm)", df=_pick_df(daily_df, df_1h, df_15m),
+            current_price=current_price,
             sentiment_score=sentiment_score, global_score=global_score,
             fundamental_score=fundamental_score, news_magnitude=news_magnitude,
             timeframe="short_term", symbol=symbol,
