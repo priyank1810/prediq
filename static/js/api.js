@@ -222,9 +222,7 @@ const API = {
     removeFromWatchlist(symbol) { return this.request(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }); },
 
     // Signals (public)
-    getIntradaySignal(symbol) { return this.request(`/api/signals/${encodeURIComponent(symbol)}`); },
     getSignalHistory(symbol, limit = 20) { return this.request(`/api/signals/${encodeURIComponent(symbol)}/history?limit=${limit}`); },
-    scanHighConfidence(threshold = 60) { return this.request(`/api/signals/scan/high-confidence?threshold=${threshold}`); },
     getSignalAccuracy() { return this.request('/api/signals/stats/accuracy'); },
     getMultiTimeframeSignals(symbol) { return this.request(`/api/signals/multi-timeframe/${encodeURIComponent(symbol)}`); },
     onSignalUpdate: null,
@@ -232,7 +230,6 @@ const API = {
 
     // FII/DII
     getFIIDIIDaily() { return this.request('/api/fii-dii/daily'); },
-    getFIIDIIHistory(days = 30) { return this.request(`/api/fii-dii/history?days=${days}`); },
 
     // Market Mood
     getMarketMood() { return this.request('/api/signals/market-mood'); },
@@ -241,10 +238,8 @@ const API = {
     getSectorHeatmap() { return this.request('/api/sectors/heatmap'); },
 
     // Chart Patterns
-    getPatterns(symbol) { return this.request(`/api/indicators/${encodeURIComponent(symbol)}/patterns`); },
 
     // Correlation Analysis
-    getCorrelationMatrix(symbols, period = '6mo') { return this.request(`/api/indicators/correlation-matrix?symbols=${encodeURIComponent(symbols.join(','))}&period=${period}`); },
     getSectorCorrelation(period = '6mo') { return this.request(`/api/indicators/sector-correlation?period=${period}`); },
     getStockCorrelations(symbol, n = 10, period = '6mo') { return this.request(`/api/indicators/${encodeURIComponent(symbol)}/correlations?n=${n}&period=${period}`); },
 
@@ -516,10 +511,7 @@ const API = {
     cancelBrokerOrder(orderId) {
         return this.request(`/api/broker/order/${orderId}`, { method: 'DELETE' });
     },
-    getBrokerPositions() { return this.request('/api/broker/positions'); },
-    getBrokerOrders() { return this.request('/api/broker/orders'); },
     getBrokerRecent(limit) { return this.request(`/api/broker/recent?limit=${limit || 5}`); },
-    syncBrokerPortfolio() { return this.request('/api/broker/sync', { method: 'POST' }); },
     getBrokerStatus() { return this.request('/api/broker/status'); },
 
     // Telegram

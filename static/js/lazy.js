@@ -50,9 +50,7 @@ const Lazy = {
     // Map module names to their global variable names
     _globalNames: {
         predictions: 'Predictions', watchlist: 'Watchlist', insights: 'Insights',
-        fundamentals: 'Fundamentals', signals: 'Signals', portfolio: 'Portfolio',
-        mtf: 'Mtf', options: 'Options', screener: 'Screener', journal: 'Journal',
-        strategies: 'Strategies',
+        fundamentals: 'Fundamentals', signals: 'Signals',
     },
 
     /**
