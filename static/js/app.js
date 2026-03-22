@@ -499,8 +499,12 @@ const App = {
                 _signals.loadSignal(symbol).catch(() => {});
             }
 
-            // Mark fundamentals as not loaded — load only when tab is clicked
-            this._fundamentalsLoaded = false;
+            // Load fundamentals in background (needed for key metrics on Overview)
+            this._fundamentalsLoaded = true;
+            Lazy.load('fundamentals').then(() => {
+                const m = Lazy._getGlobal('fundamentals');
+                if (m) m.load(symbol);
+            }).catch(() => {});
 
 
             // Update watchlist star button
