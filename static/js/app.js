@@ -166,13 +166,7 @@ const App = {
                 }
 
                 // Lazy-load content on tab switch
-                if (tab.dataset.stockTab === 'fundamentals' && this.currentSymbol && !this._fundamentalsLoaded) {
-                    this._fundamentalsLoaded = true;
-                    Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
-                }
-                if (tab.dataset.stockTab === 'news' && this.currentSymbol && !this._fundamentalsLoaded) {
-                    // News tab also needs fundamentals data for stock news
-                    this._fundamentalsLoaded = true;
+                if ((tab.dataset.stockTab === 'fundamentals' || tab.dataset.stockTab === 'news') && this.currentSymbol) {
                     Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
                 }
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
