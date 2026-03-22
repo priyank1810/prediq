@@ -5,33 +5,12 @@ const Insights = {
     init() {},
 
     async load() {
-        // Skip if data is fresh (loaded within last 30s)
         if (this._lastLoadTime && Date.now() - this._lastLoadTime < 30000) {
             return;
         }
-        // Check if we have any signal data; if not, seed a few signals first
-        if (!this._seeded) {
-            this._seeded = true;
-            try {
-                const existing = await API.scanHighConfidence(0);
-                if (!existing || existing.length === 0) {
-                    await this._seedSignals();
-                }
-            } catch (e) { /* ignore */ }
-        }
-
         this._lastLoadTime = Date.now();
         await Promise.all([
-            this.loadHighConfidence(),
-            this.loadAccuracy(),
-            this.loadRecentFeed(),
-            this.loadAccuracyBySector(),
-            this.loadAccuracyByHorizon(),
-            this.loadAccuracyByRegime(),
-            this.loadBacktestPnL(),
-            this.loadSmartAlerts(),
             this.loadPredictionLeaderboard(),
-            this.loadCorrelation(),
             this.loadTradeTrackRecord(),
         ]);
     },

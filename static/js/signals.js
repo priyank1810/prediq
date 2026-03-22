@@ -28,36 +28,23 @@ const Signals = {
         if (this.isLoading) return;
         this.isLoading = true;
 
-        const loading = document.getElementById('signalLoading');
-        const results = document.getElementById('signalResults');
-
-        // Show shimmer placeholders if elements exist
-        if (loading) {
-            Shimmer.show('signalLoading', 'signal');
-            loading.classList.remove('hidden');
-        }
-        if (results) results.classList.add('hidden');
-
-        // Show shimmer for MTF signals while loading
+        // Show shimmer for MTF signals
         Shimmer.show('mtfSignalsGrid', 'mtfSignals', 3);
 
-        // Load multi-timeframe signals (independent, always runs)
-        API.getMultiTimeframeSignals(symbol).then(mtfData => {
-            this.displayMultiTimeframeSignals(mtfData);
-            this.displayOverviewTargets(mtfData);
-        }).catch(() => {});
-
         try {
-            const [signal, history] = await Promise.all([
-                API.getIntradaySignal(symbol),
-                API.getSignalHistory(symbol, 10),
+            // Load MTF signals (the main data source now) + AI summary + accuracy in parallel
+            const [mtfData] = await Promise.all([
+                API.getMultiTimeframeSignals(symbol),
+                this.loadAISummary(symbol),
+                this.loadStockAccuracy(symbol),
             ]);
-            this.displaySignal(signal);
-            App.displaySignalBadge(signal);
-            App._lastSignalData = signal;
-            this.displaySignalHistory(history);
+
+            if (mtfData) {
+                this.displayMultiTimeframeSignals(mtfData);
+                this.displayOverviewTargets(mtfData);
+            }
         } catch (e) {
-            if (loading) loading.classList.add('hidden');
+            // Silently handle — MTF panel stays empty
         } finally {
             this.isLoading = false;
         }

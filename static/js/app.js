@@ -193,9 +193,8 @@ const App = {
 
         // Fetch quotes, smart alerts, and market movers in parallel
         try {
-            const [quotes, smartAlerts] = await Promise.all([
+            const [quotes] = await Promise.all([
                 API.getMultipleQuotes(this._overviewSymbols),
-                API.scanHighConfidence(60).catch(() => []),
             ]);
             // Fire market movers and new panels non-blocking
             this.loadMarketMovers();
@@ -214,7 +213,6 @@ const App = {
             this.renderIndicesTicker(indexQuotes);
             this.renderGrid('indicesGrid', indexQuotes);
             this.renderGrid('stocksGrid', stockQuotes);
-            this.renderSmartAlerts(smartAlerts);
             this.updateOverviewTimestamp();
 
             // Initialize dashboard widget drag-and-drop
