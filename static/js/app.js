@@ -162,7 +162,7 @@ const App = {
 
                 // Update URL hash with sub-tab
                 if (this.currentSymbol) {
-                    this._updateHash(`dashboard/${encodeURIComponent(this.currentSymbol)}/${tab.dataset.stockTab}`);
+                    this._updateHash(`stock/${encodeURIComponent(this.currentSymbol)}/${tab.dataset.stockTab}`);
                 }
 
                 // Lazy-load content on tab switch
@@ -442,7 +442,7 @@ const App = {
         this.currentSymbol = symbol;
 
         // Update URL hash
-        this._updateHash(`dashboard/${encodeURIComponent(symbol)}`);
+        this._updateHash(`stock/${encodeURIComponent(symbol)}`);
 
         // Always switch to dashboard tab first
         this._switchToDashboardTab();
@@ -1052,6 +1052,53 @@ const App = {
 
         this._skipHashUpdate = true;
 
+        // Stock route — show dashboard tab but don't load dashboard data
+        if (tab === 'stock' && symbol) {
+            // Activate dashboard tab visually (stock detail lives inside it)
+            const dashBtn = document.querySelector('.nav-tab[data-tab="dashboard"]');
+            if (dashBtn) {
+                document.querySelectorAll('.nav-tab').forEach(t => {
+                    t.classList.remove('active');
+                    t.setAttribute('aria-selected', 'false');
+                });
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                dashBtn.classList.add('active');
+                dashBtn.setAttribute('aria-selected', 'true');
+                const tabContent = document.getElementById('tab-dashboard');
+                if (tabContent) tabContent.classList.remove('hidden');
+            }
+            // Load stock directly — no dashboard APIs
+            this.loadStock(decodeURIComponent(symbol)).then(() => {
+                if (subTab) {
+                    const stBtn = document.querySelector(`.stock-tab[data-stock-tab="${subTab}"]`);
+                    if (stBtn) {
+                        document.querySelectorAll('.stock-tab').forEach(t => {
+                            t.classList.remove('active');
+                            t.setAttribute('aria-selected', 'false');
+                        });
+                        document.querySelectorAll('.stock-tab-content').forEach(c => c.classList.remove('active'));
+                        stBtn.classList.add('active');
+                        stBtn.setAttribute('aria-selected', 'true');
+                        const target = document.getElementById('stockTab-' + subTab);
+                        if (target) target.classList.add('active');
+                        if (subTab === 'fundamentals' && !this._fundamentalsLoaded) {
+                            this._fundamentalsLoaded = true;
+                            Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
+                        }
+                        if (subTab === 'predictions') {
+                            Lazy.loadAndInit('predictions').then(() => { const m = Lazy._getGlobal('predictions'); if (m) m.loadPredictions(this.currentSymbol); }).catch(() => {});
+                        }
+                        if (subTab === 'ailearning') {
+                            const _sig = Lazy._getGlobal('signals');
+                            if (_sig) _sig.loadLearningProfile(this.currentSymbol);
+                        }
+                    }
+                }
+            });
+            this._skipHashUpdate = false;
+            return;
+        }
+
         // Activate the correct main tab
         const validTabs = ['dashboard', 'watchlist', 'insights'];
         if (validTabs.includes(tab)) {
@@ -1078,42 +1125,6 @@ const App = {
             }
         }
 
-        // If dashboard with a stock symbol, load that stock
-        if (tab === 'dashboard' && symbol) {
-            this.loadStock(decodeURIComponent(symbol)).then(() => {
-                // Restore stock sub-tab if specified
-                if (subTab) {
-                    const stBtn = document.querySelector(`.stock-tab[data-stock-tab="${subTab}"]`);
-                    if (stBtn) {
-                        document.querySelectorAll('.stock-tab').forEach(t => {
-                            t.classList.remove('active');
-                            t.setAttribute('aria-selected', 'false');
-                        });
-                        document.querySelectorAll('.stock-tab-content').forEach(c => c.classList.remove('active'));
-                        stBtn.classList.add('active');
-                        stBtn.setAttribute('aria-selected', 'true');
-                        const target = document.getElementById('stockTab-' + subTab);
-                        if (target) target.classList.add('active');
-                        // Trigger lazy loading for sub-tabs
-                        if (subTab === 'fundamentals' && this.currentSymbol && !this._fundamentalsLoaded) {
-                            this._fundamentalsLoaded = true;
-                            Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
-                        }
-                        if (subTab === 'news' && this.currentSymbol && !this._fundamentalsLoaded) {
-                            this._fundamentalsLoaded = true;
-                            Lazy.load('fundamentals').then(() => { const m = Lazy._getGlobal('fundamentals'); if (m) m.load(this.currentSymbol); }).catch(() => {});
-                        }
-                        if (subTab === 'predictions' && this.currentSymbol) {
-                            Lazy.loadAndInit('predictions').then(() => { const m = Lazy._getGlobal('predictions'); if (m) m.loadPredictions(this.currentSymbol); }).catch(() => {});
-                        }
-                        if (subTab === 'ailearning' && this.currentSymbol) {
-                            const _sig = Lazy._getGlobal('signals');
-                            if (_sig) _sig.loadLearningProfile(this.currentSymbol);
-                        }
-                    }
-                }
-            });
-        }
 
         this._skipHashUpdate = false;
     },
