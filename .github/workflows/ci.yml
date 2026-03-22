@@ -56,4 +56,4 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -o StrictHostKeyChecking=no -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" 'cd ~/stock-tracker && git pull origin main && pip install -r requirements.txt --quiet && (supervisorctl restart prediq prediq-worker 2>/dev/null || sudo systemctl restart prediq prediq-worker 2>/dev/null || pm2 restart prediq 2>/dev/null || echo "Manual restart needed")'
+          ssh -o StrictHostKeyChecking=no -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" 'cd ~/stock-tracker && git pull origin main && source venv/bin/activate && pip install -r requirements.txt --quiet && sudo systemctl restart stocktracker stocktracker-worker'
