@@ -286,77 +286,6 @@ async def prediction_accuracy_backfiller():
         await asyncio.sleep(3600)  # Run every hour
 
 
-async def periodic_job_enqueuer():
-    """Every 5 min, enqueue background jobs (watchlist_signals, mtf_stream, oi_stream)
-    if market is open and no duplicate pending jobs exist."""
-    from app.services.job_service import job_service
-    from app.utils.helpers import is_market_open
-    from app.routers.websocket import manager
-
-    await asyncio.sleep(120)  # Let services warm up
-    while True:
-        try:
-            if is_market_open():
-                def _enqueue_jobs():
-                    if not job_service.has_pending("watchlist_signals"):
-                        job_service.enqueue("watchlist_signals", {}, priority=0)
-                    if manager.active_connections:
-                        symbols = list(manager.get_all_subscribed_symbols())
-                        if symbols:
-                            if not job_service.has_pending("mtf_stream"):
-                                job_service.enqueue("mtf_stream", {"symbols": symbols}, priority=0)
-                            if not job_service.has_pending("oi_stream"):
-                                job_service.enqueue("oi_stream", {"symbols": symbols}, priority=0)
-
-                await asyncio.to_thread(_enqueue_jobs)
-        except Exception:
-            pass
-        await asyncio.sleep(300)
-
-
-async def worker_result_broadcaster():
-    """Every 3s, read completed background jobs and broadcast results via WebSocket."""
-    from app.services.job_service import job_service
-    from app.routers.websocket import manager
-
-    await asyncio.sleep(10)
-    while True:
-        try:
-            if manager.active_connections:
-                jobs = await asyncio.to_thread(job_service.get_completed_background_jobs)
-                for job in jobs:
-                    job_type = job["job_type"]
-                    result = job["result"]
-
-                    if job_type == "watchlist_signals":
-                        signals_data = result.get("signals", {})
-                        for sym, signal_data in signals_data.items():
-                            await manager.broadcast_signal(sym, signal_data)
-                            # Telegram: broadcast high-confidence signals
-                            confidence = signal_data.get("confidence", 0)
-                            if confidence >= 60:
-                                from app.services.telegram_service import broadcast_to_subscribers, send_signal_alert as _tg_signal
-                                tg_data = {**signal_data, "symbol": sym}
-                                asyncio.create_task(broadcast_to_subscribers("signals", _tg_signal, tg_data))
-                                # SMS: broadcast high-confidence signals
-                                from app.services.sms_service import broadcast_to_subscribers as sms_broadcast, send_signal_alert as _sms_signal
-                                asyncio.create_task(sms_broadcast("signals", _sms_signal, tg_data))
-
-                    elif job_type == "mtf_stream":
-                        mtf_data = result.get("mtf_data", {})
-                        for sym, data in mtf_data.items():
-                            await manager.broadcast_mtf_update(sym, data)
-
-                    elif job_type == "oi_stream":
-                        oi_data = result.get("oi_data", {})
-                        for sym, data in oi_data.items():
-                            await manager.broadcast_oi_update(sym, data)
-
-                    await asyncio.to_thread(job_service.mark_broadcast, job["id"])
-        except Exception:
-            pass
-        await asyncio.sleep(3)
-
 
 async def news_alert_scanner():
     """Monitor watchlist stocks for significant sentiment changes and broadcast alerts."""
@@ -617,8 +546,6 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(signal_accuracy_validator_1hr()),
         asyncio.create_task(smart_alert_checker()),
         asyncio.create_task(market_mood_broadcaster()),
-        asyncio.create_task(periodic_job_enqueuer()),
-        asyncio.create_task(worker_result_broadcaster()),
         asyncio.create_task(prediction_accuracy_backfiller()),
         asyncio.create_task(news_alert_scanner()),
         asyncio.create_task(live_scanner()),

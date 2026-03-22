@@ -344,10 +344,6 @@ class Worker:
 
     DISPATCH = {
         "prediction": "handle_prediction",
-        "signal": "handle_signal",
-        "watchlist_signals": "handle_watchlist_signals",
-        "mtf_stream": "handle_mtf_stream",
-        "oi_stream": "handle_oi_stream",
         "watchlist_trade_scan": "handle_watchlist_trade_scan",
         "trade_validate": "handle_trade_validate",
     }

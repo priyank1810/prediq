@@ -551,36 +551,6 @@ async def get_multi_timeframe_signals(symbol: str):
 
 # --- Existing endpoints (must come AFTER scan/ and stats/ routes) ---
 
-@router.get("/{symbol}")
-async def get_intraday_signal(symbol: str):
-    try:
-        sym = symbol.upper()
-
-        from app.utils.helpers import is_market_open
-        from app.services.job_service import job_service
-        job_id = await asyncio.to_thread(job_service.enqueue, "signal", {"symbol": sym}, 10)
-
-        # Poll-wait: check every 0.5s for up to 30s
-        for _ in range(60):
-            await asyncio.sleep(0.5)
-            status = await asyncio.to_thread(job_service.get_status, job_id)
-            if not status:
-                break
-            if status["status"] == "completed":
-                return status["result"]
-            if status["status"] == "failed":
-                raise HTTPException(status_code=500, detail=f"Signal computation failed: {status.get('error', 'unknown')}")
-
-        # Timeout — fall back to direct computation
-        from app.services.signal_service import signal_service
-        signal_data = await asyncio.to_thread(signal_service.get_signal, sym)
-        if not signal_data:
-            raise ValueError(f"No signal data for {sym}")
-        return signal_data
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Signal computation failed: {str(e)}")
 
