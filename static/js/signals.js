@@ -41,6 +41,12 @@ const Signals = {
         // Show shimmer for MTF signals while loading
         Shimmer.show('mtfSignalsGrid', 'mtfSignals', 3);
 
+        // Load multi-timeframe signals (independent, always runs)
+        API.getMultiTimeframeSignals(symbol).then(mtfData => {
+            this.displayMultiTimeframeSignals(mtfData);
+            this.displayOverviewTargets(mtfData);
+        }).catch(() => {});
+
         try {
             const [signal, history] = await Promise.all([
                 API.getIntradaySignal(symbol),
@@ -50,23 +56,8 @@ const Signals = {
             App.displaySignalBadge(signal);
             App._lastSignalData = signal;
             this.displaySignalHistory(history);
-
-            // Load multi-timeframe signals in background (non-blocking)
-            API.getMultiTimeframeSignals(symbol).then(mtfData => {
-                this.displayMultiTimeframeSignals(mtfData);
-                this.displayOverviewTargets(mtfData);
-            }).catch(() => {});
         } catch (e) {
-            loading.classList.add('hidden');
-            results.classList.remove('hidden');
-            results.innerHTML = `
-                <div class="text-center py-8">
-                    <div class="text-red-400 text-sm mb-3">Failed to load signal: ${e.message}</div>
-                    <button onclick="Signals.loadSignal('${symbol}')"
-                        class="text-xs px-4 py-2 bg-dark-600 text-gray-300 rounded hover:bg-dark-700 transition">
-                        Retry
-                    </button>
-                </div>`;
+            if (loading) loading.classList.add('hidden');
         } finally {
             this.isLoading = false;
         }
