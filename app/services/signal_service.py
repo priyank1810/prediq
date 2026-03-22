@@ -769,9 +769,14 @@ class SignalService:
             }
 
         # Compute technical indicators for this timeframe
-        tech_result = indicator_service.compute_intraday_indicators(df)
-        tech_score = tech_result["score"]
-        details = tech_result.get("details", {})
+        try:
+            tech_result = indicator_service.compute_intraday_indicators(df)
+            tech_score = tech_result["score"]
+            details = tech_result.get("details", {})
+        except Exception as e:
+            logger.debug(f"Indicator computation failed for {symbol} {label}: {e}")
+            tech_score = 0
+            details = {}
 
         # Full ML prediction output
         pred_score = prediction.get("score", 0)
