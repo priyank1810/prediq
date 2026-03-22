@@ -468,10 +468,9 @@ class SignalService:
 
     # ── Multi-Timeframe Signals with Entry/Exit Levels ──
 
-    # Intraday: 2m (entry/exit), 10m (trend confirmation), 30m (trend direction)
+    # Intraday: 10m (trend confirmation), 30m (trend direction)
     # Short-term: 15m (triggers), 1h (entry/exit), 4h (trend direction + confirmation)
     _TIMEFRAME_HORIZON_MAP = {
-        "intraday_2m": "2m",
         "intraday_10m": "10m",
         "intraday_30m": "30m",
         "short_15m": "15m",
@@ -669,15 +668,6 @@ class SignalService:
             return None
 
         # ── INTRADAY SIGNALS (each uses different data window) ──
-        # 2 min — entry/exit (recent candles only for micro price action)
-        intraday_2m = self._compute_timeframe_signal(
-            label="2 Min (Entry/Exit)", df=_pick_df(df_short, df_15m),
-            current_price=current_price,
-            sentiment_score=sentiment_score, global_score=global_score,
-            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
-            timeframe="intraday", symbol=symbol,
-            prediction=pred_results.get("intraday_2m", {}),
-        )
         # 10 min — trend confirmation (full 15m candles)
         intraday_10m = self._compute_timeframe_signal(
             label="10 Min (Trend Confirm)", df=df_15m,
@@ -727,7 +717,6 @@ class SignalService:
         )
 
         all_signals = {
-            "intraday_2m": intraday_2m,
             "intraday_10m": intraday_10m,
             "intraday_30m": intraday_30m,
             "short_15m": short_15m,
@@ -749,7 +738,6 @@ class SignalService:
             "timestamp": now_ist().isoformat(),
             "market_open": is_market_open(),
             "intraday": {
-                "2m": intraday_2m,
                 "10m": intraday_10m,
                 "30m": intraday_30m,
             },
