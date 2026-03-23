@@ -204,6 +204,17 @@ async def price_streamer():
                             }
                             await manager.broadcast_price(trimmed["symbol"], trimmed)
 
+                            # Check trade predictions on every tick (real-time validation)
+                            try:
+                                from app.services.trade_tracker import trade_tracker
+                                trade_tracker.check_symbol_tick(
+                                    quote["symbol"], float(quote["ltp"]),
+                                    high=float(quote.get("high") or 0),
+                                    low=float(quote.get("low") or 0),
+                                )
+                            except Exception:
+                                pass
+
                             # Feed tick to candle builder when Angel One is active
                             if candle_builder and ANGEL_AVAILABLE:
                                 try:

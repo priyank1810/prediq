@@ -37,6 +37,101 @@ MIN_LOG_INTERVAL_MINUTES = {
 class TradeTracker:
     """Tracks trade signal predictions and validates outcomes."""
 
+    def __init__(self):
+        self._open_trades_cache = {}  # symbol -> [trade dicts]
+        self._cache_loaded = False
+
+    def _load_open_trades_cache(self):
+        """Load all open trades into memory for fast tick checking."""
+        db = SessionLocal()
+        try:
+            open_trades = (
+                db.query(TradeSignalLog)
+                .filter(TradeSignalLog.status == "open")
+                .all()
+            )
+            self._open_trades_cache = {}
+            for t in open_trades:
+                if t.symbol not in self._open_trades_cache:
+                    self._open_trades_cache[t.symbol] = []
+                self._open_trades_cache[t.symbol].append({
+                    "id": t.id, "direction": t.direction,
+                    "entry": t.entry, "target": t.target,
+                    "stop_loss": t.stop_loss, "timeframe": t.timeframe,
+                    "expires_at": t.expires_at,
+                })
+            self._cache_loaded = True
+        finally:
+            db.close()
+
+    def check_symbol_tick(self, symbol: str, ltp: float, high: float = 0, low: float = 0):
+        """Called on every price tick — real-time trade validation.
+        Uses in-memory cache, only hits DB when a trade resolves."""
+        if not self._cache_loaded:
+            self._load_open_trades_cache()
+
+        trades = self._open_trades_cache.get(symbol)
+        if not trades:
+            return
+
+        now = now_ist().replace(tzinfo=None)
+        resolved_ids = []
+
+        for trade in trades:
+            status = None
+            outcome_pct = 0
+
+            if trade["direction"] == "BULLISH":
+                if trade["target"] and ltp >= trade["target"]:
+                    status = "target_hit"
+                    outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                elif trade["stop_loss"] and ltp <= trade["stop_loss"]:
+                    status = "sl_hit"
+                    outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                elif trade["expires_at"] and now > trade["expires_at"]:
+                    status = "expired"
+                    outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
+
+            elif trade["direction"] == "BEARISH":
+                if trade["target"] and ltp <= trade["target"]:
+                    status = "target_hit"
+                    outcome_pct = round((trade["entry"] - ltp) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                elif trade["stop_loss"] and ltp >= trade["stop_loss"]:
+                    status = "sl_hit"
+                    outcome_pct = round((trade["entry"] - ltp) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                elif trade["expires_at"] and now > trade["expires_at"]:
+                    status = "expired"
+                    outcome_pct = round((trade["entry"] - ltp) / trade["entry"] * 100, 2) if trade["entry"] else 0
+
+            if status:
+                resolved_ids.append(trade["id"])
+                # Update DB
+                try:
+                    db = SessionLocal()
+                    try:
+                        record = db.query(TradeSignalLog).filter(TradeSignalLog.id == trade["id"]).first()
+                        if record and record.status == "open":
+                            record.status = status
+                            record.outcome_price = ltp
+                            record.outcome_pct = outcome_pct
+                            record.resolved_at = now
+                            if record.highest_price is None or ltp > record.highest_price:
+                                record.highest_price = ltp
+                            if record.lowest_price is None or ltp < record.lowest_price:
+                                record.lowest_price = ltp
+                            db.commit()
+                            logger.info(f"Trade resolved via tick: {symbol} {trade['timeframe']} → {status} ({outcome_pct:+.2f}%)")
+                    finally:
+                        db.close()
+                except Exception as e:
+                    logger.debug(f"Tick trade resolve failed: {e}")
+
+        # Remove resolved trades from cache
+        if resolved_ids:
+            self._open_trades_cache[symbol] = [
+                t for t in trades if t["id"] not in resolved_ids
+            ]
+
     def log_signal(self, symbol: str, timeframe: str, signal_data: dict,
                    current_price: float):
         """Log a trade prediction from an MTF signal computation."""
@@ -90,6 +185,8 @@ class TradeTracker:
             db.add(log)
             db.commit()
             logger.debug(f"Logged trade signal: {symbol} {timeframe} {signal_data['direction']}")
+            # Refresh cache so tick checker picks up new trade
+            self._cache_loaded = False
         except Exception as e:
             db.rollback()
             logger.debug(f"Trade signal logging failed: {e}")
