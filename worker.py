@@ -87,25 +87,43 @@ class Worker:
 
 
     def handle_watchlist_trade_scan(self, params: dict) -> dict:
-        """Compute MTF signals for all watchlist stocks and log trade predictions.
-        scan_type: "full" (all timeframes) or "short" (intraday + short_term only)."""
+        """Compute MTF signals for watchlist + popular stocks.
+        Watchlist: log all non-neutral signals.
+        Popular stocks (not in watchlist): only log high-confidence (>=60%) signals."""
         from app.models import WatchlistItem
         from app.services.trade_tracker import trade_tracker
+        from app.config import POPULAR_STOCKS
         import time as _time
 
         scan_type = params.get("scan_type", "full")
+        HIGH_CONF_THRESHOLD = 60  # Only track famous stocks with strong signals
 
         db = SessionLocal()
         try:
-            symbols = [row.symbol for row in db.query(WatchlistItem.symbol).distinct().all()]
+            watchlist = set(row.symbol for row in db.query(WatchlistItem.symbol).distinct().all())
         finally:
             db.close()
 
-        if not symbols:
+        # Combine: watchlist + popular stocks not already in watchlist
+        popular_extra = [s for s in POPULAR_STOCKS if s not in watchlist]
+        all_symbols = list(watchlist) + popular_extra
+
+        if not all_symbols:
             return {"symbols_processed": 0}
 
         logged = 0
-        for sym in symbols:
+        popular_logged = 0
+
+        def _should_log(sym, sig):
+            """Watchlist: log all non-neutral. Popular: only high confidence."""
+            if not sig or sig.get("direction") == "NEUTRAL":
+                return False
+            if sym in watchlist:
+                return True
+            # Popular stock — only if confidence is high
+            return (sig.get("confidence") or 0) >= HIGH_CONF_THRESHOLD
+
+        for sym in all_symbols:
             try:
                 result = self.signal_service.get_multi_timeframe_signals(sym)
                 current_price = result.get("current_price", 0)
@@ -113,22 +131,23 @@ class Worker:
                 short_term = result.get("short_term", {})
 
                 if scan_type == "intraday":
-                    # Only log intraday signals (10m, 15m, 30m) — fast scan
                     for tf_key, sig in intraday.items():
-                        if sig and sig.get("direction") != "NEUTRAL":
+                        if _should_log(sym, sig):
                             trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
+                            if sym not in watchlist:
+                                popular_logged += 1
                 elif scan_type == "short":
-                    # Log short-term signals (1h, 4h)
                     for tf_key, sig in short_term.items():
-                        if sig and sig.get("direction") != "NEUTRAL":
+                        if _should_log(sym, sig):
                             trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
+                            if sym not in watchlist:
+                                popular_logged += 1
                 else:
-                    # Full scan — log everything
                     for tf_key, sig in intraday.items():
-                        if sig and sig.get("direction") != "NEUTRAL":
+                        if _should_log(sym, sig):
                             trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
                     for tf_key, sig in short_term.items():
-                        if sig and sig.get("direction") != "NEUTRAL":
+                        if _should_log(sym, sig):
                             trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
 
                 logged += 1
@@ -138,7 +157,16 @@ class Worker:
             # Shorter pause for intraday (15s), longer for full (30s)
             _time.sleep(15 if scan_type == "intraday" else 30)
 
-        return {"symbols_processed": logged, "total": len(symbols), "scan_type": scan_type}
+        if popular_logged:
+            log.info(f"Popular stocks: {popular_logged} high-confidence signals logged")
+        return {
+            "symbols_processed": logged,
+            "total": len(all_symbols),
+            "watchlist": len(watchlist),
+            "popular_scanned": len(popular_extra),
+            "popular_logged": popular_logged,
+            "scan_type": scan_type,
+        }
 
     def handle_trade_validate(self, params: dict) -> dict:
         """Validate open trade predictions and learn from results."""
