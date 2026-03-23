@@ -662,6 +662,62 @@
 
         <!-- AI Insights Tab -->
         <div id="tab-insights" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-insights">
+            <!-- Virtual Portfolio -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-base sm:text-lg font-semibold text-white">Virtual Portfolio (₹10,000)</h3>
+                    <span id="vpTotalTrades" class="text-xs text-gray-500"></span>
+                </div>
+                <!-- Summary -->
+                <div id="vpSummary" class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+                    <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                        <div class="text-[10px] text-gray-500">Current Value</div>
+                        <div id="vpCurrentValue" class="text-lg font-bold text-white">₹10,000</div>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                        <div class="text-[10px] text-gray-500">Total P&L</div>
+                        <div id="vpTotalPnl" class="text-lg font-bold text-white">₹0</div>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                        <div class="text-[10px] text-gray-500">Return %</div>
+                        <div id="vpReturnPct" class="text-lg font-bold text-white">0%</div>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                        <div class="text-[10px] text-gray-500">Win Rate</div>
+                        <div id="vpWinRate" class="text-lg font-bold text-white">0%</div>
+                    </div>
+                    <div class="bg-dark-700 rounded-lg p-2.5 text-center">
+                        <div class="text-[10px] text-gray-500">Per Trade</div>
+                        <div id="vpPerTrade" class="text-sm font-bold text-gray-400">-</div>
+                    </div>
+                </div>
+                <!-- Open Positions -->
+                <div id="vpOpenPositions" class="mb-3"></div>
+                <!-- Daily P&L -->
+                <div id="vpDailyPnl" class="mb-3"></div>
+                <!-- Recent Trades -->
+                <h4 class="text-sm font-medium text-white mb-2">Recent Trades</h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="text-gray-500 border-b border-gray-700">
+                                <th class="text-left px-2 py-1.5">Symbol</th>
+                                <th class="text-left px-2 py-1.5">TF</th>
+                                <th class="text-right px-2 py-1.5">Qty</th>
+                                <th class="text-right px-2 py-1.5">Entry</th>
+                                <th class="text-right px-2 py-1.5">Exit</th>
+                                <th class="text-right px-2 py-1.5">Invested</th>
+                                <th class="text-right px-2 py-1.5">P&L</th>
+                                <th class="text-center px-2 py-1.5">Result</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vpTradesTable">
+                            <tr><td colspan="8" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Prediction Model Leaderboard -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex items-center justify-between mb-3">

@@ -417,6 +417,16 @@ def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
         db.close()
 
 
+@router.get("/stats/virtual-portfolio")
+def get_virtual_portfolio(capital: float = Query(10000, gt=0)):
+    """Get virtual portfolio performance based on AI trade signals."""
+    try:
+        from app.services.virtual_portfolio import virtual_portfolio
+        return virtual_portfolio.get_portfolio(capital)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/stats/trades")
 def trade_prediction_stats(symbol: str = Query(None)):
     """Get trade prediction accuracy stats (target hit vs stop-loss hit vs expired)."""

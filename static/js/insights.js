@@ -10,6 +10,7 @@ const Insights = {
         }
         this._lastLoadTime = Date.now();
         await Promise.all([
+            this.loadVirtualPortfolio(),
             this.loadPredictionLeaderboard(),
             this.loadTradeTrackRecord(),
         ]);
@@ -989,6 +990,108 @@ const Insights = {
     },
 
     // ─── Trade Prediction Track Record ──────────────────────────
+
+    async loadVirtualPortfolio() {
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/virtual-portfolio?capital=10000`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            // Summary cards
+            const cv = data.current_value || 10000;
+            const pnl = data.total_pnl || 0;
+            const pnlPct = data.total_pnl_pct || 0;
+            const pnlColor = pnl >= 0 ? 'text-green-400' : 'text-red-400';
+            const pnlSign = pnl >= 0 ? '+' : '';
+
+            document.getElementById('vpCurrentValue').textContent = `₹${cv.toLocaleString('en-IN')}`;
+            document.getElementById('vpCurrentValue').className = `text-lg font-bold ${pnlColor}`;
+
+            const pnlEl = document.getElementById('vpTotalPnl');
+            pnlEl.textContent = `${pnlSign}₹${Math.abs(pnl).toLocaleString('en-IN')}`;
+            pnlEl.className = `text-lg font-bold ${pnlColor}`;
+
+            const retEl = document.getElementById('vpReturnPct');
+            retEl.textContent = `${pnlSign}${pnlPct}%`;
+            retEl.className = `text-lg font-bold ${pnlColor}`;
+
+            const wrEl = document.getElementById('vpWinRate');
+            const wr = data.win_rate || 0;
+            wrEl.textContent = `${wr}%`;
+            wrEl.className = `text-lg font-bold ${wr >= 50 ? 'text-green-400' : wr > 0 ? 'text-red-400' : 'text-white'}`;
+
+            document.getElementById('vpPerTrade').textContent = `₹${(data.per_trade_allocation || 2000).toLocaleString('en-IN')}`;
+            document.getElementById('vpTotalTrades').textContent = `${data.total_trades || 0} trades | ${(data.open_positions || []).length} open`;
+
+            // Open positions
+            const openEl = document.getElementById('vpOpenPositions');
+            const positions = data.open_positions || [];
+            if (positions.length > 0) {
+                openEl.innerHTML = `
+                    <h4 class="text-xs font-medium text-white mb-1">Open Positions</h4>
+                    <div class="flex flex-wrap gap-2">
+                        ${positions.map(p => `
+                            <div class="bg-dark-700 rounded px-2.5 py-1.5 text-xs cursor-pointer hover:bg-dark-600" onclick="Search.select('${p.symbol}','')">
+                                <span class="text-white font-medium">${p.symbol}</span>
+                                <span class="text-gray-500 ml-1">${p.qty}×₹${p.entry.toFixed(0)}</span>
+                                <span class="text-gray-500 ml-1">→ ₹${p.target ? p.target.toFixed(0) : '-'}</span>
+                            </div>
+                        `).join('')}
+                    </div>`;
+            } else {
+                openEl.innerHTML = '';
+            }
+
+            // Daily P&L
+            const dailyEl = document.getElementById('vpDailyPnl');
+            const dailyData = data.daily_pnl || [];
+            if (dailyData.length > 0) {
+                dailyEl.innerHTML = `
+                    <h4 class="text-xs font-medium text-white mb-1">Daily P&L</h4>
+                    <div class="flex flex-wrap gap-1">
+                        ${dailyData.slice(-10).map(d => {
+                            const c = d.pnl >= 0 ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400';
+                            const s = d.pnl >= 0 ? '+' : '';
+                            return `<div class="rounded px-2 py-1 text-[10px] ${c}">${d.date.slice(5)} ${s}₹${Math.abs(d.pnl).toFixed(0)}</div>`;
+                        }).join('')}
+                    </div>`;
+            } else {
+                dailyEl.innerHTML = '';
+            }
+
+            // Recent trades table
+            const trades = data.recent_trades || [];
+            const tbody = document.getElementById('vpTradesTable');
+            if (trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">No trades yet. Virtual portfolio follows bullish signals from your watchlist.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = trades.map(t => {
+                const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                const sign = t.pnl >= 0 ? '+' : '';
+                let badge = '';
+                if (t.status === 'target_hit') badge = '<span class="px-1 py-0.5 rounded bg-green-900 text-green-400 text-[10px]">✓ Target</span>';
+                else if (t.status === 'sl_hit') badge = '<span class="px-1 py-0.5 rounded bg-red-900 text-red-400 text-[10px]">✗ SL</span>';
+                else badge = `<span class="px-1 py-0.5 rounded bg-gray-800 ${pColor} text-[10px]">Expired</span>`;
+
+                const tfShort = { intraday_10m: '10m', intraday_30m: '30m', short_15m: '15m', short_1h: '1h', short_4h: '4h' };
+
+                return `<tr class="border-b border-gray-800">
+                    <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
+                    <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
+                    <td class="px-2 py-1.5 text-right text-gray-300">${t.qty}</td>
+                    <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry.toFixed(2)}</td>
+                    <td class="px-2 py-1.5 text-right text-gray-300">₹${t.exit_price.toFixed(2)}</td>
+                    <td class="px-2 py-1.5 text-right text-gray-300">₹${t.invested.toFixed(0)}</td>
+                    <td class="px-2 py-1.5 text-right ${pColor} font-medium">${sign}₹${Math.abs(t.pnl).toFixed(0)} (${sign}${t.pnl_pct}%)</td>
+                    <td class="px-2 py-1.5 text-center">${badge}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            // Silently fail
+        }
+    },
 
     async loadTradeTrackRecord() {
         try {
