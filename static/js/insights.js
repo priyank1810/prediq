@@ -1049,7 +1049,7 @@ const Insights = {
         const tbody = document.getElementById('tradeRecentTable');
 
         if (trades.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">No resolved trades yet</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">No resolved trades yet</td></tr>';
             return;
         }
 
@@ -1070,7 +1070,18 @@ const Insights = {
             const pnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
             const pnlSign = (t.outcome_pct || 0) >= 0 ? '+' : '';
 
-            const tfShort = { intraday: 'Intra', short_term: '1W', long_term: '3M' };
+            const tfShort = { intraday_10m: '10m', intraday_30m: '30m', short_15m: '15m', short_1h: '1h', short_4h: '4h' };
+
+            // Actual price color: green if moved in predicted direction
+            const actualPrice = t.outcome_price;
+            let actualColor = 'text-gray-300';
+            if (actualPrice && t.entry) {
+                if (t.direction === 'BULLISH') {
+                    actualColor = actualPrice > t.entry ? 'text-green-400' : 'text-red-400';
+                } else {
+                    actualColor = actualPrice < t.entry ? 'text-green-400' : 'text-red-400';
+                }
+            }
 
             return `<tr class="border-b border-gray-800 hover:bg-dark-700/50">
                 <td class="px-2 py-1.5 font-medium text-white cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
@@ -1079,6 +1090,7 @@ const Insights = {
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry ? t.entry.toFixed(2) : '-'}</td>
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.target ? t.target.toFixed(2) : '-'}</td>
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.stop_loss ? t.stop_loss.toFixed(2) : '-'}</td>
+                <td class="px-2 py-1.5 text-right ${actualColor} font-medium">₹${actualPrice ? actualPrice.toFixed(2) : '-'}</td>
                 <td class="px-2 py-1.5 text-center">${statusBadge}</td>
                 <td class="px-2 py-1.5 text-right ${pnlColor} font-medium">${pnlSign}${(t.outcome_pct || 0).toFixed(2)}%</td>
             </tr>`;
