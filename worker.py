@@ -109,21 +109,34 @@ class Worker:
             try:
                 result = self.signal_service.get_multi_timeframe_signals(sym)
                 current_price = result.get("current_price", 0)
+                intraday = result.get("intraday", {})
+                short_term = result.get("short_term", {})
 
-                if scan_type == "short":
-                    # Only log intraday and short_term, skip long_term
-                    for tf_key in ("intraday", "short_term"):
-                        sig = result.get(tf_key)
-                        if sig:
-                            trade_tracker.log_signal(sym, tf_key, sig, current_price)
-                # "full" scan logs all via the internal call in get_multi_timeframe_signals
+                if scan_type == "intraday":
+                    # Only log intraday signals (10m, 15m, 30m) — fast scan
+                    for tf_key, sig in intraday.items():
+                        if sig and sig.get("direction") != "NEUTRAL":
+                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
+                elif scan_type == "short":
+                    # Log short-term signals (1h, 4h)
+                    for tf_key, sig in short_term.items():
+                        if sig and sig.get("direction") != "NEUTRAL":
+                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
+                else:
+                    # Full scan — log everything
+                    for tf_key, sig in intraday.items():
+                        if sig and sig.get("direction") != "NEUTRAL":
+                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
+                    for tf_key, sig in short_term.items():
+                        if sig and sig.get("direction") != "NEUTRAL":
+                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
 
                 logged += 1
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
 
-            # 30s pause between stocks to stay gentle on resources
-            _time.sleep(30)
+            # Shorter pause for intraday (15s), longer for full (30s)
+            _time.sleep(15 if scan_type == "intraday" else 30)
 
         return {"symbols_processed": logged, "total": len(symbols), "scan_type": scan_type}
 

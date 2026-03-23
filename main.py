@@ -366,48 +366,47 @@ async def news_alert_scanner():
 
 
 async def trade_job_enqueuer():
-    """Enqueue trade scan and validation jobs to the worker process.
-    - Trade scan: twice daily (10:30 AM, 2:30 PM IST)
-    - Validation: every 10 minutes during market hours
-    All heavy work runs on the worker, keeping the main app lightweight."""
+    """Tiered trade scanning + validation.
+
+    Intraday (10m, 15m, 30m): every 30 min during market hours
+    Short-term (1h, 4h):      every 2 hours during market hours
+    Validation:               every 10 min (real-time via ticks + worker fallback)
+    """
     await asyncio.sleep(300)  # Let services warm up
 
-    _ran_today = set()
+    _last_intraday_scan = 0
+    _last_shortterm_scan = 0
 
     while True:
         try:
             from app.utils.helpers import is_market_open, now_ist
             from app.services.job_service import job_service
+            import time
 
             current = now_ist()
+            now_ts = time.time()
 
             if is_market_open():
-                # Validate open trades every 10 min
+                # Validate open trades every 10 min (fallback for missed ticks)
                 if not job_service.has_pending("trade_validate"):
                     job_service.enqueue("trade_validate", {}, priority=0)
 
-                # Short-term scan: 3x daily (10:00, 12:30, 14:30)
-                # Full scan (includes long-term): 1x daily (10:00)
-                window = None
-                scan_type = "short"
-                if current.hour == 10 and 0 <= current.minute <= 10:
-                    window = f"{current.date()}_morning"
-                    scan_type = "full"  # Morning scan includes long-term
-                elif current.hour == 12 and 28 <= current.minute <= 38:
-                    window = f"{current.date()}_midday"
-                elif current.hour == 14 and 28 <= current.minute <= 38:
-                    window = f"{current.date()}_afternoon"
-
-                if window and window not in _ran_today:
+                # Intraday scan (10m, 15m, 30m): every 30 min
+                if now_ts - _last_intraday_scan >= 1800:  # 30 min
                     if not job_service.has_pending("watchlist_trade_scan"):
-                        job_service.enqueue("watchlist_trade_scan", {"scan_type": scan_type}, priority=0)
-                        _ran_today.add(window)
-                        _ran_today = {w for w in _ran_today if current.date().isoformat() in w}
+                        job_service.enqueue("watchlist_trade_scan", {"scan_type": "intraday"}, priority=0)
+                        _last_intraday_scan = now_ts
+
+                # Short-term scan (1h, 4h): every 2 hours
+                if now_ts - _last_shortterm_scan >= 7200:  # 2 hours
+                    if not job_service.has_pending("watchlist_trade_scan"):
+                        job_service.enqueue("watchlist_trade_scan", {"scan_type": "short"}, priority=0)
+                        _last_shortterm_scan = now_ts
 
         except Exception:
             pass
 
-        await asyncio.sleep(600)  # Check every 10 minutes
+        await asyncio.sleep(300)  # Check every 5 minutes
 
 
 async def daily_stock_learner():
