@@ -125,13 +125,12 @@ class TradeTracker:
                         db.close()
                 except Exception as e:
                     logger.debug(f"Tick trade resolve failed: {e}")
-
-                else:
-                    # Track high/low watermarks in cache for partial progress
-                    if "highest" not in trade or ltp > trade.get("highest", 0):
-                        trade["highest"] = ltp
-                    if "lowest" not in trade or ltp < trade.get("lowest", float("inf")):
-                        trade["lowest"] = ltp
+            else:
+                # Not resolved yet — track high/low watermarks in cache
+                if "highest" not in trade or ltp > trade.get("highest", 0):
+                    trade["highest"] = ltp
+                if "lowest" not in trade or ltp < trade.get("lowest", float("inf")):
+                    trade["lowest"] = ltp
 
         # Remove resolved trades from cache
         if resolved_ids:
