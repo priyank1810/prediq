@@ -1076,20 +1076,20 @@ class SignalService:
             reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
 
         elif direction == "BEARISH":
-            # Bearish for long-only investors: "exit your position"
-            # Entry = current price (where to sell/exit)
+            # Bearish: expecting price to drop
+            # Entry = current price (where to short/exit)
             entry = current_price
 
-            # Stop loss: BELOW current price — if price drops to here, exit to limit losses
-            atr_stop = entry - (atr * atr_multiplier_sl)
-            if confidence_lower is not None and confidence_lower < entry:
-                stop_loss = confidence_lower * 0.4 + atr_stop * 0.6
+            # Stop loss: ABOVE entry — if price rises to here, you're wrong
+            atr_stop = entry + (atr * atr_multiplier_sl)
+            if confidence_upper is not None and confidence_upper > entry:
+                stop_loss = confidence_upper * 0.4 + atr_stop * 0.6
             else:
                 stop_loss = atr_stop
-            stop_loss = max(stop_loss, swing_low - atr * 0.5)
-            # Floor: never more than 4% below entry
-            min_sl = entry * 0.96
-            stop_loss = max(stop_loss, min_sl)
+            stop_loss = min(stop_loss, swing_high + atr * 0.5)
+            # Cap: never more than 4% above entry
+            max_sl = entry * 1.04
+            stop_loss = min(stop_loss, max_sl)
 
             # Target: expected downside level (how far price may fall)
             support_candidates = sorted([
