@@ -108,22 +108,28 @@ class StockLearner:
         if len(logs) < MIN_DATA_FOR_PROFILE:
             return None
 
-        # Per-model stats
+        # Per-model stats with horizon-aware thresholds
+        def _get_threshold(log):
+            days = (log.target_date - log.prediction_date).days if log.target_date and log.prediction_date else 1
+            if days <= 0: return 0.3
+            elif days <= 1: return 0.5
+            elif days <= 5: return 1.0
+            elif days <= 22: return 1.5
+            else: return 2.0
+
         model_stats = {}
         for log in logs:
             m = log.model_type or "unknown"
             if m not in model_stats:
-                model_stats[m] = {"mape_sum": 0, "within_2pct": 0, "within_5pct": 0,
-                                  "correct_dir": 0, "total": 0}
+                model_stats[m] = {"mape_sum": 0, "accurate": 0, "within_5pct": 0, "total": 0}
             s = model_stats[m]
             s["total"] += 1
             mape = abs(log.predicted_price - log.actual_price) / log.actual_price * 100
             s["mape_sum"] += mape
-            if mape <= 2:
-                s["within_2pct"] += 1
+            if mape <= _get_threshold(log):
+                s["accurate"] += 1
             if mape <= 5:
                 s["within_5pct"] += 1
-                s["correct_dir"] += 1
 
         models = {}
         best_model = None
@@ -135,7 +141,7 @@ class StockLearner:
             models[model] = {
                 "total": s["total"],
                 "avg_mape": avg_mape,
-                "accuracy_2pct": round(s["within_2pct"] / s["total"] * 100, 1),
+                "accuracy": round(s["accurate"] / s["total"] * 100, 1),
                 "accuracy_5pct": round(s["within_5pct"] / s["total"] * 100, 1),
             }
             if avg_mape < best_mape:

@@ -1151,7 +1151,7 @@ const Signals = {
                             ${isBest ? '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/50 text-purple-300">Best</span>' : ''}
                         </div>
                         <div class="text-lg font-bold ${m.avg_mape <= 3 ? 'text-green-400' : m.avg_mape <= 6 ? 'text-yellow-400' : 'text-red-400'}">${m.avg_mape}% MAPE</div>
-                        <div class="text-[10px] text-gray-500">${m.total} predictions | ${m.accuracy_2pct}% within 2%</div>
+                        <div class="text-[10px] text-gray-500">${m.total} predictions | ${m.accuracy || m.accuracy_2pct || 0}% accurate</div>
                     </div>`;
             }).join('');
 

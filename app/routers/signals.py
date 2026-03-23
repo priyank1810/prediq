@@ -104,26 +104,34 @@ def prediction_leaderboard():
             return {"models": [], "by_symbol": [], "by_sector": []}
 
         # --- Per-model aggregate stats ---
+        # Accuracy threshold based on prediction horizon
+        def _get_accuracy_threshold(log):
+            """Stricter thresholds for shorter timeframes."""
+            days = (log.target_date - log.prediction_date).days if log.target_date and log.prediction_date else 1
+            if days <= 0:
+                return 0.3   # intraday: 0.3%
+            elif days <= 1:
+                return 0.5   # 1 day: 0.5%
+            elif days <= 5:
+                return 1.0   # 1 week: 1%
+            elif days <= 22:
+                return 1.5   # 1 month: 1.5%
+            else:
+                return 2.0   # 3+ months: 2%
+
         model_stats = {}
         for log in all_logs:
             m = log.model_type
             if m not in model_stats:
-                model_stats[m] = {"mape_sum": 0, "correct_dir": 0, "within_2pct": 0, "total": 0}
+                model_stats[m] = {"mape_sum": 0, "correct_dir": 0, "accurate": 0, "total": 0}
             s = model_stats[m]
             s["total"] += 1
             mape = abs(log.predicted_price - log.actual_price) / log.actual_price * 100
             s["mape_sum"] += mape
-            # Directional accuracy: did prediction direction match actual?
-            pred_dir = 1 if log.predicted_price >= log.actual_price * 0.999 else -1
-            # We need a baseline — use prediction_date closing price if available
-            # For simplicity: predict up if predicted > actual*(1-threshold) means "up from some base"
-            # Better: compare direction relative to the prediction_date
-            # Since we don't store the price at prediction time, we approximate
-            # by checking if predicted and actual moved in same direction relative to each other
-            if mape <= 2:
-                s["within_2pct"] += 1
-            # Directional: predicted higher than actual means model was bullish vs what happened
-            # This is a simplified metric — count if error < 5% as "directionally ok"
+
+            threshold = _get_accuracy_threshold(log)
+            if mape <= threshold:
+                s["accurate"] += 1
             if mape <= 5:
                 s["correct_dir"] += 1
 
@@ -136,7 +144,7 @@ def prediction_leaderboard():
                 "model": model_name,
                 "total": s["total"],
                 "avg_mape": round(s["mape_sum"] / s["total"], 2),
-                "win_rate": round(s["within_2pct"] / s["total"] * 100, 1),
+                "win_rate": round(s["accurate"] / s["total"] * 100, 1),
                 "directional_accuracy": round(s["correct_dir"] / s["total"] * 100, 1),
             })
 
