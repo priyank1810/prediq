@@ -126,6 +126,13 @@ class TradeTracker:
                 except Exception as e:
                     logger.debug(f"Tick trade resolve failed: {e}")
 
+                else:
+                    # Track high/low watermarks in cache for partial progress
+                    if "highest" not in trade or ltp > trade.get("highest", 0):
+                        trade["highest"] = ltp
+                    if "lowest" not in trade or ltp < trade.get("lowest", float("inf")):
+                        trade["lowest"] = ltp
+
         # Remove resolved trades from cache
         if resolved_ids:
             self._open_trades_cache[symbol] = [
@@ -362,6 +369,22 @@ class TradeTracker:
                 recent = recent.filter(TradeSignalLog.symbol == symbol)
             recent = recent.order_by(TradeSignalLog.resolved_at.desc()).limit(20).all()
 
+            def _target_progress(s):
+                """How close price got to target (0-100%)."""
+                if not s.entry or not s.target or s.entry == s.target:
+                    return None
+                if s.direction == "BULLISH":
+                    best = s.highest_price or s.outcome_price or s.entry
+                    move = best - s.entry
+                    needed = s.target - s.entry
+                else:
+                    best = s.lowest_price or s.outcome_price or s.entry
+                    move = s.entry - best
+                    needed = s.entry - s.target
+                if needed <= 0:
+                    return None
+                return min(100, round(move / needed * 100, 1))
+
             recent_list = [{
                 "symbol": s.symbol,
                 "timeframe": s.timeframe,
@@ -374,6 +397,7 @@ class TradeTracker:
                 "outcome_price": s.outcome_price,
                 "highest_price": s.highest_price,
                 "lowest_price": s.lowest_price,
+                "target_progress": _target_progress(s),
                 "confidence": s.confidence,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
                 "resolved_at": s.resolved_at.isoformat() if s.resolved_at else None,

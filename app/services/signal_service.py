@@ -916,20 +916,62 @@ class SignalService:
             confidence = min(100, round(base_confidence, 2))
 
         # ── Compute Entry / Target / Stop Loss ──
-        entry, target, stop_loss, risk_reward, reasoning = self._compute_entry_exit(
-            df, current_price, direction, timeframe, details,
-            predicted_price=predicted_price,
-            pred_confidence=pred_confidence,
-            confidence_lower=confidence_lower,
-            confidence_upper=confidence_upper,
-            volume_conviction=volume_conviction,
-            regime=regime,
-        )
+        if direction == "BULLISH":
+            # Full computation for bullish (actionable trade)
+            entry, target, stop_loss, risk_reward, reasoning = self._compute_entry_exit(
+                df, current_price, direction, timeframe, details,
+                predicted_price=predicted_price,
+                pred_confidence=pred_confidence,
+                confidence_lower=confidence_lower,
+                confidence_upper=confidence_upper,
+                volume_conviction=volume_conviction,
+                regime=regime,
+            )
+        elif direction == "BEARISH":
+            # Lightweight for bearish — just reentry level, skip heavy S/R computation
+            entry = current_price
+            # Simple reentry: predicted price or current - ATR estimate
+            if predicted_price and predicted_price < current_price * 0.995:
+                target = round(predicted_price, 2)
+            else:
+                target = round(current_price * 0.97, 2)  # 3% below as default reentry
+            stop_loss = None
+            risk_reward = None
+            reasoning = f"Exit near ₹{entry:.2f} | Re-enter at ₹{target:.2f}"
+        else:
+            entry = round(current_price, 2)
+            target = None
+            stop_loss = None
+            risk_reward = None
+            reasoning = "No clear directional bias — wait for confirmation"
+
+        # ── Confidence trend (compare with recent signals for this stock) ──
+        conf_trend = None
+        try:
+            cache_key = f"conf_history:{symbol}:{timeframe}"
+            from app.utils.cache import cache as _cache
+            prev_confs = _cache.get(cache_key) or []
+            prev_confs.append(confidence)
+            if len(prev_confs) > 10:
+                prev_confs = prev_confs[-10:]
+            _cache.set(cache_key, prev_confs, 7200)  # keep 2 hours
+            if len(prev_confs) >= 3:
+                recent_avg = sum(prev_confs[-3:]) / 3
+                older_avg = sum(prev_confs[:min(3, len(prev_confs)-3)]) / min(3, len(prev_confs)-3) if len(prev_confs) > 3 else recent_avg
+                if recent_avg > older_avg + 5:
+                    conf_trend = "rising"
+                elif recent_avg < older_avg - 5:
+                    conf_trend = "falling"
+                else:
+                    conf_trend = "stable"
+        except Exception:
+            pass
 
         return {
             "label": label,
             "direction": direction,
             "confidence": confidence,
+            "confidence_trend": conf_trend,
             "score": composite,
             "entry": entry,
             "target": target,

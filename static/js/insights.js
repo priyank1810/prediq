@@ -1297,7 +1297,10 @@ const Insights = {
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.target ? t.target.toFixed(2) : '-'}</td>
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.stop_loss ? t.stop_loss.toFixed(2) : '-'}</td>
                 <td class="px-2 py-1.5 text-right ${actualColor} font-medium">₹${actualPrice ? actualPrice.toFixed(2) : '-'}</td>
-                <td class="px-2 py-1.5 text-center">${statusBadge}</td>
+                <td class="px-2 py-1.5 text-center">
+                    ${statusBadge}
+                    ${t.target_progress != null && t.status !== 'target_hit' ? `<div class="mt-0.5 w-full bg-dark-600 rounded-full h-1"><div class="h-1 rounded-full ${t.target_progress >= 80 ? 'bg-yellow-400' : 'bg-gray-500'}" style="width:${Math.min(100, t.target_progress)}%"></div></div><div class="text-[8px] text-gray-500">${t.target_progress}% to target</div>` : ''}
+                </td>
                 <td class="px-2 py-1.5 text-right ${pnlColor} font-medium">${pnlSign}${(t.outcome_pct || 0).toFixed(2)}%</td>
             </tr>`;
         }).join('');

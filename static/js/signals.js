@@ -718,6 +718,11 @@ const Signals = {
                     ${regimeBadge}
                     ${volBadge}
                     ${modelConfBadge}
+                    ${sig.confidence_trend ? `<span class="text-[9px] px-1 py-0.5 rounded ${
+                        sig.confidence_trend === 'rising' ? 'bg-green-900/50 text-green-400' :
+                        sig.confidence_trend === 'falling' ? 'bg-red-900/50 text-red-400' :
+                        'bg-gray-800 text-gray-500'
+                    }">Conf:${sig.confidence_trend}</span>` : ''}
                 </div>
                 ${sig.reasoning ? `<div class="text-[10px] text-gray-500 mt-2 leading-relaxed">${sig.reasoning}</div>` : ''}
             </div>`;
