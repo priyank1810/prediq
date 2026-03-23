@@ -1044,6 +1044,9 @@ const Insights = {
                 openEl.innerHTML = '';
             }
 
+            // Near-bullish suggestions
+            this._loadNearBullish();
+
             // Equity curve chart
             this._renderEquityCurve(data.equity_curve || []);
 
@@ -1139,6 +1142,34 @@ const Insights = {
             }).join('');
         } catch (e) {
             // Silently fail
+        }
+    },
+
+    async _loadNearBullish() {
+        const el = document.getElementById('vpNearBullish');
+        if (!el) return;
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/near-bullish`);
+            if (!resp.ok) { el.innerHTML = ''; return; }
+            const stocks = await resp.json();
+            if (!stocks || stocks.length === 0) { el.innerHTML = ''; return; }
+
+            el.innerHTML = `
+                <h4 class="text-xs font-medium text-yellow-400 mb-1">Stocks To Watch (Near Bullish)</h4>
+                <div class="flex flex-wrap gap-2">
+                    ${stocks.map(s => {
+                        const scoreColor = s.score > 5 ? 'text-green-400' : 'text-yellow-400';
+                        return `<div class="bg-dark-700 border border-yellow-800/30 rounded px-2.5 py-1.5 text-xs cursor-pointer hover:bg-dark-600" onclick="Search.select('${s.symbol}','')">
+                            <span class="text-white font-medium">${s.symbol}</span>
+                            <span class="${scoreColor} ml-1">+${s.score.toFixed(1)}</span>
+                            <span class="text-gray-500 ml-1 text-[10px]">${s.label}</span>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <p class="text-[10px] text-gray-500 mt-1">These stocks have positive momentum but haven't crossed the bullish threshold yet.</p>
+            `;
+        } catch (e) {
+            el.innerHTML = '';
         }
     },
 

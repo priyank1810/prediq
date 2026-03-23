@@ -425,6 +425,17 @@ def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
         db.close()
 
 
+@router.get("/stats/near-bullish")
+def get_near_bullish_stocks():
+    """Get popular stocks that are close to turning bullish — opportunities to watch."""
+    try:
+        from app.utils.cache import cache
+        near = cache.get("near_bullish_stocks") or []
+        return near
+    except Exception:
+        return []
+
+
 @router.get("/stats/virtual-portfolio")
 def get_virtual_portfolio(capital: float = Query(10000, gt=0)):
     """Get virtual portfolio performance based on AI trade signals."""

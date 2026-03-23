@@ -96,7 +96,6 @@ class Worker:
         import time as _time
 
         scan_type = params.get("scan_type", "full")
-        HIGH_CONF_THRESHOLD = 60  # Only track famous stocks with strong signals
 
         db = SessionLocal()
         try:
@@ -113,58 +112,98 @@ class Worker:
 
         logged = 0
         popular_logged = 0
+        watchlist_bullish = 0
+        near_bullish = []  # Popular stocks close to turning bullish
 
-        def _should_log(sym, sig):
-            """Watchlist: log all non-neutral. Popular: only high confidence."""
-            if not sig or sig.get("direction") == "NEUTRAL":
-                return False
-            if sym in watchlist:
-                return True
-            # Popular stock — only if confidence is high
-            return (sig.get("confidence") or 0) >= HIGH_CONF_THRESHOLD
-
-        for sym in all_symbols:
+        # Phase 1: Scan watchlist first to detect if all bearish
+        for sym in watchlist:
             try:
                 result = self.signal_service.get_multi_timeframe_signals(sym)
                 current_price = result.get("current_price", 0)
                 intraday = result.get("intraday", {})
                 short_term = result.get("short_term", {})
 
-                if scan_type == "intraday":
+                all_sigs = list(intraday.values()) + list(short_term.values())
+                for sig in all_sigs:
+                    if sig and sig.get("direction") == "BULLISH":
+                        watchlist_bullish += 1
+
+                # Log all non-neutral watchlist signals
+                if scan_type in ("intraday", "full"):
                     for tf_key, sig in intraday.items():
-                        if _should_log(sym, sig):
+                        if sig and sig.get("direction") != "NEUTRAL":
                             trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
-                            if sym not in watchlist:
-                                popular_logged += 1
-                elif scan_type == "short":
+                if scan_type in ("short", "full"):
                     for tf_key, sig in short_term.items():
-                        if _should_log(sym, sig):
-                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
-                            if sym not in watchlist:
-                                popular_logged += 1
-                else:
-                    for tf_key, sig in intraday.items():
-                        if _should_log(sym, sig):
-                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
-                    for tf_key, sig in short_term.items():
-                        if _should_log(sym, sig):
+                        if sig and sig.get("direction") != "NEUTRAL":
                             trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
 
                 logged += 1
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
-
-            # Shorter pause for intraday (15s), longer for full (30s)
             _time.sleep(15 if scan_type == "intraday" else 30)
 
+        # Adaptive threshold: if watchlist is all bearish, lower popular stock threshold
+        if watchlist_bullish == 0 and len(watchlist) > 0:
+            popular_threshold = 45  # Lower threshold — hunt harder for opportunities
+            log.info("All watchlist bearish — lowering popular stock threshold to 45%")
+        else:
+            popular_threshold = 60  # Normal threshold
+
+        # Phase 2: Scan popular stocks
+        for sym in popular_extra:
+            try:
+                result = self.signal_service.get_multi_timeframe_signals(sym)
+                current_price = result.get("current_price", 0)
+                intraday = result.get("intraday", {})
+                short_term = result.get("short_term", {})
+
+                all_sigs = list(intraday.values()) + list(short_term.values())
+
+                # Track near-bullish stocks (neutral with positive composite)
+                for sig in all_sigs:
+                    if sig and sig.get("direction") == "NEUTRAL" and (sig.get("score") or 0) > 0:
+                        near_bullish.append({
+                            "symbol": sym,
+                            "score": sig.get("score", 0),
+                            "confidence": sig.get("confidence", 0),
+                            "label": sig.get("label", ""),
+                        })
+
+                # Log bullish signals above threshold
+                if scan_type in ("intraday", "full"):
+                    for tf_key, sig in intraday.items():
+                        if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
+                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
+                            popular_logged += 1
+                if scan_type in ("short", "full"):
+                    for tf_key, sig in short_term.items():
+                        if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
+                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
+                            popular_logged += 1
+
+                logged += 1
+            except Exception as e:
+                log.debug("Trade scan failed for %s: %s", sym, e)
+            _time.sleep(15 if scan_type == "intraday" else 30)
+
+        # Save near-bullish stocks to cache for the UI
+        if near_bullish:
+            from app.utils.cache import cache
+            near_bullish.sort(key=lambda x: -x["score"])
+            cache.set("near_bullish_stocks", near_bullish[:10], 3600)
+
         if popular_logged:
-            log.info(f"Popular stocks: {popular_logged} high-confidence signals logged")
+            log.info(f"Popular stocks: {popular_logged} signals logged (threshold: {popular_threshold}%)")
         return {
             "symbols_processed": logged,
             "total": len(all_symbols),
             "watchlist": len(watchlist),
+            "watchlist_bullish": watchlist_bullish,
             "popular_scanned": len(popular_extra),
             "popular_logged": popular_logged,
+            "popular_threshold": popular_threshold,
+            "near_bullish": len(near_bullish),
             "scan_type": scan_type,
         }
 
