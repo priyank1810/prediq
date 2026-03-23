@@ -1128,14 +1128,17 @@ const Insights = {
             tbody.innerHTML = trades.reverse().map(t => {
                 const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
                 const sign = t.pnl >= 0 ? '+' : '';
+                const rowBg = t.status === 'target_hit' ? 'bg-green-900/10 border-l-2 border-l-green-500' :
+                              t.status === 'sl_hit' ? 'bg-red-900/10 border-l-2 border-l-red-500' :
+                              'border-l-2 border-l-gray-700';
                 let badge = '';
-                if (t.status === 'target_hit') badge = '<span class="px-1 py-0.5 rounded bg-green-900 text-green-400 text-[10px]">✓</span>';
-                else if (t.status === 'sl_hit') badge = '<span class="px-1 py-0.5 rounded bg-red-900 text-red-400 text-[10px]">✗</span>';
-                else badge = `<span class="px-1 py-0.5 rounded bg-gray-800 text-gray-400 text-[10px]">E</span>`;
+                if (t.status === 'target_hit') badge = '<span class="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px] font-medium">✓ Win</span>';
+                else if (t.status === 'sl_hit') badge = '<span class="px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px] font-medium">✗ Loss</span>';
+                else badge = `<span class="px-1.5 py-0.5 rounded bg-gray-800 ${t.pnl >= 0 ? 'text-green-400' : 'text-red-400'} text-[10px]">Expired</span>`;
 
                 const confColor = (t.confidence || 0) >= 70 ? 'text-green-400' : (t.confidence || 0) >= 50 ? 'text-yellow-400' : 'text-gray-500';
 
-                return `<tr class="border-b border-gray-800 hover:bg-dark-700/50">
+                return `<tr class="${rowBg} hover:bg-dark-700/50">
                     <td class="px-2 py-1.5 text-gray-400">${t.date || '-'}</td>
                     <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
                     <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
@@ -1281,10 +1284,12 @@ const Insights = {
             </div>`;
 
             const wrColor = tf.win_rate >= 60 ? 'text-green-400' : tf.win_rate >= 45 ? 'text-yellow-400' : 'text-red-400';
-            return `<div class="bg-dark-700 rounded-lg p-3 text-center">
+            const borderColor = tf.win_rate >= 60 ? 'border-green-700/50' : tf.win_rate >= 45 ? 'border-yellow-700/50' : 'border-red-700/50';
+            const bgColor = tf.win_rate >= 60 ? 'bg-green-900/10' : tf.win_rate >= 45 ? 'bg-yellow-900/10' : 'bg-red-900/10';
+            return `<div class="rounded-lg p-3 text-center border ${borderColor} ${bgColor}">
                 <div class="text-xs text-gray-500 mb-1">${label}</div>
                 <div class="text-lg font-bold ${wrColor}">${tf.win_rate}%</div>
-                <div class="text-[10px] text-gray-500 mt-1">${tf.target_hit} wins · ${tf.sl_hit} losses · ${tf.expired} expired</div>
+                <div class="text-[10px] mt-1"><span class="text-green-400">${tf.target_hit} wins</span> · <span class="text-red-400">${tf.sl_hit} losses</span> · <span class="text-gray-500">${tf.expired} expired</span></div>
                 <div class="text-[10px] text-gray-600">${tf.total} trades</div>
             </div>`;
         }).join('');
@@ -1328,7 +1333,11 @@ const Insights = {
                 }
             }
 
-            return `<tr class="border-b border-gray-800 hover:bg-dark-700/50">
+            const rowBg = t.status === 'target_hit' ? 'bg-green-900/10 border-l-2 border-l-green-500' :
+                          t.status === 'sl_hit' ? 'bg-red-900/10 border-l-2 border-l-red-500' :
+                          (t.outcome_pct || 0) >= 0 ? 'border-l-2 border-l-green-800' : 'border-l-2 border-l-red-800';
+
+            return `<tr class="${rowBg} hover:bg-dark-700/50">
                 <td class="px-2 py-1.5 font-medium text-white cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
                 <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
                 <td class="px-2 py-1.5 text-center ${dirColor}">${dirArrow}</td>
