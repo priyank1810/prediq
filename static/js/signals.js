@@ -706,9 +706,8 @@ const Signals = {
                 </div>
                 <div class="border-t border-gray-700/50 pt-2 space-y-1">
                     ${sig.direction === 'BEARISH'
-                        ? `${levelRow('Exit', sig.entry, 'text-white font-bold text-sm')}
-                           ${levelRow('Downside', sig.target, 'text-red-400 font-bold text-sm')}
-                           ${levelRow('Stop Loss', sig.stop_loss, 'text-yellow-400')}`
+                        ? `${levelRow('Exit Now', sig.entry, 'text-red-400 font-bold text-sm')}
+                           ${levelRow('Re-enter At', sig.target, 'text-green-400 font-bold text-sm')}`
                         : `${levelRow('Entry', sig.entry, 'text-white font-bold text-sm')}
                            ${levelRow('Target', sig.target, 'text-green-400 font-bold text-sm')}
                            ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}`
@@ -899,10 +898,11 @@ const Signals = {
 
         if (sig.direction === 'BULLISH') {
             targetEl.innerHTML = sig.entry ? `Entry: ₹${sig.entry.toFixed(2)} → Target: ₹${sig.target ? sig.target.toFixed(2) : '-'}` : '';
+            slEl.innerHTML = sig.stop_loss ? `Stop Loss: ₹${sig.stop_loss.toFixed(2)}` : '';
         } else {
-            targetEl.innerHTML = sig.target ? `Downside: ₹${sig.target.toFixed(2)}` : '';
+            targetEl.innerHTML = sig.target ? `Exit → Re-enter at ₹${sig.target.toFixed(2)}` : '';
+            slEl.innerHTML = '';
         }
-        slEl.innerHTML = sig.stop_loss ? `Stop Loss: ₹${sig.stop_loss.toFixed(2)}` : '';
         rrEl.textContent = sig.risk_reward ? `R:R ${sig.risk_reward}` : '';
 
         targetPanel.classList.remove('hidden');

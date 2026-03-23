@@ -1076,42 +1076,29 @@ class SignalService:
             reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
 
         elif direction == "BEARISH":
-            # Bearish: expecting price to drop
-            # Entry = current price (where to short/exit)
+            # Bearish for long-only investors: exit position, wait for re-entry
             entry = current_price
 
-            # Stop loss: ABOVE entry — if price rises to here, you're wrong
-            atr_stop = entry + (atr * atr_multiplier_sl)
-            if confidence_upper is not None and confidence_upper > entry:
-                stop_loss = confidence_upper * 0.4 + atr_stop * 0.6
-            else:
-                stop_loss = atr_stop
-            stop_loss = min(stop_loss, swing_high + atr * 0.5)
-            # Cap: never more than 4% above entry
-            max_sl = entry * 1.04
-            stop_loss = min(stop_loss, max_sl)
-
-            # Target: expected downside level (how far price may fall)
+            # Re-entry: support level where it's safe to buy back
             support_candidates = sorted([
                 lvl for lvl in [fib_618, fib_500, swing_low]
                 if lvl < current_price
             ], reverse=True)
-            tech_target = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
+            reentry = support_candidates[0] if support_candidates else current_price - atr * atr_multiplier_target
 
             if predicted_price and predicted_price < current_price * 0.995:
-                target = predicted_price * ai_weight + tech_target * tech_weight
+                reentry = predicted_price * ai_weight + reentry * tech_weight
                 if confidence_lower is not None and confidence_lower < current_price:
-                    target = max(target, confidence_lower)
-                reasoning_parts.append(f"AI ₹{predicted_price:.2f}")
-            else:
-                target = tech_target
+                    reentry = max(reentry, confidence_lower)
 
-            if target > current_price * 0.995:
-                target = current_price - atr * atr_multiplier_target
+            if reentry > current_price * 0.995:
+                reentry = current_price - atr * atr_multiplier_target
+
+            target = reentry  # store as target for tracking
+            stop_loss = None  # no SL needed — not entering a trade
 
             reasoning_parts.append(f"Exit near ₹{entry:.2f}")
-            reasoning_parts.append(f"Downside ₹{target:.2f}")
-            reasoning_parts.append(f"SL ₹{stop_loss:.2f}")
+            reasoning_parts.append(f"Re-enter at ₹{reentry:.2f}")
 
         else:  # NEUTRAL
             entry = round(current_price, 2)
