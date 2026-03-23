@@ -1021,7 +1021,7 @@ const Insights = {
             wrEl.className = `text-lg font-bold ${wr >= 50 ? 'text-green-400' : wr > 0 ? 'text-red-400' : 'text-white'}`;
 
             document.getElementById('vpPerTrade').textContent = `₹${(data.per_trade_allocation || 2000).toLocaleString('en-IN')}`;
-            document.getElementById('vpTotalTrades').textContent = `${data.total_trades || 0} trades | ${(data.open_positions || []).length} open`;
+            document.getElementById('vpTotalTrades').textContent = `${data.total_trades || 0} trades | ${(data.open_positions || []).length} open | ${data.skipped_signals || 0} skipped`;
 
             // Open positions
             const openEl = document.getElementById('vpOpenPositions');
@@ -1076,6 +1076,8 @@ const Insights = {
                 else badge = `<span class="px-1 py-0.5 rounded bg-gray-800 ${pColor} text-[10px]">Expired</span>`;
 
                 const tfShort = { intraday_10m: '10m', intraday_30m: '30m', short_15m: '15m', short_1h: '1h', short_4h: '4h' };
+
+                const confColor = (t.confidence || 0) >= 70 ? 'text-green-400' : (t.confidence || 0) >= 50 ? 'text-yellow-400' : 'text-gray-500';
 
                 return `<tr class="border-b border-gray-800">
                     <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
