@@ -93,8 +93,11 @@ const App = {
                 if (tab.dataset.tab === 'watchlist') {
                     Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
                 }
+                if (tab.dataset.tab === 'portfolio') {
+                    Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadPortfolio(); }).catch(() => {});
+                }
                 if (tab.dataset.tab === 'insights') {
-                    Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
+                    Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadTrackRecord(); }).catch(() => {});
                 }
             });
         });
@@ -1098,7 +1101,7 @@ const App = {
         }
 
         // Activate the correct main tab
-        const validTabs = ['dashboard', 'watchlist', 'insights'];
+        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'insights'];
         if (validTabs.includes(tab)) {
             const tabBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
             if (tabBtn) {
@@ -1119,7 +1122,8 @@ const App = {
                     this.loadMarketOverview();
                 }
                 if (tab === 'watchlist') Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
-                if (tab === 'insights') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.load(); }).catch(() => {});
+                if (tab === 'portfolio') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadPortfolio(); }).catch(() => {});
+                if (tab === 'insights') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadTrackRecord(); }).catch(() => {});
             }
         }
 

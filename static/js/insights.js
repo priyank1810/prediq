@@ -5,12 +5,20 @@ const Insights = {
     init() {},
 
     async load() {
-        if (this._lastLoadTime && Date.now() - this._lastLoadTime < 30000) {
-            return;
-        }
-        this._lastLoadTime = Date.now();
+        await this.loadPortfolio();
+        await this.loadTrackRecord();
+    },
+
+    async loadPortfolio() {
+        if (this._portfolioLoadTime && Date.now() - this._portfolioLoadTime < 30000) return;
+        this._portfolioLoadTime = Date.now();
+        await this.loadVirtualPortfolio();
+    },
+
+    async loadTrackRecord() {
+        if (this._trackRecordLoadTime && Date.now() - this._trackRecordLoadTime < 30000) return;
+        this._trackRecordLoadTime = Date.now();
         await Promise.all([
-            this.loadVirtualPortfolio(),
             this.loadPredictionLeaderboard(),
             this.loadTradeTrackRecord(),
         ]);

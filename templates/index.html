@@ -143,6 +143,7 @@
         <div class="max-w-7xl mx-auto flex gap-1 sm:gap-1 px-3 sm:px-6" role="tablist" aria-label="Main navigation">
             <button class="nav-tab active" data-tab="dashboard" role="tab" aria-selected="true" aria-controls="tab-dashboard">Dashboard</button>
             <button class="nav-tab" data-tab="watchlist" role="tab" aria-selected="false" aria-controls="tab-watchlist">Watchlist</button>
+            <button class="nav-tab" data-tab="portfolio" role="tab" aria-selected="false" aria-controls="tab-portfolio">Portfolio</button>
             <button class="nav-tab" data-tab="insights" role="tab" aria-selected="false" aria-controls="tab-insights">Track Record</button>
         </div>
     </nav>
@@ -661,7 +662,8 @@
         </div>
 
         <!-- AI Insights Tab -->
-        <div id="tab-insights" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-insights">
+        <!-- Portfolio Tab -->
+        <div id="tab-portfolio" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-portfolio">
             <!-- Virtual Portfolio -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex items-center justify-between mb-3">
@@ -734,6 +736,10 @@
                 </div>
             </div>
 
+        </div>
+
+        <!-- Track Record Tab -->
+        <div id="tab-insights" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-insights">
             <!-- Prediction Model Leaderboard -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                 <div class="flex items-center justify-between mb-3">
