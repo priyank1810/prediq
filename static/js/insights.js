@@ -1030,16 +1030,41 @@ const Insights = {
                 openEl.innerHTML = `
                     <h4 class="text-xs font-medium text-white mb-1">Open Positions</h4>
                     <div class="flex flex-wrap gap-2">
-                        ${positions.map(p => `
-                            <div class="bg-dark-700 rounded px-2.5 py-1.5 text-xs cursor-pointer hover:bg-dark-600" onclick="Search.select('${p.symbol}','')">
+                        ${positions.map(p => {
+                            const confC = (p.confidence || 0) >= 70 ? 'text-green-400' : 'text-yellow-400';
+                            return `<div class="bg-dark-700 rounded px-2.5 py-1.5 text-xs cursor-pointer hover:bg-dark-600" onclick="Search.select('${p.symbol}','')">
                                 <span class="text-white font-medium">${p.symbol}</span>
                                 <span class="text-gray-500 ml-1">${p.qty}×₹${p.entry.toFixed(0)}</span>
                                 <span class="text-gray-500 ml-1">→ ₹${p.target ? p.target.toFixed(0) : '-'}</span>
-                            </div>
-                        `).join('')}
+                                <span class="${confC} ml-1">${(p.confidence || 0).toFixed(0)}%</span>
+                            </div>`;
+                        }).join('')}
                     </div>`;
             } else {
                 openEl.innerHTML = '';
+            }
+
+            // Equity curve chart
+            this._renderEquityCurve(data.equity_curve || []);
+
+            // Per-stock breakdown
+            const stockEl = document.getElementById('vpStockBreakdown');
+            const stocks = data.stock_summary || [];
+            if (stocks.length > 0) {
+                stockEl.innerHTML = `
+                    <h4 class="text-xs font-medium text-white mb-1">P&L by Stock</h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        ${stocks.map(s => {
+                            const wrColor = s.win_rate >= 60 ? 'text-green-400' : s.win_rate >= 40 ? 'text-yellow-400' : 'text-red-400';
+                            return `<div class="bg-dark-700 rounded p-2 text-center cursor-pointer hover:bg-dark-600" onclick="Search.select('${s.symbol}','')">
+                                <div class="text-xs text-white font-medium">${s.symbol}</div>
+                                <div class="text-sm font-bold ${wrColor}">${s.win_rate}%</div>
+                                <div class="text-[10px] text-gray-500">${s.trades} trades</div>
+                            </div>`;
+                        }).join('')}
+                    </div>`;
+            } else {
+                stockEl.innerHTML = '';
             }
 
             // Daily P&L
@@ -1049,7 +1074,7 @@ const Insights = {
                 dailyEl.innerHTML = `
                     <h4 class="text-xs font-medium text-white mb-1">Daily P&L</h4>
                     <div class="flex flex-wrap gap-1">
-                        ${dailyData.slice(-10).map(d => {
+                        ${dailyData.slice(-20).map(d => {
                             const c = d.pnl >= 0 ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400';
                             const s = d.pnl >= 0 ? '+' : '';
                             return `<div class="rounded px-2 py-1 text-[10px] ${c}">${d.date.slice(5)} ${s}₹${Math.abs(d.pnl).toFixed(0)}</div>`;
@@ -1059,39 +1084,115 @@ const Insights = {
                 dailyEl.innerHTML = '';
             }
 
-            // Recent trades table
+            // Best / Worst trade
+            const bwEl = document.getElementById('vpBestWorst');
+            const best = data.best_trade;
+            const worst = data.worst_trade;
+            if (best || worst) {
+                const renderTrade = (label, t, color) => {
+                    if (!t) return '';
+                    const s = t.pnl >= 0 ? '+' : '';
+                    return `<div class="bg-dark-700 rounded p-2 flex-1">
+                        <div class="text-[10px] text-gray-500 mb-0.5">${label}</div>
+                        <div class="text-xs"><span class="text-white font-medium">${t.symbol}</span> <span class="${color} font-bold">${s}₹${Math.abs(t.pnl).toFixed(0)}</span> <span class="text-gray-500">(${s}${t.pnl_pct}%)</span></div>
+                    </div>`;
+                };
+                bwEl.innerHTML = `<div class="flex gap-2">${renderTrade('Best Trade', best, 'text-green-400')}${renderTrade('Worst Trade', worst, 'text-red-400')}</div>`;
+            } else {
+                bwEl.innerHTML = '';
+            }
+
+            // All trades table
             const trades = data.recent_trades || [];
             const tbody = document.getElementById('vpTradesTable');
+            document.getElementById('vpTradeCount').textContent = `${trades.length} trades`;
+
             if (trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">No trades yet. Virtual portfolio follows bullish signals from your watchlist.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">No trades yet. Virtual portfolio follows bullish signals from your watchlist.</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = trades.map(t => {
+            const tfShort = { intraday_10m: '10m', intraday_30m: '30m', short_15m: '15m', short_1h: '1h', short_4h: '4h' };
+
+            tbody.innerHTML = trades.reverse().map(t => {
                 const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
                 const sign = t.pnl >= 0 ? '+' : '';
                 let badge = '';
-                if (t.status === 'target_hit') badge = '<span class="px-1 py-0.5 rounded bg-green-900 text-green-400 text-[10px]">✓ Target</span>';
-                else if (t.status === 'sl_hit') badge = '<span class="px-1 py-0.5 rounded bg-red-900 text-red-400 text-[10px]">✗ SL</span>';
-                else badge = `<span class="px-1 py-0.5 rounded bg-gray-800 ${pColor} text-[10px]">Expired</span>`;
-
-                const tfShort = { intraday_10m: '10m', intraday_30m: '30m', short_15m: '15m', short_1h: '1h', short_4h: '4h' };
+                if (t.status === 'target_hit') badge = '<span class="px-1 py-0.5 rounded bg-green-900 text-green-400 text-[10px]">✓</span>';
+                else if (t.status === 'sl_hit') badge = '<span class="px-1 py-0.5 rounded bg-red-900 text-red-400 text-[10px]">✗</span>';
+                else badge = `<span class="px-1 py-0.5 rounded bg-gray-800 text-gray-400 text-[10px]">E</span>`;
 
                 const confColor = (t.confidence || 0) >= 70 ? 'text-green-400' : (t.confidence || 0) >= 50 ? 'text-yellow-400' : 'text-gray-500';
 
-                return `<tr class="border-b border-gray-800">
+                return `<tr class="border-b border-gray-800 hover:bg-dark-700/50">
+                    <td class="px-2 py-1.5 text-gray-400">${t.date || '-'}</td>
                     <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
                     <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
+                    <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
                     <td class="px-2 py-1.5 text-right text-gray-300">${t.qty}</td>
                     <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry.toFixed(2)}</td>
                     <td class="px-2 py-1.5 text-right text-gray-300">₹${t.exit_price.toFixed(2)}</td>
                     <td class="px-2 py-1.5 text-right text-gray-300">₹${t.invested.toFixed(0)}</td>
-                    <td class="px-2 py-1.5 text-right ${pColor} font-medium">${sign}₹${Math.abs(t.pnl).toFixed(0)} (${sign}${t.pnl_pct}%)</td>
+                    <td class="px-2 py-1.5 text-right ${pColor} font-bold">${sign}₹${Math.abs(t.pnl).toFixed(0)}</td>
                     <td class="px-2 py-1.5 text-center">${badge}</td>
                 </tr>`;
             }).join('');
         } catch (e) {
             // Silently fail
+        }
+    },
+
+    _renderEquityCurve(curve) {
+        const container = document.getElementById('vpEquityChart');
+        if (!container || !curve || curve.length < 2) {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs">Not enough data for equity curve</div>';
+            return;
+        }
+
+        try {
+            // Clean up previous chart
+            container.innerHTML = '';
+
+            const chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: 200,
+                layout: { background: { color: '#1a1d29' }, textColor: '#9ca3af' },
+                grid: { vertLines: { color: '#2d2d44' }, horzLines: { color: '#2d2d44' } },
+                rightPriceScale: { borderColor: '#374151' },
+                timeScale: { borderColor: '#374151' },
+            });
+
+            const lineSeries = chart.addLineSeries({
+                color: '#2979ff',
+                lineWidth: 2,
+                priceFormat: { type: 'custom', formatter: (p) => '₹' + p.toFixed(0) },
+            });
+
+            // Convert dates to timestamps
+            const data = curve.filter(p => p.date && p.date !== 'start').map(p => ({
+                time: p.date,
+                value: p.value,
+            }));
+
+            if (data.length > 0) {
+                lineSeries.setData(data);
+                chart.timeScale().fitContent();
+
+                // Add baseline at initial capital
+                const baseline = chart.addLineSeries({
+                    color: '#374151', lineWidth: 1, lineStyle: 2,
+                    priceLineVisible: false, lastValueVisible: false,
+                });
+                baseline.setData(data.map(d => ({ time: d.time, value: curve[0].value || 10000 })));
+            }
+
+            // Resize handler
+            const ro = new ResizeObserver(() => {
+                chart.applyOptions({ width: container.clientWidth });
+            });
+            ro.observe(container);
+        } catch (e) {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs">Chart unavailable</div>';
         }
     },
 

@@ -693,16 +693,30 @@
                 </div>
                 <!-- Open Positions -->
                 <div id="vpOpenPositions" class="mb-3"></div>
+                <!-- Equity Curve -->
+                <div id="vpEquityCurve" class="mb-3">
+                    <h4 class="text-xs font-medium text-white mb-1">Equity Curve</h4>
+                    <div id="vpEquityChart" class="w-full rounded-lg overflow-hidden bg-dark-700" style="height:200px"></div>
+                </div>
+                <!-- Per-Stock P&L -->
+                <div id="vpStockBreakdown" class="mb-3"></div>
                 <!-- Daily P&L -->
                 <div id="vpDailyPnl" class="mb-3"></div>
-                <!-- Recent Trades -->
-                <h4 class="text-sm font-medium text-white mb-2">Recent Trades</h4>
-                <div class="overflow-x-auto">
+                <!-- Best / Worst Trade -->
+                <div id="vpBestWorst" class="mb-3"></div>
+                <!-- All Trades -->
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-sm font-medium text-white">All Trades</h4>
+                    <span id="vpTradeCount" class="text-xs text-gray-500"></span>
+                </div>
+                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
                     <table class="w-full text-xs">
-                        <thead>
+                        <thead class="sticky top-0 bg-dark-800">
                             <tr class="text-gray-500 border-b border-gray-700">
+                                <th class="text-left px-2 py-1.5">Date</th>
                                 <th class="text-left px-2 py-1.5">Symbol</th>
                                 <th class="text-left px-2 py-1.5">TF</th>
+                                <th class="text-right px-2 py-1.5">Conf</th>
                                 <th class="text-right px-2 py-1.5">Qty</th>
                                 <th class="text-right px-2 py-1.5">Entry</th>
                                 <th class="text-right px-2 py-1.5">Exit</th>
@@ -712,7 +726,7 @@
                             </tr>
                         </thead>
                         <tbody id="vpTradesTable">
-                            <tr><td colspan="8" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                            <tr><td colspan="10" class="text-center py-4 text-gray-500">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>

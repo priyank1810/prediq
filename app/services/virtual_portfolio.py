@@ -244,7 +244,7 @@ class VirtualPortfolio:
                 "daily_pnl": daily_pnl_list,
                 "equity_curve": equity_curve,
                 "open_positions": open_positions[:10],
-                "recent_trades": trades_detail[-15:],
+                "recent_trades": trades_detail,
                 "best_trade": best_trade,
                 "worst_trade": worst_trade,
                 "stock_summary": stock_summary[:10],
