@@ -993,7 +993,7 @@ const Insights = {
 
     async loadVirtualPortfolio() {
         try {
-            const resp = await fetch(`${API.baseUrl}/api/signals/stats/virtual-portfolio?capital=10000`);
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/virtual-portfolio?capital=100000`);
             if (!resp.ok) return;
             const data = await resp.json();
 

@@ -17,7 +17,7 @@ from app.utils.helpers import now_ist
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CAPITAL = 10000
+DEFAULT_CAPITAL = 100000
 
 # Smart allocation config
 MIN_CONFIDENCE = 40          # Skip signals below this
