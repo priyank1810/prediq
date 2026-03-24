@@ -319,21 +319,22 @@ class TradeTracker:
             win_rate = round((target_hits + expired_profit) / total * 100, 1) if total > 0 else 0
             avg_win = 0
             avg_loss = 0
-            wins = [s.outcome_pct for s in resolved if s.status == "target_hit" and s.outcome_pct]
-            losses = [s.outcome_pct for s in resolved if s.status == "sl_hit" and s.outcome_pct]
+            # Count ALL profitable trades as wins, ALL losing trades as losses
+            wins = [s.outcome_pct for s in resolved if s.outcome_pct and s.outcome_pct > 0]
+            losses = [s.outcome_pct for s in resolved if s.outcome_pct and s.outcome_pct < 0]
             if wins:
                 avg_win = round(sum(wins) / len(wins), 2)
             if losses:
                 avg_loss = round(sum(losses) / len(losses), 2)
 
-            # By timeframe
+            # By timeframe group
             by_timeframe = {}
-            for tf in ["intraday", "short_term", "long_term"]:
-                tf_signals = [s for s in resolved if s.timeframe == tf]
+            for tf_group in ["intraday", "short_term"]:
+                tf_signals = [s for s in resolved if s.timeframe and s.timeframe.startswith(tf_group.split("_")[0])]
                 if tf_signals:
                     tf_target = sum(1 for s in tf_signals if s.status == "target_hit")
                     tf_expired_profit = sum(1 for s in tf_signals if s.status == "expired" and (s.outcome_pct or 0) > 0)
-                    by_timeframe[tf] = {
+                    by_timeframe[tf_group] = {
                         "total": len(tf_signals),
                         "target_hit": tf_target,
                         "sl_hit": sum(1 for s in tf_signals if s.status == "sl_hit"),

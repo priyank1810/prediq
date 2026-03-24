@@ -170,7 +170,7 @@ class Worker:
                             "label": sig.get("label", ""),
                         })
 
-                # Log bullish signals above threshold
+                # Popular stocks: only log BULLISH signals (long-only portfolio)
                 if scan_type in ("intraday", "full"):
                     for tf_key, sig in intraday.items():
                         if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:

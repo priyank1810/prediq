@@ -369,7 +369,7 @@ const Insights = {
 
         // By timeframe
         const tfEl = document.getElementById('tradeByTimeframe');
-        const tfLabels = { intraday: 'Intraday', short_term: '1 Week', long_term: '3 Months' };
+        const tfLabels = { intraday: 'Intraday', short_term: 'Short-term' };
         const bt = data.by_timeframe || {};
 
         tfEl.innerHTML = Object.entries(tfLabels).map(([key, label]) => {
@@ -416,7 +416,10 @@ const Insights = {
             const pnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
             const pnlSign = (t.outcome_pct || 0) >= 0 ? '+' : '';
 
-            const tfShort = { intraday_10m: '10m', intraday_30m: '30m', short_15m: '15m', short_1h: '1h', short_4h: '4h' };
+            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+
+            // Target label: "Re-entry" for bearish
+            const targetLabel = t.direction === 'BEARISH' ? 'Re-entry' : 'Target';
 
             // Actual price color: green if moved in predicted direction
             const actualPrice = t.outcome_price;
