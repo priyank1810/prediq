@@ -266,6 +266,74 @@ const Insights = {
         }
     },
 
+    async loadPredictionLeaderboard() {
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/prediction-leaderboard`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            // Model cards
+            const modelsEl = document.getElementById('predLeaderboardModels');
+            if (modelsEl && data.models) {
+                modelsEl.innerHTML = data.models.map((m, i) => {
+                    const isBest = i === 0;
+                    const border = isBest ? 'border-green-600' : 'border-gray-700';
+                    const mapeColor = m.avg_mape <= 3 ? 'text-green-400' : m.avg_mape <= 6 ? 'text-yellow-400' : 'text-red-400';
+                    const wrColor = m.win_rate >= 60 ? 'text-green-400' : m.win_rate >= 40 ? 'text-yellow-400' : 'text-red-400';
+                    return `<div class="bg-dark-700 border ${border} rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-white font-bold capitalize">${m.model}</span>
+                            ${isBest ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-green-900 text-green-400 font-medium">BEST</span>' : ''}
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div><div class="text-[10px] text-gray-500">Avg MAPE</div><div class="text-sm font-bold ${mapeColor}">${m.avg_mape}%</div></div>
+                            <div><div class="text-[10px] text-gray-500">Win Rate</div><div class="text-sm font-bold ${wrColor}">${m.win_rate}%</div></div>
+                            <div><div class="text-[10px] text-gray-500">Predictions</div><div class="text-sm font-bold text-white">${m.total}</div></div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            // By symbol
+            const bySymEl = document.getElementById('predLeaderboardBySymbol');
+            if (bySymEl && data.by_symbol) {
+                bySymEl.innerHTML = data.by_symbol.slice(0, 15).map(s => {
+                    const mapeColor = s.avg_mape <= 1 ? 'text-green-400' : s.avg_mape <= 3 ? 'text-yellow-400' : 'text-red-400';
+                    return `<div class="flex items-center justify-between py-1 border-b border-gray-800">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] px-1 py-0.5 rounded bg-dark-600 text-gray-400 uppercase">${s.model}</span>
+                            <span class="text-xs text-white cursor-pointer hover:text-accent-blue" onclick="Search.select('${s.symbol}','')">${s.symbol}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-gray-500">${s.total}x</span>
+                            <span class="text-xs font-bold ${mapeColor}">${s.avg_mape}%</span>
+                        </div>
+                    </div>`;
+                }).join('') || '<div class="text-center py-2 text-gray-500 text-xs">No data</div>';
+            }
+
+            // By sector
+            const bySectorEl = document.getElementById('predLeaderboardBySector');
+            if (bySectorEl && data.by_sector) {
+                bySectorEl.innerHTML = data.by_sector.slice(0, 10).map(s => {
+                    const mapeColor = s.avg_mape <= 1 ? 'text-green-400' : s.avg_mape <= 3 ? 'text-yellow-400' : 'text-red-400';
+                    return `<div class="flex items-center justify-between py-1 border-b border-gray-800">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] px-1 py-0.5 rounded bg-dark-600 text-gray-400 uppercase">${s.model}</span>
+                            <span class="text-xs text-white">${s.sector}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-gray-500">${s.total}x</span>
+                            <span class="text-xs font-bold ${mapeColor}">${s.avg_mape}%</span>
+                        </div>
+                    </div>`;
+                }).join('') || '<div class="text-center py-2 text-gray-500 text-xs">No data</div>';
+            }
+        } catch (e) {
+            // Silently fail
+        }
+    },
+
     async loadTradeTrackRecord() {
         try {
             const resp = await fetch(`${API.baseUrl}/api/signals/stats/trades`);
