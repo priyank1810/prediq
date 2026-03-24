@@ -17,11 +17,11 @@ logger = logging.getLogger(__name__)
 
 # Timeframe → window duration (how long before a signal "expires")
 TIMEFRAME_WINDOWS = {
-    "intraday_10m": timedelta(minutes=30),
-    "intraday_15m": timedelta(minutes=45),
-    "intraday_30m": timedelta(hours=2),
-    "short_1h": timedelta(hours=4),
-    "short_4h": timedelta(hours=8),
+    "intraday_10m": timedelta(hours=1),
+    "intraday_15m": timedelta(hours=2),
+    "intraday_30m": timedelta(hours=3),
+    "short_1h": timedelta(hours=6),
+    "short_4h": timedelta(days=1),
 }
 
 # Minimum minutes between logging same symbol+timeframe (prevent duplicates)

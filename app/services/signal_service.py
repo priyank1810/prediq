@@ -1021,18 +1021,19 @@ class SignalService:
             atr = current_price * 0.015
 
         # Swing high/low for the timeframe
+        # Conservative targets to avoid expired trades
         if timeframe == "intraday":
             lookback = min(26, len(df))
-            atr_multiplier_sl = 1.0
-            atr_multiplier_target = 1.5
+            atr_multiplier_sl = 0.7
+            atr_multiplier_target = 0.8  # tight target — realistic for 10-30 min
         elif timeframe == "short_term":
             lookback = min(10, len(df))
+            atr_multiplier_sl = 1.0
+            atr_multiplier_target = 1.5  # moderate target for 1-4 hours
+        else:
+            lookback = min(60, len(df))
             atr_multiplier_sl = 1.5
             atr_multiplier_target = 2.5
-        else:  # long_term
-            lookback = min(60, len(df))
-            atr_multiplier_sl = 2.0
-            atr_multiplier_target = 4.0
 
         # ── Regime & volume-based ATR adjustments ──
         # Volatile regime → widen stop-loss for breathing room
