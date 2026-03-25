@@ -89,8 +89,8 @@ class TradeTracker:
                     status = "sl_hit"
                     outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
                 elif trade["expires_at"] and now > trade["expires_at"]:
-                    status = "expired"
                     outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                    status = "correct" if outcome_pct > 0 else "wrong"
 
             elif trade["direction"] == "BEARISH":
                 if trade["target"] and ltp <= trade["target"]:
@@ -100,8 +100,8 @@ class TradeTracker:
                     status = "sl_hit"
                     outcome_pct = round((trade["entry"] - ltp) / trade["entry"] * 100, 2) if trade["entry"] else 0
                 elif trade["expires_at"] and now > trade["expires_at"]:
-                    status = "expired"
                     outcome_pct = round((trade["entry"] - ltp) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                    status = "correct" if outcome_pct > 0 else "wrong"
 
             if status:
                 resolved_ids.append(trade["id"])
@@ -258,9 +258,9 @@ class TradeTracker:
                         sig.resolved_at = now
                         resolved += 1
                     elif sig.expires_at and now > sig.expires_at:
-                        sig.status = "expired"
                         sig.outcome_price = ltp
                         sig.outcome_pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
+                        sig.status = "correct" if sig.outcome_pct > 0 else "wrong"
                         sig.resolved_at = now
                         resolved += 1
 
@@ -278,9 +278,9 @@ class TradeTracker:
                         sig.resolved_at = now
                         resolved += 1
                     elif sig.expires_at and now > sig.expires_at:
-                        sig.status = "expired"
                         sig.outcome_price = ltp
                         sig.outcome_pct = round((sig.entry - ltp) / sig.entry * 100, 2) if sig.entry else 0
+                        sig.status = "correct" if sig.outcome_pct > 0 else "wrong"
                         sig.resolved_at = now
                         resolved += 1
 
@@ -313,10 +313,11 @@ class TradeTracker:
             total = len(resolved)
             target_hits = sum(1 for s in resolved if s.status == "target_hit")
             sl_hits = sum(1 for s in resolved if s.status == "sl_hit")
-            expired = sum(1 for s in resolved if s.status == "expired")
-            expired_profit = sum(1 for s in resolved if s.status == "expired" and (s.outcome_pct or 0) > 0)
+            correct = sum(1 for s in resolved if s.status == "correct")
+            wrong = sum(1 for s in resolved if s.status == "wrong")
 
-            win_rate = round((target_hits + expired_profit) / total * 100, 1) if total > 0 else 0
+            total_wins = target_hits + correct
+            win_rate = round(total_wins / total * 100, 1) if total > 0 else 0
             avg_win = 0
             avg_loss = 0
             # Count ALL profitable trades as wins, ALL losing trades as losses
@@ -333,13 +334,16 @@ class TradeTracker:
                 tf_signals = [s for s in resolved if s.timeframe and s.timeframe.startswith(tf_group.split("_")[0])]
                 if tf_signals:
                     tf_target = sum(1 for s in tf_signals if s.status == "target_hit")
-                    tf_expired_profit = sum(1 for s in tf_signals if s.status == "expired" and (s.outcome_pct or 0) > 0)
+                    tf_correct = sum(1 for s in tf_signals if s.status == "correct")
+                    tf_wrong = sum(1 for s in tf_signals if s.status == "wrong")
+                    tf_wins = tf_target + tf_correct
                     by_timeframe[tf_group] = {
                         "total": len(tf_signals),
                         "target_hit": tf_target,
                         "sl_hit": sum(1 for s in tf_signals if s.status == "sl_hit"),
-                        "expired": sum(1 for s in tf_signals if s.status == "expired"),
-                        "win_rate": round((tf_target + tf_expired_profit) / len(tf_signals) * 100, 1),
+                        "correct": tf_correct,
+                        "wrong": tf_wrong,
+                        "win_rate": round(tf_wins / len(tf_signals) * 100, 1),
                     }
 
             # By symbol (top 10)
@@ -410,6 +414,8 @@ class TradeTracker:
                 "total": total,
                 "target_hit": target_hits,
                 "sl_hit": sl_hits,
+                "correct": correct,
+                "wrong": wrong,
                 "expired": expired,
                 "win_rate": win_rate,
                 "avg_win_pct": avg_win,

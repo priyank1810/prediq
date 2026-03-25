@@ -165,6 +165,8 @@ const Insights = {
                 let badge = '';
                 if (t.status === 'target_hit') badge = '<span class="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px] font-medium">✓ Win</span>';
                 else if (t.status === 'sl_hit') badge = '<span class="px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px] font-medium">✗ Loss</span>';
+                else if (t.status === 'correct') badge = '<span class="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px] font-medium">✓ Correct</span>';
+                else if (t.status === 'wrong') badge = '<span class="px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px] font-medium">✗ Wrong</span>';
                 else badge = `<span class="px-1.5 py-0.5 rounded bg-gray-800 ${t.pnl >= 0 ? 'text-green-400' : 'text-red-400'} text-[10px]">Expired</span>`;
 
                 const confColor = (t.confidence || 0) >= 70 ? 'text-green-400' : (t.confidence || 0) >= 50 ? 'text-yellow-400' : 'text-gray-500';
@@ -408,8 +410,8 @@ const Insights = {
         winRateEl.textContent = `${wr}%`;
         winRateEl.className = `text-xl font-bold ${wr >= 60 ? 'text-green-400' : wr >= 45 ? 'text-yellow-400' : 'text-red-400'}`;
 
-        document.getElementById('tradeTargetHits').textContent = data.target_hit || 0;
-        document.getElementById('tradeSLHits').textContent = data.sl_hit || 0;
+        document.getElementById('tradeTargetHits').textContent = (data.target_hit || 0) + (data.correct || 0);
+        document.getElementById('tradeSLHits').textContent = (data.sl_hit || 0) + (data.wrong || 0);
 
         const avgPnlEl = document.getElementById('tradeAvgPnl');
         avgPnlEl.innerHTML = `<span class="text-green-400">+${data.avg_win_pct || 0}%</span> / <span class="text-red-400">${data.avg_loss_pct || 0}%</span>`;
@@ -435,7 +437,7 @@ const Insights = {
             return `<div class="rounded-lg p-3 text-center border ${borderColor} ${bgColor}">
                 <div class="text-xs text-gray-500 mb-1">${label}</div>
                 <div class="text-lg font-bold ${wrColor}">${tf.win_rate}%</div>
-                <div class="text-[10px] mt-1"><span class="text-green-400">${tf.target_hit} wins</span> · <span class="text-red-400">${tf.sl_hit} losses</span> · <span class="text-gray-500">${tf.expired} expired</span></div>
+                <div class="text-[10px] mt-1"><span class="text-green-400">${(tf.target_hit || 0) + (tf.correct || 0)} correct</span> · <span class="text-red-400">${(tf.sl_hit || 0) + (tf.wrong || 0)} wrong</span></div>
                 <div class="text-[10px] text-gray-600">${tf.total} trades</div>
             </div>`;
         }).join('');
@@ -460,7 +462,13 @@ const Insights = {
                 statusBadge = '<span class="px-1.5 py-0.5 rounded bg-red-900 text-red-400">SL Hit ✗</span>';
             } else {
                 const expPnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
-                statusBadge = `<span class="px-1.5 py-0.5 rounded bg-gray-800 ${expPnlColor}">Expired</span>`;
+                if (t.status === 'correct') {
+                    statusBadge = '<span class="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400">✓ Correct</span>';
+                } else if (t.status === 'wrong') {
+                    statusBadge = '<span class="px-1.5 py-0.5 rounded bg-red-900/50 text-red-400">✗ Wrong</span>';
+                } else {
+                    statusBadge = `<span class="px-1.5 py-0.5 rounded bg-gray-800 ${expPnlColor}">Expired</span>`;
+                }
             }
 
             const pnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
