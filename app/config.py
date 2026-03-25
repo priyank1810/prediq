@@ -137,10 +137,16 @@ NIFTY_50_SYMBOLS = [
 
 # Popular NSE stocks for quick access
 POPULAR_STOCKS = [
+    # Nifty 50 top weights
     "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
     "HINDUNILVR", "SBIN", "BHARTIARTL", "KOTAKBANK", "ITC",
     "LT", "AXISBANK", "BAJFINANCE", "MARUTI", "TITAN",
     "ASIANPAINT", "SUNPHARMA", "HCLTECH", "WIPRO", "ULTRACEMCO",
+    # Additional high-volume stocks
+    "TATAMOTORS", "POWERGRID", "NTPC", "ONGC", "COALINDIA",
+    "ADANIENT", "ADANIPORTS", "JSWSTEEL", "TATASTEEL", "HINDALCO",
+    "TECHM", "DIVISLAB", "DRREDDY", "CIPLA", "APOLLOHOSP",
+    "EICHERMOT", "HEROMOTOCO", "M&M", "BAJAJ-AUTO", "TATACONSUM",
 ]
 
 # Indian Market Indices (symbol -> yfinance ticker)

@@ -387,18 +387,18 @@ async def trade_job_enqueuer():
             now_ts = time.time()
 
             if is_market_open():
-                # Validate open trades every 10 min (fallback for missed ticks)
+                # Validate open trades every 5 min (fallback for missed ticks)
                 if not job_service.has_pending("trade_validate"):
                     job_service.enqueue("trade_validate", {}, priority=0)
 
-                # Intraday scan (10m, 15m, 30m): every 30 min
-                if now_ts - _last_intraday_scan >= 1800:  # 30 min
+                # Intraday scan (10m, 15m, 30m): every 15 min
+                if now_ts - _last_intraday_scan >= 900:  # 15 min
                     if not job_service.has_pending("watchlist_trade_scan"):
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "intraday"}, priority=0)
                         _last_intraday_scan = now_ts
 
-                # Short-term scan (1h, 4h): every 2 hours
-                if now_ts - _last_shortterm_scan >= 7200:  # 2 hours
+                # Short-term scan (1h, 4h): every 1 hour
+                if now_ts - _last_shortterm_scan >= 3600:  # 1 hour
                     if not job_service.has_pending("watchlist_trade_scan"):
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "short"}, priority=0)
                         _last_shortterm_scan = now_ts
@@ -406,7 +406,7 @@ async def trade_job_enqueuer():
         except Exception:
             pass
 
-        await asyncio.sleep(300)  # Check every 5 minutes
+        await asyncio.sleep(180)  # Check every 3 minutes
 
 
 async def daily_stock_learner():
