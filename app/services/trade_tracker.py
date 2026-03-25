@@ -352,7 +352,7 @@ class TradeTracker:
                 if s.symbol not in by_symbol:
                     by_symbol[s.symbol] = {"total": 0, "wins": 0, "pnl_sum": 0}
                 by_symbol[s.symbol]["total"] += 1
-                if s.status == "target_hit" or (s.status == "expired" and (s.outcome_pct or 0) > 0):
+                if s.status in ("target_hit", "correct"):
                     by_symbol[s.symbol]["wins"] += 1
                 by_symbol[s.symbol]["pnl_sum"] += s.outcome_pct or 0
 
@@ -416,7 +416,6 @@ class TradeTracker:
                 "sl_hit": sl_hits,
                 "correct": correct,
                 "wrong": wrong,
-                "expired": expired,
                 "win_rate": win_rate,
                 "avg_win_pct": avg_win,
                 "avg_loss_pct": avg_loss,
