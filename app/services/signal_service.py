@@ -250,10 +250,10 @@ class SignalService:
         # News-magnitude crisis override (takes precedence — reduce fundamental in crisis)
         news_magnitude = global_result.get("news_magnitude", 0)
         if news_magnitude >= 80:
-            w_tech = 0.20
-            w_sent = 0.20
-            w_glob = 0.50
-            w_fund = 0.05  # Fundamentals matter little in panic
+            w_tech = 0.30
+            w_sent = 0.15
+            w_glob = 0.35
+            w_fund = 0.10  # Still consider fundamentals
         elif news_magnitude >= 60:
             w_tech = 0.30
             w_sent = 0.20
@@ -857,11 +857,21 @@ class SignalService:
 
         # Crisis override — global news dominates
         if news_magnitude >= 80:
-            w_pred, w_tech, w_sent, w_glob, w_fund = (w_pred * 0.4), 0.10, 0.15, 0.50, 0.05
-            remaining = 1.0 - (w_pred + 0.10 + 0.15 + 0.50 + 0.05)
-            w_tech += remaining
+            # Reduce crisis override — let prediction/technical still shine through
+            w_pred = w_pred * 0.7
+            w_glob = 0.30
+            w_tech = max(w_tech, 0.25)
+            w_fund = max(w_fund, 0.05)
+            # Renormalize
+            total_w = w_pred + w_tech + w_sent + w_glob + w_fund
+            w_pred /= total_w; w_tech /= total_w; w_sent /= total_w; w_glob /= total_w; w_fund /= total_w
         elif news_magnitude >= 60:
-            w_pred, w_tech, w_sent, w_glob, w_fund = (w_pred * 0.6), 0.15, 0.15, 0.35, 0.10
+            w_pred = w_pred * 0.8
+            w_glob = 0.25
+            w_tech = max(w_tech, 0.20)
+            # Renormalize
+            total_w = w_pred + w_tech + w_sent + w_glob + w_fund
+            w_pred /= total_w; w_tech /= total_w; w_sent /= total_w; w_glob /= total_w; w_fund /= total_w
             remaining = 1.0 - (w_pred + 0.15 + 0.15 + 0.35 + 0.10)
             w_tech += remaining
 
