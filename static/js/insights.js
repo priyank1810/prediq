@@ -64,20 +64,29 @@ const Insights = {
             const positions = data.open_positions || [];
             if (positions.length > 0) {
                 openEl.innerHTML = `
-                    <h4 class="text-xs font-medium text-white mb-1">Open Positions</h4>
-                    <div class="flex flex-wrap gap-2">
+                    <h4 class="text-xs font-medium text-white mb-2">Open Positions (Live P&L)</h4>
+                    <div class="space-y-1">
                         ${positions.map(p => {
                             const confC = (p.confidence || 0) >= 70 ? 'text-green-400' : 'text-yellow-400';
-                            return `<div class="bg-dark-700 rounded px-2.5 py-1.5 text-xs cursor-pointer hover:bg-dark-600" onclick="Search.select('${p.symbol}','')">
-                                <span class="text-white font-medium">${p.symbol}</span>
-                                <span class="text-gray-500 ml-1">${p.qty}×₹${p.entry.toFixed(0)}</span>
-                                <span class="text-gray-500 ml-1">→ ₹${p.target ? p.target.toFixed(0) : '-'}</span>
-                                <span class="${confC} ml-1">${(p.confidence || 0).toFixed(0)}%</span>
+                            const pnlC = (p.live_pnl_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
+                            const pnlSign = (p.live_pnl_pct || 0) >= 0 ? '+' : '';
+                            return `<div class="bg-dark-700 rounded-lg p-2 cursor-pointer hover:bg-dark-600 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3" onclick="Search.select('${p.symbol}','')">
+                                <div class="flex items-center gap-2 min-w-[120px]">
+                                    <span class="text-white font-medium text-sm">${p.symbol}</span>
+                                    <span class="${confC} text-[10px]">${(p.confidence || 0).toFixed(0)}%</span>
+                                </div>
+                                <div class="flex items-center gap-3 text-xs">
+                                    <span class="text-gray-500">${p.qty}×₹${p.entry.toFixed(0)}</span>
+                                    <span class="text-gray-500">→ ₹${p.target ? p.target.toFixed(0) : '-'}</span>
+                                    ${p.current_price ? `<span class="text-white">Now: ₹${p.current_price.toFixed(2)}</span>` : ''}
+                                    ${p.live_pnl != null ? `<span class="${pnlC} font-bold">${pnlSign}₹${Math.abs(p.live_pnl).toFixed(0)} (${pnlSign}${p.live_pnl_pct}%)</span>` : ''}
+                                </div>
+                                <div class="text-[10px] text-gray-600 ml-auto">${p.why_picked || ''} · ${p.scanned_at || ''}</div>
                             </div>`;
                         }).join('')}
                     </div>`;
             } else {
-                openEl.innerHTML = '';
+                openEl.innerHTML = '<div class="text-center py-3 text-gray-500 text-xs">No open bullish positions. All signals are bearish — portfolio is in cash.</div>';
             }
 
             // Near-bullish suggestions
@@ -417,7 +426,11 @@ const Insights = {
         avgPnlEl.innerHTML = `<span class="text-green-400">+${data.avg_win_pct || 0}%</span> / <span class="text-red-400">${data.avg_loss_pct || 0}%</span>`;
 
         const openEl = document.getElementById('tradeTrackOpenCount');
-        if (openEl) openEl.textContent = `${data.open_trades || 0} open predictions | ${data.total} resolved`;
+        if (openEl) {
+            const dirAcc = data.direction_accuracy != null ? ` | Direction: ${data.direction_accuracy}%` : '';
+            const predErr = data.avg_prediction_error != null ? ` | Pred Error: ${data.avg_prediction_error}%` : '';
+            openEl.textContent = `${data.open_trades || 0} open | ${data.total} resolved${dirAcc}${predErr}`;
+        }
 
         // By timeframe
         const tfEl = document.getElementById('tradeByTimeframe');
@@ -501,7 +514,10 @@ const Insights = {
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry ? t.entry.toFixed(2) : '-'}</td>
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.target ? t.target.toFixed(2) : '-'}</td>
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.stop_loss ? t.stop_loss.toFixed(2) : '-'}</td>
-                <td class="px-2 py-1.5 text-right ${actualColor} font-medium">₹${actualPrice ? actualPrice.toFixed(2) : '-'}</td>
+                <td class="px-2 py-1.5 text-right ${actualColor} font-medium">
+                    ₹${actualPrice ? actualPrice.toFixed(2) : '-'}
+                    ${t.prediction_error != null ? `<div class="text-[8px] ${t.prediction_error <= 1 ? 'text-green-500' : t.prediction_error <= 3 ? 'text-yellow-500' : 'text-red-500'}">${t.prediction_error}% error</div>` : ''}
+                </td>
                 <td class="px-2 py-1.5 text-center">
                     ${statusBadge}
                     ${t.target_progress != null && t.status !== 'target_hit' ? `<div class="mt-0.5 w-full bg-dark-600 rounded-full h-1"><div class="h-1 rounded-full ${t.target_progress >= 80 ? 'bg-yellow-400' : 'bg-gray-500'}" style="width:${Math.min(100, t.target_progress)}%"></div></div><div class="text-[8px] text-gray-500">${t.target_progress}% to target</div>` : ''}

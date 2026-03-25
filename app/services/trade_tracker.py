@@ -396,6 +396,7 @@ class TradeTracker:
                 "entry": s.entry,
                 "target": s.target,
                 "stop_loss": s.stop_loss,
+                "predicted_price": s.predicted_price,
                 "status": s.status,
                 "outcome_pct": s.outcome_pct,
                 "outcome_price": s.outcome_price,
@@ -403,9 +404,24 @@ class TradeTracker:
                 "lowest_price": s.lowest_price,
                 "target_progress": _target_progress(s),
                 "confidence": s.confidence,
+                "prediction_error": round(abs(s.predicted_price - s.outcome_price) / s.outcome_price * 100, 2)
+                    if s.predicted_price and s.outcome_price and s.outcome_price > 0 else None,
+                "direction_correct": s.status in ("target_hit", "correct"),
                 "created_at": s.created_at.isoformat() if s.created_at else None,
                 "resolved_at": s.resolved_at.isoformat() if s.resolved_at else None,
             } for s in recent]
+
+            # Direction accuracy (separate from target hit rate)
+            direction_correct = sum(1 for s in resolved if s.status in ("target_hit", "correct"))
+            direction_accuracy = round(direction_correct / total * 100, 1) if total > 0 else 0
+
+            # Prediction error stats
+            pred_errors = [
+                abs(s.predicted_price - s.outcome_price) / s.outcome_price * 100
+                for s in resolved
+                if s.predicted_price and s.outcome_price and s.outcome_price > 0
+            ]
+            avg_pred_error = round(sum(pred_errors) / len(pred_errors), 2) if pred_errors else None
 
             # Open trades count
             open_count = db.query(TradeSignalLog).filter(TradeSignalLog.status == "open").count()
@@ -417,6 +433,8 @@ class TradeTracker:
                 "correct": correct,
                 "wrong": wrong,
                 "win_rate": win_rate,
+                "direction_accuracy": direction_accuracy,
+                "avg_prediction_error": avg_pred_error,
                 "avg_win_pct": avg_win,
                 "avg_loss_pct": avg_loss,
                 "open_trades": open_count,

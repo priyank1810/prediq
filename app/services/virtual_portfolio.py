@@ -186,8 +186,19 @@ class VirtualPortfolio:
                 if worst_trade is None or pnl < worst_trade["pnl"]:
                     worst_trade = trade_info
 
-            # Open positions with smart allocation
+            # Open positions with smart allocation + live P&L
             open_positions = []
+            # Fetch live prices for open positions
+            open_symbols = list({t.symbol for t in open_trades if t.direction == "BULLISH"})
+            live_quotes = {}
+            if open_symbols:
+                try:
+                    from app.services.data_fetcher import data_fetcher
+                    quotes = data_fetcher.get_bulk_quotes(open_symbols)
+                    live_quotes = {q["symbol"]: q for q in quotes if q.get("symbol")}
+                except Exception:
+                    pass
+
             for trade in open_trades:
                 if trade.direction != "BULLISH" or not trade.entry or trade.entry <= 0:
                     continue
@@ -199,6 +210,20 @@ class VirtualPortfolio:
                 )
                 qty = max(1, int(allocation / trade.entry))
 
+                # Live P&L
+                live = live_quotes.get(trade.symbol, {})
+                current_ltp = live.get("ltp")
+                live_pnl = None
+                live_pnl_pct = None
+                if current_ltp and trade.entry:
+                    live_pnl = round((current_ltp - trade.entry) * qty, 2)
+                    live_pnl_pct = round((current_ltp - trade.entry) / trade.entry * 100, 2)
+
+                # Why picked (allocation breakdown)
+                conf_mult = max(0.5, min(2.0, ((trade.confidence or 50) - 20) / 40))
+                tf_mults = {"intraday_10m": 0.7, "intraday_15m": 0.9, "intraday_30m": 0.85, "short_1h": 1.1, "short_4h": 1.3}
+                tf_mult = tf_mults.get(trade.timeframe, 1.0)
+
                 open_positions.append({
                     "symbol": trade.symbol,
                     "timeframe": trade.timeframe,
@@ -209,7 +234,12 @@ class VirtualPortfolio:
                     "invested": round(qty * trade.entry, 2),
                     "allocation": round(allocation, 2),
                     "confidence": trade.confidence,
+                    "current_price": current_ltp,
+                    "live_pnl": live_pnl,
+                    "live_pnl_pct": live_pnl_pct,
+                    "why_picked": f"Conf {(trade.confidence or 0):.0f}% ({conf_mult:.1f}x) × TF {trade.timeframe} ({tf_mult:.1f}x)",
                     "created_at": trade.created_at.isoformat() if trade.created_at else None,
+                    "scanned_at": trade.created_at.strftime("%H:%M") if trade.created_at else None,
                 })
 
             total_pnl = round(equity - capital, 2)
