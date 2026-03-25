@@ -83,6 +83,9 @@ const Insights = {
             // Near-bullish suggestions
             this._loadNearBullish();
 
+            // Scan overview — all scanned stocks with portfolio pick status
+            this._renderScanOverview(data.scan_overview || []);
+
             // Equity curve chart
             this._renderEquityCurve(data.equity_curve || []);
 
@@ -182,6 +185,53 @@ const Insights = {
         } catch (e) {
             // Silently fail
         }
+    },
+
+    _renderScanOverview(stocks) {
+        const el = document.getElementById('vpScanOverview');
+        if (!el || !stocks || stocks.length === 0) { if (el) el.innerHTML = ''; return; }
+
+        const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+
+        el.innerHTML = `
+            <h4 class="text-xs font-medium text-white mb-2">Scanned Stocks</h4>
+            <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
+                <table class="w-full text-xs">
+                    <thead class="sticky top-0 bg-dark-800">
+                        <tr class="text-gray-500 border-b border-gray-700">
+                            <th class="text-left px-2 py-1">Stock</th>
+                            <th class="text-center px-2 py-1">Direction</th>
+                            <th class="text-right px-2 py-1">Confidence</th>
+                            <th class="text-left px-2 py-1">TF</th>
+                            <th class="text-right px-2 py-1">Entry</th>
+                            <th class="text-right px-2 py-1">Target</th>
+                            <th class="text-center px-2 py-1">In Portfolio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${stocks.map(s => {
+                            const dirColor = s.direction === 'BULLISH' ? 'text-green-400' : 'text-red-400';
+                            const arrow = s.direction === 'BULLISH' ? '▲' : '▼';
+                            const confColor = s.confidence >= 70 ? 'text-green-400' : s.confidence >= 50 ? 'text-yellow-400' : 'text-gray-500';
+                            const picked = s.picked_for_portfolio;
+                            const rowBg = picked ? 'bg-green-900/10 border-l-2 border-l-green-500' : '';
+                            const pickedBadge = picked
+                                ? '<span class="px-1.5 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px] font-medium">✓ Added</span>'
+                                : '<span class="text-gray-600 text-[10px]">—</span>';
+                            return `<tr class="${rowBg} hover:bg-dark-700/50">
+                                <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${s.symbol}','')">${s.symbol}</td>
+                                <td class="px-2 py-1.5 text-center ${dirColor}">${arrow} ${s.direction}</td>
+                                <td class="px-2 py-1.5 text-right ${confColor} font-bold">${s.confidence.toFixed(1)}%</td>
+                                <td class="px-2 py-1.5 text-gray-400">${tfShort[s.timeframe] || s.timeframe}</td>
+                                <td class="px-2 py-1.5 text-right text-gray-300">₹${s.entry ? s.entry.toFixed(2) : '-'}</td>
+                                <td class="px-2 py-1.5 text-right text-gray-300">₹${s.target ? s.target.toFixed(2) : '-'}</td>
+                                <td class="px-2 py-1.5 text-center">${pickedBadge}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
     },
 
     async _loadNearBullish() {

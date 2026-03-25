@@ -231,6 +231,26 @@ class VirtualPortfolio:
                     })
             stock_summary.sort(key=lambda x: -x["trades"])
 
+            # Scan overview — show all scanned stocks with best confidence
+            scan_overview = []
+            all_trades = list(resolved) + list(open_trades)
+            seen = {}
+            for trade in all_trades:
+                key = trade.symbol
+                conf = trade.confidence or 0
+                if key not in seen or conf > seen[key]["confidence"]:
+                    picked = trade.direction == "BULLISH" and conf >= MIN_CONFIDENCE
+                    seen[key] = {
+                        "symbol": trade.symbol,
+                        "direction": trade.direction,
+                        "confidence": conf,
+                        "timeframe": trade.timeframe,
+                        "picked_for_portfolio": picked,
+                        "entry": trade.entry,
+                        "target": trade.target,
+                    }
+            scan_overview = sorted(seen.values(), key=lambda x: -x["confidence"])
+
             return {
                 "initial_capital": capital,
                 "current_value": round(equity, 2),
@@ -248,6 +268,7 @@ class VirtualPortfolio:
                 "best_trade": best_trade,
                 "worst_trade": worst_trade,
                 "stock_summary": stock_summary[:10],
+                "scan_overview": scan_overview[:30],
                 "strategy": "smart",
                 "rules": {
                     "min_confidence": MIN_CONFIDENCE,
