@@ -53,7 +53,8 @@ class TradeTracker:
                 if t.symbol not in self._open_trades_cache:
                     self._open_trades_cache[t.symbol] = []
                 self._open_trades_cache[t.symbol].append({
-                    "id": t.id, "direction": t.direction,
+                    "id": t.id, "_symbol": t.symbol,
+                    "direction": t.direction,
                     "entry": t.entry, "target": t.target,
                     "stop_loss": t.stop_loss, "timeframe": t.timeframe,
                     "expires_at": t.expires_at,
@@ -115,11 +116,34 @@ class TradeTracker:
                 # Check exits
                 if sl and ltp <= sl:
                     if trade.get("trailing_sl") and ltp > entry:
-                        # Trailing stop hit while in profit = still a win
                         status = "target_hit"
                     else:
                         status = "sl_hit"
                     outcome_pct = round((ltp - entry) / entry * 100, 2) if entry else 0
+                elif ltp > entry and profit >= target_dist * 0.5:
+                    # In profit and past 50% — check if AI still predicts up
+                    # Only check every few ticks (not every 3s)
+                    last_check = trade.get("_last_pred_check", 0)
+                    import time as _time
+                    if _time.time() - last_check > 300:  # Check every 5 min
+                        trade["_last_pred_check"] = _time.time()
+                        try:
+                            from app.services.signal_service import signal_service
+                            mtf = signal_service.get_multi_timeframe_signals(trade.get("_symbol") or symbol)
+                            # Check if any timeframe still says bullish
+                            still_bullish = False
+                            for group in (mtf.get("intraday", {}), mtf.get("short_term", {})):
+                                for tf_sig in group.values():
+                                    if tf_sig and tf_sig.get("direction") == "BULLISH":
+                                        still_bullish = True
+                                        break
+                            if not still_bullish:
+                                # AI says sell — exit with profit
+                                status = "target_hit"
+                                outcome_pct = round((ltp - entry) / entry * 100, 2) if entry else 0
+                                logger.info(f"Smart exit: {symbol} — AI flipped, selling at +{outcome_pct}%")
+                        except Exception:
+                            pass  # If check fails, hold
                 elif trade["expires_at"] and now > trade["expires_at"]:
                     outcome_pct = round((ltp - entry) / entry * 100, 2) if entry else 0
                     status = "correct" if outcome_pct > 0 else "wrong"
