@@ -161,6 +161,8 @@ def get_history(symbol: str, period: str = Query("1y")):
             # add IST offset so chart axis shows IST time instead of UTC
             if dt_col.dt.tz is not None:
                 df["date"] = df["date"] + 19800  # +5h30m IST offset
+            # Sort by timestamp and drop duplicates (prevent chart errors)
+            df = df.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
             # Filter out bad candles: >8% move from previous close is suspect
             if len(df) > 1 and "close" in df.columns:
                 prev_close = df["close"].shift(1)

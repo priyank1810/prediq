@@ -194,10 +194,44 @@ class TradeTracker:
                 t for t in trades if t["id"] not in resolved_ids
             ]
 
+    def _is_near_earnings(self, symbol: str) -> bool:
+        """Check if stock has earnings within 2 days — risky to trade."""
+        try:
+            from app.utils.cache import cache as _cache
+            key = f"earnings_check:{symbol}"
+            cached = _cache.get(key)
+            if cached is not None:
+                return cached
+
+            from app.services.fundamental_service import fundamental_service
+            fund = fundamental_service.get_fundamentals(symbol)
+            if fund and fund.get("earnings_quarterly"):
+                from datetime import datetime, timedelta
+                today = datetime.now().date()
+                for q in fund["earnings_quarterly"][:2]:
+                    date_str = q.get("date", "")
+                    if date_str:
+                        try:
+                            earn_date = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+                            if abs((earn_date - today).days) <= 2:
+                                _cache.set(key, True, 3600)
+                                return True
+                        except Exception:
+                            pass
+            _cache.set(key, False, 3600)
+            return False
+        except Exception:
+            return False
+
     def log_signal(self, symbol: str, timeframe: str, signal_data: dict,
                    current_price: float):
         """Log a trade prediction from an MTF signal computation."""
         if not signal_data or signal_data.get("direction") == "NEUTRAL":
+            return
+
+        # Skip stocks near earnings announcements (too risky)
+        if signal_data.get("direction") == "BULLISH" and self._is_near_earnings(symbol):
+            logger.debug(f"Skipped {symbol}: near earnings announcement")
             return
 
         entry = signal_data.get("entry")

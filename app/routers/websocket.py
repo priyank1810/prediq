@@ -198,7 +198,14 @@ async def price_streamer():
                 if symbols:
                     quotes = await asyncio.to_thread(data_fetcher.get_bulk_quotes, symbols)
                     for quote in quotes:
-                        if quote.get("ltp"):
+                        ltp = quote.get("ltp")
+                        # Data quality: skip zero, negative, or clearly wrong prices
+                        if not ltp or ltp <= 0:
+                            continue
+                        # Skip if price hasn't changed at all (might be stale cache)
+                        if quote.get("change") == 0 and quote.get("pct_change") == 0 and quote.get("volume", 0) == 0:
+                            continue
+                        if ltp:
                             # Trim to only fields the frontend needs
                             trimmed = {
                                 "symbol": quote["symbol"],

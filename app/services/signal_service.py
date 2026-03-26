@@ -312,9 +312,23 @@ class SignalService:
         except Exception as e:
             logger.warning(f"MTF confluence failed: {e}")
 
-        # Sector-Relative Strength modifier
+        # Sector-Relative Strength modifier — stronger during crisis
         if sector_result.get("available"):
-            composite += sector_result["score"] * 0.10
+            rel_strength = sector_result["score"]
+            # During global crisis, relative strength matters MORE
+            # A stock outperforming its sector in a downturn is bullish
+            if news_magnitude >= 60:
+                rel_weight = 0.25  # 25% weight during crisis (was 10%)
+                # If stock is outperforming sector, counteract global drag
+                if sector_result.get("relative_pct", 0) > 0:
+                    composite += rel_strength * rel_weight
+                    # Bonus: strong outperformance during crisis = extra bullish
+                    if sector_result.get("relative_pct", 0) > 1.0:
+                        composite += 10  # +10 pts bonus for sector leaders
+                else:
+                    composite += rel_strength * 0.10  # normal weight for underperformers
+            else:
+                composite += rel_strength * 0.10
 
         composite = max(-100, min(100, round(composite, 2)))
 
