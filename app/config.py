@@ -147,6 +147,11 @@ POPULAR_STOCKS = [
     "ADANIENT", "ADANIPORTS", "JSWSTEEL", "TATASTEEL", "HINDALCO",
     "TECHM", "DIVISLAB", "DRREDDY", "CIPLA", "APOLLOHOSP",
     "EICHERMOT", "HEROMOTOCO", "M&M", "BAJAJ-AUTO", "TATACONSUM",
+    # Midcap & sector leaders
+    "HAL", "BEL", "IRFC", "PFC", "RECLTD",
+    "ZOMATO", "PAYTM", "DMART", "TRENT", "VEDL",
+    "INDIGO", "PIIND", "PERSISTENT", "COFORGE", "MPHASIS",
+    "BANKBARODA", "PNB", "CANBK", "IDFCFIRSTB", "FEDERALBNK",
 ]
 
 # Indian Market Indices (symbol -> yfinance ticker)

@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_CAPITAL = 100000
 
 # Smart allocation config
-MIN_CONFIDENCE = 40          # Skip signals below this
+MIN_CONFIDENCE = 10          # Accept any bullish signal (rare in bear markets)
 MAX_STOCK_PCT = 0.30         # Max 30% of capital in one stock
-MAX_CONCURRENT = 5           # Max 5 positions at a time
+MAX_CONCURRENT = 10          # Max 10 positions at a time
 LOSS_STREAK_REDUCE = 0.5     # Halve position after 2 consecutive losses
 
 
