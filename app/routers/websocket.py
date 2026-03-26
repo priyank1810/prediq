@@ -185,8 +185,16 @@ async def price_streamer():
 
     while True:
         try:
-            if is_market_open() and manager.active_connections:
-                symbols = list(manager.get_all_subscribed_symbols())
+            if is_market_open():
+                # Get user-subscribed symbols + all symbols with open trades
+                symbols = set(manager.get_all_subscribed_symbols()) if manager.active_connections else set()
+                try:
+                    from app.services.trade_tracker import trade_tracker
+                    if trade_tracker._cache_loaded:
+                        symbols.update(trade_tracker._open_trades_cache.keys())
+                except Exception:
+                    pass
+                symbols = list(symbols)
                 if symbols:
                     quotes = await asyncio.to_thread(data_fetcher.get_bulk_quotes, symbols)
                     for quote in quotes:
