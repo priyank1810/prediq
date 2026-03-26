@@ -57,6 +57,11 @@ const Insights = {
             wrEl.className = `text-lg font-bold ${wr >= 50 ? 'text-green-400' : wr > 0 ? 'text-red-400' : 'text-white'}`;
 
             document.getElementById('vpPerTrade').textContent = `₹${(data.per_trade_allocation || 2000).toLocaleString('en-IN')}`;
+
+            // Market closed warning
+            if (data.total_trades === 0 && (data.open_positions || []).length === 0) {
+                document.getElementById('vpTradeCount').textContent += ' | Market may be closed';
+            }
             document.getElementById('vpTotalTrades').textContent = `${data.total_trades || 0} trades | ${(data.open_positions || []).length} open | ${data.skipped_signals || 0} skipped`;
 
             // Open positions

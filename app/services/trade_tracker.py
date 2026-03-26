@@ -66,7 +66,12 @@ class TradeTracker:
 
     def check_symbol_tick(self, symbol: str, ltp: float, high: float = 0, low: float = 0):
         """Called on every price tick — real-time trade validation.
-        Uses in-memory cache, only hits DB when a trade resolves."""
+        Uses in-memory cache, only hits DB when a trade resolves.
+        Skips validation when market is closed."""
+        from app.utils.helpers import is_market_open
+        if not is_market_open():
+            return
+
         if not self._cache_loaded:
             self._load_open_trades_cache()
 
@@ -201,7 +206,10 @@ class TradeTracker:
 
     def validate_open_signals(self):
         """Check all open signals against current prices.
-        Called by background task periodically."""
+        Called by background task periodically. Skips when market closed."""
+        from app.utils.helpers import is_market_open
+        if not is_market_open():
+            return {"checked": 0, "resolved": 0, "market_closed": True}
         from app.services.data_fetcher import data_fetcher
 
         db = SessionLocal()
