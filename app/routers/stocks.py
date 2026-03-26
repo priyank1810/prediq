@@ -156,11 +156,13 @@ def get_history(symbol: str, period: str = Query("1y")):
                 raise HTTPException(status_code=404, detail=f"No data available for {symbol}")
             # Convert datetime to Unix timestamp (seconds) for LightweightCharts
             dt_col = pd.to_datetime(df["datetime"])
-            df["date"] = dt_col.astype("int64") // 10**9
-            # LightweightCharts displays UTC; if timestamps are tz-aware (IST),
-            # add IST offset so chart axis shows IST time instead of UTC
+            # Strip timezone if present (we'll handle offset manually)
             if dt_col.dt.tz is not None:
-                df["date"] = df["date"] + 19800  # +5h30m IST offset
+                dt_col = dt_col.dt.tz_localize(None)
+            df["date"] = dt_col.astype("int64") // 10**9
+            # Always add IST offset — LightweightCharts displays UTC,
+            # so we shift timestamps forward by 5h30m to show IST time
+            df["date"] = df["date"] + 19800  # +5h30m IST offset
             # Sort by timestamp and drop duplicates (prevent chart errors)
             df = df.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
             # Filter out bad candles: >8% move from previous close is suspect
