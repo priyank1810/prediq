@@ -1,4 +1,4 @@
-const Signals = {
+window.Signals = {
     intradayChart: null,
     isLoading: false,
     _intradayResizeHandler: null,

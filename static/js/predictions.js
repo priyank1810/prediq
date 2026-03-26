@@ -1,4 +1,4 @@
-const Predictions = {
+window.Predictions = {
     currentHorizon: '1d',
     _abortController: null,
     _requestId: 0,

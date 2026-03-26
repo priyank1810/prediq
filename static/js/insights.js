@@ -1,4 +1,4 @@
-const Insights = {
+window.Insights = {
     _seeded: false,
     _lastLoadTime: 0,
 

@@ -1,4 +1,4 @@
-const Fundamentals = {
+window.Fundamentals = {
     _currentSymbol: null,
 
     async load(symbol) {

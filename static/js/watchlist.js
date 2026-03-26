@@ -1,4 +1,4 @@
-const Watchlist = {
+window.Watchlist = {
     _items: [],
     _alerts: [],
     _sortBy: 'name',
