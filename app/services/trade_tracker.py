@@ -85,14 +85,43 @@ class TradeTracker:
             outcome_pct = 0
 
             if trade["direction"] == "BULLISH":
-                if trade["target"] and ltp >= trade["target"]:
-                    status = "target_hit"
-                    outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
-                elif trade["stop_loss"] and ltp <= trade["stop_loss"]:
-                    status = "sl_hit"
-                    outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                entry = trade["entry"] or 0
+                target = trade["target"] or 0
+                sl = trade.get("trailing_sl") or trade["stop_loss"] or 0
+                highest = trade.get("highest") or entry
+
+                # Track highest price seen
+                if ltp > highest:
+                    trade["highest"] = ltp
+                    highest = ltp
+
+                # Smart trailing stop: move SL up as price rises
+                if entry > 0 and target > entry:
+                    target_dist = target - entry
+                    profit = highest - entry
+
+                    if profit >= target_dist:
+                        # Past target — trail SL at 70% of max profit
+                        trade["trailing_sl"] = round(entry + profit * 0.70, 2)
+                    elif profit >= target_dist * 0.75:
+                        # 75% to target — lock in 50% of profit
+                        trade["trailing_sl"] = round(entry + profit * 0.50, 2)
+                    elif profit >= target_dist * 0.50:
+                        # 50% to target — move SL to breakeven
+                        trade["trailing_sl"] = round(entry, 2)
+
+                    sl = trade.get("trailing_sl") or sl
+
+                # Check exits
+                if sl and ltp <= sl:
+                    if trade.get("trailing_sl") and ltp > entry:
+                        # Trailing stop hit while in profit = still a win
+                        status = "target_hit"
+                    else:
+                        status = "sl_hit"
+                    outcome_pct = round((ltp - entry) / entry * 100, 2) if entry else 0
                 elif trade["expires_at"] and now > trade["expires_at"]:
-                    outcome_pct = round((ltp - trade["entry"]) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                    outcome_pct = round((ltp - entry) / entry * 100, 2) if entry else 0
                     status = "correct" if outcome_pct > 0 else "wrong"
 
             elif trade["direction"] == "BEARISH":
