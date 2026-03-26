@@ -16,12 +16,28 @@ const Fundamentals = {
             ]);
             if (symbol !== this._currentSymbol) return;
             this.render(data, news);
-            // Populate 52W data in Technical tab overview
+            // Populate 52W high/low bar above chart
             if (data) {
-                const h = document.getElementById('tech52H');
-                const l = document.getElementById('tech52L');
-                if (h && data['52_week_high']) h.textContent = '₹' + data['52_week_high'].toLocaleString('en-IN', { minimumFractionDigits: 2 });
-                if (l && data['52_week_low']) l.textContent = '₹' + data['52_week_low'].toLocaleString('en-IN', { minimumFractionDigits: 2 });
+                const high52 = data['52_week_high'];
+                const low52 = data['52_week_low'];
+                const bar = document.getElementById('highLowBar');
+                if (bar && high52 && low52 && high52 > low52) {
+                    bar.classList.remove('hidden');
+                    document.getElementById('chartHigh52').textContent = '₹' + high52.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                    document.getElementById('chartLow52').textContent = '₹' + low52.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+                    // Position marker based on current price
+                    const priceEl = document.getElementById('stockPrice');
+                    if (priceEl) {
+                        const priceText = priceEl.textContent.replace(/[₹,]/g, '');
+                        const currentPrice = parseFloat(priceText);
+                        if (currentPrice > 0) {
+                            const pct = Math.max(0, Math.min(100, ((currentPrice - low52) / (high52 - low52)) * 100));
+                            document.getElementById('chartPricePosition').style.width = pct + '%';
+                            document.getElementById('chartPriceMarker').style.left = pct + '%';
+                        }
+                    }
+                }
             }
         } catch (e) {
             panel.innerHTML = '<div class="text-center py-4 text-gray-500 text-sm">Failed to load fundamentals</div>';

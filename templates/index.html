@@ -224,6 +224,21 @@
                         </div>
                     </div>
                     <!-- Chart -->
+                    <!-- 52W High/Low Bar -->
+                    <div id="highLowBar" class="hidden flex items-center gap-3 mb-2 text-xs">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-gray-500">52W Low</span>
+                            <span id="chartLow52" class="text-red-400 font-medium"></span>
+                        </div>
+                        <div class="flex-1 relative h-1.5 bg-dark-600 rounded-full">
+                            <div id="chartPricePosition" class="absolute h-1.5 bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 rounded-full" style="width:50%"></div>
+                            <div id="chartPriceMarker" class="absolute w-2 h-3 bg-white rounded-sm -top-[3px]" style="left:50%"></div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span id="chartHigh52" class="text-green-400 font-medium"></span>
+                            <span class="text-gray-500">52W High</span>
+                        </div>
+                    </div>
                     <div id="chartWrapper" class="relative">
                         <div id="chartContainer" class="bg-dark-800 rounded-lg overflow-hidden relative h-[280px] sm:h-[380px] lg:h-[450px]">
                             <div id="liveBadge" class="hidden absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-dark-900/80 rounded-full px-2.5 py-1">
