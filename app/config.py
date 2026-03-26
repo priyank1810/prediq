@@ -152,6 +152,11 @@ POPULAR_STOCKS = [
     "ZOMATO", "PAYTM", "DMART", "TRENT", "VEDL",
     "INDIGO", "PIIND", "PERSISTENT", "COFORGE", "MPHASIS",
     "BANKBARODA", "PNB", "CANBK", "IDFCFIRSTB", "FEDERALBNK",
+    # More midcap momentum stocks
+    "TATAELXSI", "LTIM", "OFSS", "DIXON", "POLYCAB",
+    "SIEMENS", "ABB", "HAVELLS", "VOLTAS", "GODREJCP",
+    "DABUR", "MARICO", "COLPAL", "PIDILITIND", "TORNTPHARM",
+    "LUPIN", "GLENMARK", "IPCALAB", "BIOCON", "LALPATHLAB",
 ]
 
 # Indian Market Indices (symbol -> yfinance ticker)

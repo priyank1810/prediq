@@ -425,6 +425,17 @@ def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
         db.close()
 
 
+@router.get("/stats/scan-status")
+def get_scan_status():
+    """Get last scan status — when it ran, how many stocks, results."""
+    try:
+        from app.utils.cache import cache
+        status = cache.get("last_scan_status")
+        return status or {"message": "No scan has run yet"}
+    except Exception:
+        return {"message": "Scan status unavailable"}
+
+
 @router.get("/stats/near-bullish")
 def get_near_bullish_stocks():
     """Get popular stocks that are close to turning bullish — opportunities to watch."""

@@ -94,7 +94,8 @@ const Insights = {
                 openEl.innerHTML = '<div class="text-center py-3 text-gray-500 text-xs">No open bullish positions. All signals are bearish — portfolio is in cash.</div>';
             }
 
-            // Near-bullish suggestions
+            // Scan status + near-bullish suggestions
+            this._loadScanStatus();
             this._loadNearBullish();
 
             // Scan overview — all scanned stocks with portfolio pick status
@@ -200,6 +201,59 @@ const Insights = {
             }).join('');
         } catch (e) {
             // Silently fail
+        }
+    },
+
+    async _loadScanStatus() {
+        const el = document.getElementById('vpScanStatus');
+        if (!el) return;
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/scan-status`);
+            if (!resp.ok) { el.innerHTML = ''; return; }
+            const s = await resp.json();
+            if (!s || s.message) {
+                el.innerHTML = `<div class="bg-dark-700 rounded-lg p-2 text-xs text-gray-500">No scan data yet. Scans run during market hours.</div>`;
+                return;
+            }
+
+            const time = s.timestamp ? new Date(s.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
+            const scanLabel = { intraday: 'Intraday (15m/30m)', short: 'Short-term (1h/4h)', full: 'Full scan' };
+
+            el.innerHTML = `
+                <div class="bg-dark-700 rounded-lg p-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-xs font-medium text-white">Scan Status</h4>
+                        <span class="text-[10px] text-gray-500">Last: ${time} IST</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                        <div class="bg-dark-600 rounded p-1.5">
+                            <div class="text-[10px] text-gray-500">Type</div>
+                            <div class="text-white font-medium">${scanLabel[s.scan_type] || s.scan_type}</div>
+                        </div>
+                        <div class="bg-dark-600 rounded p-1.5">
+                            <div class="text-[10px] text-gray-500">Stocks Scanned</div>
+                            <div class="text-white font-bold">${s.total || 0}</div>
+                        </div>
+                        <div class="bg-dark-600 rounded p-1.5">
+                            <div class="text-[10px] text-gray-500">Watchlist</div>
+                            <div class="text-white">${s.watchlist || 0} <span class="text-green-400">(${s.watchlist_bullish || 0} bullish)</span></div>
+                        </div>
+                        <div class="bg-dark-600 rounded p-1.5">
+                            <div class="text-[10px] text-gray-500">Popular Logged</div>
+                            <div class="text-white">${s.popular_logged || 0} <span class="text-gray-500">/ ${s.popular_scanned || 0}</span></div>
+                        </div>
+                        <div class="bg-dark-600 rounded p-1.5">
+                            <div class="text-[10px] text-gray-500">Near Bullish</div>
+                            <div class="text-yellow-400 font-medium">${s.near_bullish || 0}</div>
+                        </div>
+                    </div>
+                    <div class="mt-1 text-[10px] text-gray-600">
+                        Intraday: every 10 min | Short-term: every 30 min | Threshold: ${s.popular_threshold || 60}% conf
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            el.innerHTML = '';
         }
     },
 

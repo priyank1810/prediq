@@ -141,7 +141,7 @@ class Worker:
                 logged += 1
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
-            _time.sleep(10 if scan_type == "intraday" else 20)
+            _time.sleep(5 if scan_type == "intraday" else 10)
 
         # Adaptive threshold: if watchlist is all bearish, lower popular stock threshold
         if watchlist_bullish == 0 and len(watchlist) > 0:
@@ -185,7 +185,7 @@ class Worker:
                 logged += 1
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
-            _time.sleep(10 if scan_type == "intraday" else 20)
+            _time.sleep(5 if scan_type == "intraday" else 10)
 
         # Save near-bullish stocks to cache for the UI
         if near_bullish:
@@ -195,7 +195,8 @@ class Worker:
 
         if popular_logged:
             log.info(f"Popular stocks: {popular_logged} signals logged (threshold: {popular_threshold}%)")
-        return {
+
+        result = {
             "symbols_processed": logged,
             "total": len(all_symbols),
             "watchlist": len(watchlist),
@@ -206,6 +207,17 @@ class Worker:
             "near_bullish": len(near_bullish),
             "scan_type": scan_type,
         }
+
+        # Save scan status for the UI
+        from app.utils.cache import cache
+        from app.utils.helpers import now_ist
+        cache.set("last_scan_status", {
+            **result,
+            "timestamp": now_ist().isoformat(),
+            "stocks_list": [s for s in all_symbols],
+        }, 7200)
+
+        return result
 
     def handle_trade_validate(self, params: dict) -> dict:
         """Validate open trade predictions and learn from results."""
