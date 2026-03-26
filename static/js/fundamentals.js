@@ -69,6 +69,23 @@ const Fundamentals = {
         if (newsTab) {
             newsTab.innerHTML = this._renderNews(news);
         }
+
+        // Also populate main news headlines (was done by removed signal endpoint)
+        const mainNews = document.getElementById('newsHeadlines');
+        if (mainNews && news && news.headlines && news.headlines.length > 0) {
+            mainNews.innerHTML = news.headlines.slice(0, 8).map(h => {
+                const c = h.sentiment === 'positive' ? 'text-green-400 bg-green-900' :
+                          (h.sentiment === 'negative' ? 'text-red-400 bg-red-900' : 'text-gray-400 bg-gray-800');
+                return `
+                    <div class="flex items-start gap-2 py-1.5 border-b border-gray-800 last:border-0">
+                        <span class="text-xs px-1.5 py-0.5 rounded ${c} whitespace-nowrap">${h.sentiment}</span>
+                        <a href="${h.link}" target="_blank" rel="noopener"
+                           class="text-xs text-gray-300 hover:text-white line-clamp-2">${h.title}</a>
+                    </div>`;
+            }).join('');
+        } else if (mainNews) {
+            mainNews.innerHTML = '<div class="text-gray-500 text-sm py-2">No recent news found</div>';
+        }
     },
 
     _renderKeyMetrics(d) {
