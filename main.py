@@ -448,6 +448,95 @@ async def daily_stock_learner():
             await asyncio.sleep(600)
 
 
+async def daily_telegram_report():
+    """Send daily portfolio + track record summary via Telegram at 4:30 PM IST."""
+    await asyncio.sleep(900)
+
+    _sent_today = None
+
+    while True:
+        try:
+            from app.utils.helpers import now_ist
+            current = now_ist()
+
+            if current.hour == 16 and 28 <= current.minute <= 35 and _sent_today != current.date():
+                _sent_today = current.date()
+
+                from app.services.virtual_portfolio import virtual_portfolio
+                from app.services.trade_tracker import trade_tracker
+
+                # Get portfolio data
+                pf = virtual_portfolio.get_portfolio()
+                stats = trade_tracker.get_accuracy_stats()
+
+                # Build report
+                pnl = pf.get("total_pnl", 0)
+                pnl_pct = pf.get("total_pnl_pct", 0)
+                wr = pf.get("win_rate", 0)
+                trades = pf.get("total_trades", 0)
+                open_pos = len(pf.get("open_positions", []))
+                current_val = pf.get("current_value", 100000)
+
+                # Track record
+                total_signals = stats.get("total", 0)
+                signal_wr = stats.get("win_rate", 0)
+                direction_acc = stats.get("direction_accuracy", 0)
+                pred_err = stats.get("avg_prediction_error", 0)
+
+                sign = "+" if pnl >= 0 else ""
+                pnl_emoji = "📈" if pnl >= 0 else "📉"
+
+                report = f"""
+{pnl_emoji} <b>Daily Report — {current.strftime('%d %b %Y')}</b>
+
+<b>💰 Virtual Portfolio</b>
+Value: ₹{current_val:,.0f} ({sign}{pnl_pct:.1f}%)
+P&L: {sign}₹{abs(pnl):,.0f}
+Win Rate: {wr:.0f}% | Trades: {trades}
+Open Positions: {open_pos}
+
+<b>🎯 Track Record</b>
+Signals Tracked: {total_signals}
+Signal Win Rate: {signal_wr:.0f}%
+Direction Accuracy: {direction_acc:.0f}%
+Avg Prediction Error: {pred_err:.2f}%
+
+<b>📊 Top Performers</b>"""
+
+                # Add top 3 stocks
+                for s in (pf.get("stock_summary") or [])[:3]:
+                    report += f"\n• {s['symbol']}: {s['win_rate']:.0f}% WR ({s['trades']} trades)"
+
+                # Add best trade
+                best = pf.get("best_trade")
+                if best:
+                    report += f"\n\n🏆 Best: {best['symbol']} +₹{abs(best['pnl']):.0f} (+{best['pnl_pct']}%)"
+
+                report += "\n\n🔗 prediq.duckdns.org"
+
+                # Send to all telegram subscribers
+                from app.services.telegram_service import broadcast_to_subscribers, send_message
+                from app.database import SessionLocal
+                from app.models import User
+
+                db = SessionLocal()
+                try:
+                    users = db.query(User).filter(User.telegram_chat_id.isnot(None)).all()
+                    for user in users:
+                        await send_message(user.telegram_chat_id, report.strip())
+                    if users:
+                        logging.getLogger(__name__).info(f"Daily report sent to {len(users)} users")
+                finally:
+                    db.close()
+
+                await asyncio.sleep(3600)
+            else:
+                await asyncio.sleep(300)
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Daily report error: {e}")
+            await asyncio.sleep(600)
+
+
 async def live_scanner():
     """Run screener filters every 5 minutes and broadcast new matches via WebSocket."""
     await asyncio.sleep(120)
@@ -549,6 +638,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(news_alert_scanner()),
         asyncio.create_task(live_scanner()),
         asyncio.create_task(daily_stock_learner()),
+        asyncio.create_task(daily_telegram_report()),
         asyncio.create_task(trade_job_enqueuer()),
     ]
     yield
