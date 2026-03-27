@@ -454,15 +454,98 @@ window.Insights = {
         }
     },
 
+    _thPage: 1,
+
     async loadTradeTrackRecord() {
         try {
             const resp = await fetch(`${API.baseUrl}/api/signals/stats/trades`);
             if (!resp.ok) return;
             const data = await resp.json();
             this.renderTradeTrackRecord(data);
-        } catch (e) {
-            // Silently fail if no trade data yet
+        } catch (e) {}
+
+        // Load paginated history
+        this._loadTradeHistory(1);
+    },
+
+    async _loadTradeHistory(page) {
+        if (page === undefined) page = this._thPage || 1;
+        this._thPage = page;
+
+        const dir = document.getElementById('thFilterDir')?.value || '';
+        const status = document.getElementById('thFilterStatus')?.value || '';
+        const tf = document.getElementById('thFilterTF')?.value || '';
+        const symbol = document.getElementById('thFilterSymbol')?.value || '';
+        const date = document.getElementById('thFilterDate')?.value || '';
+        const sort = document.getElementById('thSort')?.value || 'created_at';
+
+        let url = `${API.baseUrl}/api/signals/stats/trades/history?page=${page}&per_page=20&sort_by=${sort}&sort_order=${sort === 'outcome_pct' ? 'desc' : 'desc'}`;
+        if (dir) url += `&direction=${dir}`;
+        if (status) url += `&status=${status}`;
+        if (tf) url += `&timeframe=${tf}`;
+        if (symbol) url += `&symbol=${symbol}`;
+        if (date) url += `&date_from=${date}&date_to=${date}`;
+
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            this._renderTradeHistory(data);
+        } catch (e) {}
+    },
+
+    _renderTradeHistory(data) {
+        const tbody = document.getElementById('tradeHistoryTable');
+        const pageInfo = document.getElementById('thPageInfo');
+        const pageNum = document.getElementById('thPageNum');
+        const prevBtn = document.getElementById('thPrevBtn');
+        const nextBtn = document.getElementById('thNextBtn');
+
+        if (!tbody) return;
+
+        pageInfo.textContent = `${data.total} trades | Page ${data.page}/${data.total_pages}`;
+        pageNum.textContent = `${data.page} / ${data.total_pages}`;
+        prevBtn.disabled = data.page <= 1;
+        nextBtn.disabled = data.page >= data.total_pages;
+
+        if (!data.trades || data.trades.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">No trades match filters</td></tr>';
+            return;
         }
+
+        const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+
+        tbody.innerHTML = data.trades.map(t => {
+            const dirColor = t.direction === 'BULLISH' ? 'text-green-400' : 'text-red-400';
+            const dirArrow = t.direction === 'BULLISH' ? '▲' : '▼';
+            const pnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
+            const pnlSign = (t.outcome_pct || 0) >= 0 ? '+' : '';
+            const confColor = (t.confidence || 0) >= 60 ? 'text-green-400' : (t.confidence || 0) >= 40 ? 'text-yellow-400' : 'text-gray-500';
+
+            let badge = '';
+            if (t.status === 'target_hit') badge = '<span class="px-1 py-0.5 rounded bg-green-900 text-green-400 text-[10px]">Target ✓</span>';
+            else if (t.status === 'sl_hit') badge = '<span class="px-1 py-0.5 rounded bg-red-900 text-red-400 text-[10px]">SL ✗</span>';
+            else if (t.status === 'correct') badge = '<span class="px-1 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">✓ Correct</span>';
+            else if (t.status === 'wrong') badge = '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗ Wrong</span>';
+
+            const rowBg = (t.status === 'target_hit' || t.status === 'correct') ? 'bg-green-900/5 border-l-2 border-l-green-600' :
+                          (t.status === 'sl_hit' || t.status === 'wrong') ? 'bg-red-900/5 border-l-2 border-l-red-600' : '';
+
+            const date = t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+
+            return `<tr class="${rowBg} hover:bg-dark-700/50">
+                <td class="px-2 py-1.5 text-gray-400 text-[10px]">${date}</td>
+                <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
+                <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
+                <td class="px-2 py-1.5 text-center ${dirColor}">${dirArrow}</td>
+                <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
+                <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry ? t.entry.toFixed(2) : '-'}</td>
+                <td class="px-2 py-1.5 text-right text-gray-300">₹${t.target ? t.target.toFixed(2) : '-'}</td>
+                <td class="px-2 py-1.5 text-right text-gray-300">₹${t.outcome_price ? t.outcome_price.toFixed(2) : '-'}${t.prediction_error != null ? '<br><span class=\"text-[8px] ' + (t.prediction_error <= 1 ? 'text-green-500' : 'text-red-500') + '\">' + t.prediction_error + '% err</span>' : ''}</td>
+                <td class="px-2 py-1.5 text-center">${badge}</td>
+                <td class="px-2 py-1.5 text-right ${pnlColor} font-bold">${pnlSign}${(t.outcome_pct || 0).toFixed(2)}%</td>
+            </tr>`;
+        }).join('');
     },
 
     renderTradeTrackRecord(data) {

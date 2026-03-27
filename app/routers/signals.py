@@ -425,6 +425,102 @@ def scan_high_confidence(threshold: int = Query(60, ge=0, le=100)):
         db.close()
 
 
+@router.get("/stats/trades/history")
+def trade_history(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=5, le=100),
+    direction: str = Query(None, description="BULLISH or BEARISH"),
+    status: str = Query(None, description="target_hit, sl_hit, correct, wrong"),
+    symbol: str = Query(None),
+    timeframe: str = Query(None),
+    min_pnl: float = Query(None, description="Minimum P&L %"),
+    max_pnl: float = Query(None, description="Maximum P&L %"),
+    sort_by: str = Query("created_at", description="created_at, outcome_pct, confidence, symbol"),
+    sort_order: str = Query("desc", description="asc or desc"),
+    date_from: str = Query(None, description="YYYY-MM-DD"),
+    date_to: str = Query(None, description="YYYY-MM-DD"),
+):
+    """Paginated, filterable, sortable trade history."""
+    from app.models import TradeSignalLog
+    from datetime import datetime
+
+    db = SessionLocal()
+    try:
+        query = db.query(TradeSignalLog).filter(TradeSignalLog.status != "open")
+
+        # Filters
+        if direction:
+            query = query.filter(TradeSignalLog.direction == direction.upper())
+        if status:
+            query = query.filter(TradeSignalLog.status == status)
+        if symbol:
+            query = query.filter(TradeSignalLog.symbol == symbol.upper())
+        if timeframe:
+            query = query.filter(TradeSignalLog.timeframe == timeframe)
+        if min_pnl is not None:
+            query = query.filter(TradeSignalLog.outcome_pct >= min_pnl)
+        if max_pnl is not None:
+            query = query.filter(TradeSignalLog.outcome_pct <= max_pnl)
+        if date_from:
+            try:
+                dt = datetime.strptime(date_from, "%Y-%m-%d")
+                query = query.filter(TradeSignalLog.created_at >= dt)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                dt = datetime.strptime(date_to, "%Y-%m-%d")
+                from datetime import timedelta
+                query = query.filter(TradeSignalLog.created_at < dt + timedelta(days=1))
+            except ValueError:
+                pass
+
+        # Count before pagination
+        total = query.count()
+
+        # Sort
+        sort_col = getattr(TradeSignalLog, sort_by, TradeSignalLog.created_at)
+        if sort_order == "asc":
+            query = query.order_by(sort_col.asc())
+        else:
+            query = query.order_by(sort_col.desc())
+
+        # Paginate
+        offset = (page - 1) * per_page
+        trades = query.offset(offset).limit(per_page).all()
+
+        results = [{
+            "id": t.id,
+            "symbol": t.symbol,
+            "timeframe": t.timeframe,
+            "direction": t.direction,
+            "confidence": t.confidence,
+            "entry": t.entry,
+            "target": t.target,
+            "stop_loss": t.stop_loss,
+            "predicted_price": t.predicted_price,
+            "outcome_price": t.outcome_price,
+            "outcome_pct": t.outcome_pct,
+            "status": t.status,
+            "highest_price": t.highest_price,
+            "lowest_price": t.lowest_price,
+            "prediction_error": round(abs(t.predicted_price - t.outcome_price) / t.outcome_price * 100, 2)
+                if t.predicted_price and t.outcome_price and t.outcome_price > 0 else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
+        } for t in trades]
+
+        return {
+            "trades": results,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page,
+        }
+    finally:
+        db.close()
+
+
 @router.get("/stats/scan-status")
 def get_scan_status():
     """Get last scan status — when it ran, how many stocks, results."""

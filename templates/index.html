@@ -805,27 +805,62 @@
                 </div>
                 <!-- By timeframe -->
                 <div id="tradeByTimeframe" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4"></div>
-                <!-- Recent trades -->
-                <h4 class="text-sm font-medium text-white mb-2">Recent Predictions</h4>
-                <div class="overflow-x-auto">
+                <!-- Trade History with Filters -->
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <h4 class="text-sm font-medium text-white">All Predictions</h4>
+                    <select id="thFilterDir" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                        <option value="">All Directions</option>
+                        <option value="BULLISH">Bullish</option>
+                        <option value="BEARISH">Bearish</option>
+                    </select>
+                    <select id="thFilterStatus" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                        <option value="">All Results</option>
+                        <option value="target_hit">Target Hit</option>
+                        <option value="sl_hit">SL Hit</option>
+                        <option value="correct">Correct</option>
+                        <option value="wrong">Wrong</option>
+                    </select>
+                    <select id="thFilterTF" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                        <option value="">All Timeframes</option>
+                        <option value="intraday_15m">15m</option>
+                        <option value="intraday_30m">30m</option>
+                        <option value="short_1h">1h</option>
+                        <option value="short_4h">4h</option>
+                    </select>
+                    <input type="text" id="thFilterSymbol" placeholder="Symbol" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1 w-20 uppercase" onchange="Insights._loadTradeHistory()">
+                    <input type="date" id="thFilterDate" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                    <select id="thSort" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                        <option value="created_at">Newest</option>
+                        <option value="outcome_pct">P&L</option>
+                        <option value="confidence">Confidence</option>
+                    </select>
+                    <span id="thPageInfo" class="text-[10px] text-gray-500 ml-auto"></span>
+                </div>
+                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
                     <table class="w-full text-xs">
-                        <thead>
+                        <thead class="sticky top-0 bg-dark-800">
                             <tr class="text-gray-500 border-b border-gray-700">
+                                <th class="text-left px-2 py-1.5">Date</th>
                                 <th class="text-left px-2 py-1.5">Symbol</th>
                                 <th class="text-left px-2 py-1.5">TF</th>
                                 <th class="text-center px-2 py-1.5">Dir</th>
+                                <th class="text-right px-2 py-1.5">Conf</th>
                                 <th class="text-right px-2 py-1.5">Entry</th>
                                 <th class="text-right px-2 py-1.5">Target</th>
-                                <th class="text-right px-2 py-1.5">SL</th>
                                 <th class="text-right px-2 py-1.5">Actual</th>
                                 <th class="text-center px-2 py-1.5">Result</th>
                                 <th class="text-right px-2 py-1.5">P&L</th>
                             </tr>
                         </thead>
-                        <tbody id="tradeRecentTable">
-                            <tr><td colspan="8" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                        <tbody id="tradeHistoryTable">
+                            <tr><td colspan="10" class="text-center py-4 text-gray-500">Loading...</td></tr>
                         </tbody>
                     </table>
+                </div>
+                <div class="flex items-center justify-center gap-2 mt-2">
+                    <button id="thPrevBtn" class="px-2 py-1 text-[10px] bg-dark-700 text-gray-400 rounded hover:bg-dark-600 disabled:opacity-30" onclick="Insights._loadTradeHistory(Insights._thPage-1)" disabled>← Prev</button>
+                    <span id="thPageNum" class="text-[10px] text-gray-500">1</span>
+                    <button id="thNextBtn" class="px-2 py-1 text-[10px] bg-dark-700 text-gray-400 rounded hover:bg-dark-600 disabled:opacity-30" onclick="Insights._loadTradeHistory(Insights._thPage+1)" disabled>Next →</button>
                 </div>
             </div>
 
