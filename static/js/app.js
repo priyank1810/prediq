@@ -99,6 +99,9 @@ const App = {
                 if (tab.dataset.tab === 'insights') {
                     Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadTrackRecord(); }).catch(() => {});
                 }
+                if (tab.dataset.tab === 'analysis') {
+                    Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadAIAnalysis(); }).catch(() => {});
+                }
             });
         });
     },
@@ -1101,7 +1104,7 @@ const App = {
         }
 
         // Activate the correct main tab
-        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'insights'];
+        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'insights', 'analysis'];
         if (validTabs.includes(tab)) {
             const tabBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
             if (tabBtn) {
@@ -1124,6 +1127,7 @@ const App = {
                 if (tab === 'watchlist') Lazy.loadAndInit('watchlist').then(() => { const m = Lazy._getGlobal('watchlist'); if (m) m.load(); }).catch(() => {});
                 if (tab === 'portfolio') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadPortfolio(); }).catch(() => {});
                 if (tab === 'insights') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadTrackRecord(); }).catch(() => {});
+                if (tab === 'analysis') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadAIAnalysis(); }).catch(() => {});
             }
         }
 

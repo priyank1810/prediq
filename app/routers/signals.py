@@ -521,6 +521,173 @@ def trade_history(
         db.close()
 
 
+@router.get("/stats/ai-analysis")
+def ai_analysis():
+    """Comprehensive AI analysis — detailed breakdown of all predictions."""
+    from app.models import TradeSignalLog
+    from sqlalchemy import func
+    from collections import defaultdict
+
+    db = SessionLocal()
+    try:
+        resolved = db.query(TradeSignalLog).filter(TradeSignalLog.status != "open").all()
+        open_count = db.query(TradeSignalLog).filter(TradeSignalLog.status == "open").count()
+
+        if not resolved:
+            return {"total": 0}
+
+        total = len(resolved)
+        wins = [r for r in resolved if r.status in ("target_hit", "correct")]
+        losses = [r for r in resolved if r.status in ("sl_hit", "wrong")]
+
+        # Overall
+        win_rate = round(len(wins) / total * 100, 1)
+        avg_win = round(sum(r.outcome_pct for r in wins if r.outcome_pct) / max(len(wins), 1), 2)
+        avg_loss = round(sum(r.outcome_pct for r in losses if r.outcome_pct) / max(len(losses), 1), 2)
+
+        # By direction
+        by_direction = {}
+        for dir_val in ["BULLISH", "BEARISH"]:
+            d_trades = [r for r in resolved if r.direction == dir_val]
+            if d_trades:
+                d_wins = sum(1 for r in d_trades if r.status in ("target_hit", "correct"))
+                d_pnls = [r.outcome_pct for r in d_trades if r.outcome_pct]
+                by_direction[dir_val] = {
+                    "total": len(d_trades),
+                    "win_rate": round(d_wins / len(d_trades) * 100, 1),
+                    "avg_pnl": round(sum(d_pnls) / len(d_pnls), 2) if d_pnls else 0,
+                    "best": round(max(d_pnls), 2) if d_pnls else 0,
+                    "worst": round(min(d_pnls), 2) if d_pnls else 0,
+                }
+
+        # By timeframe
+        by_timeframe = {}
+        for tf in set(r.timeframe for r in resolved if r.timeframe):
+            tf_trades = [r for r in resolved if r.timeframe == tf]
+            tf_wins = sum(1 for r in tf_trades if r.status in ("target_hit", "correct"))
+            tf_pnls = [r.outcome_pct for r in tf_trades if r.outcome_pct]
+            by_timeframe[tf] = {
+                "total": len(tf_trades),
+                "win_rate": round(tf_wins / len(tf_trades) * 100, 1),
+                "avg_pnl": round(sum(tf_pnls) / len(tf_pnls), 2) if tf_pnls else 0,
+                "target_hits": sum(1 for r in tf_trades if r.status == "target_hit"),
+                "sl_hits": sum(1 for r in tf_trades if r.status == "sl_hit"),
+            }
+
+        # By confidence bucket
+        by_confidence = []
+        for lo, hi in [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100)]:
+            bucket = [r for r in resolved if r.confidence and lo <= r.confidence < hi]
+            if bucket:
+                b_wins = sum(1 for r in bucket if r.status in ("target_hit", "correct"))
+                b_pnls = [r.outcome_pct for r in bucket if r.outcome_pct]
+                by_confidence.append({
+                    "range": f"{lo}-{hi}%",
+                    "total": len(bucket),
+                    "win_rate": round(b_wins / len(bucket) * 100, 1),
+                    "avg_pnl": round(sum(b_pnls) / len(b_pnls), 2) if b_pnls else 0,
+                })
+
+        # By time of day
+        by_hour = []
+        for h in range(9, 16):
+            h_trades = [r for r in resolved if r.created_at and r.created_at.hour == h]
+            if h_trades:
+                h_wins = sum(1 for r in h_trades if r.status in ("target_hit", "correct"))
+                by_hour.append({
+                    "hour": f"{h}:00-{h+1}:00",
+                    "total": len(h_trades),
+                    "win_rate": round(h_wins / len(h_trades) * 100, 1),
+                })
+
+        # By stock (top 15)
+        stock_stats = defaultdict(lambda: {"wins": 0, "total": 0, "pnl_sum": 0})
+        for r in resolved:
+            s = stock_stats[r.symbol]
+            s["total"] += 1
+            if r.status in ("target_hit", "correct"):
+                s["wins"] += 1
+            if r.outcome_pct:
+                s["pnl_sum"] += r.outcome_pct
+
+        by_stock = sorted([
+            {
+                "symbol": sym,
+                "total": s["total"],
+                "win_rate": round(s["wins"] / s["total"] * 100, 1),
+                "avg_pnl": round(s["pnl_sum"] / s["total"], 2),
+            }
+            for sym, s in stock_stats.items()
+        ], key=lambda x: -x["total"])[:15]
+
+        # By status breakdown
+        status_counts = defaultdict(int)
+        for r in resolved:
+            status_counts[r.status] += 1
+
+        # Prediction error
+        pred_errors = [
+            abs(r.predicted_price - r.outcome_price) / r.outcome_price * 100
+            for r in resolved
+            if r.predicted_price and r.outcome_price and r.outcome_price > 0
+        ]
+
+        # Best and worst trades
+        sorted_by_pnl = sorted([r for r in resolved if r.outcome_pct], key=lambda x: -x.outcome_pct)
+        best_trades = [{
+            "symbol": r.symbol, "timeframe": r.timeframe, "direction": r.direction,
+            "pnl": r.outcome_pct, "confidence": r.confidence,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        } for r in sorted_by_pnl[:5]]
+        worst_trades = [{
+            "symbol": r.symbol, "timeframe": r.timeframe, "direction": r.direction,
+            "pnl": r.outcome_pct, "confidence": r.confidence,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        } for r in sorted_by_pnl[-5:]]
+
+        # Daily P&L trend
+        daily_pnl = defaultdict(lambda: {"pnl": 0, "trades": 0, "wins": 0})
+        for r in resolved:
+            if r.created_at:
+                day = r.created_at.strftime("%Y-%m-%d")
+                daily_pnl[day]["trades"] += 1
+                if r.outcome_pct:
+                    daily_pnl[day]["pnl"] += r.outcome_pct
+                if r.status in ("target_hit", "correct"):
+                    daily_pnl[day]["wins"] += 1
+
+        daily_trend = [
+            {"date": d, "pnl": round(v["pnl"], 2), "trades": v["trades"],
+             "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] > 0 else 0}
+            for d, v in sorted(daily_pnl.items())
+        ]
+
+        return {
+            "total": total,
+            "open": open_count,
+            "win_rate": win_rate,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "status_counts": dict(status_counts),
+            "by_direction": by_direction,
+            "by_timeframe": by_timeframe,
+            "by_confidence": by_confidence,
+            "by_hour": by_hour,
+            "by_stock": by_stock,
+            "prediction_error": {
+                "avg": round(sum(pred_errors) / len(pred_errors), 2) if pred_errors else None,
+                "within_1pct": round(sum(1 for e in pred_errors if e <= 1) / len(pred_errors) * 100, 1) if pred_errors else 0,
+                "within_2pct": round(sum(1 for e in pred_errors if e <= 2) / len(pred_errors) * 100, 1) if pred_errors else 0,
+                "total": len(pred_errors),
+            },
+            "best_trades": best_trades,
+            "worst_trades": worst_trades,
+            "daily_trend": daily_trend[-30:],
+        }
+    finally:
+        db.close()
+
+
 @router.get("/stats/scan-status")
 def get_scan_status():
     """Get last scan status — when it ran, how many stocks, results."""

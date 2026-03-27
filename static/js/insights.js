@@ -15,6 +15,196 @@ window.Insights = {
         await this.loadVirtualPortfolio();
     },
 
+    async loadAIAnalysis() {
+        if (this._analysisLoaded && Date.now() - this._analysisLoaded < 60000) return;
+        this._analysisLoaded = Date.now();
+
+        const container = document.getElementById('aiAnalysisContent');
+        if (!container) return;
+
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/ai-analysis`);
+            if (!resp.ok) { container.innerHTML = '<div class="text-center py-8 text-gray-500">Failed to load analysis</div>'; return; }
+            const d = await resp.json();
+            if (!d || d.total === 0) { container.innerHTML = '<div class="text-center py-8 text-gray-500">No trade data yet</div>'; return; }
+
+            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            const wrColor = (wr) => wr >= 65 ? 'text-green-400' : wr >= 50 ? 'text-yellow-400' : 'text-red-400';
+            const pnlColor = (p) => p >= 0 ? 'text-green-400' : 'text-red-400';
+            const pnlSign = (p) => p >= 0 ? '+' : '';
+
+            let html = `
+            <!-- Overview -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div class="bg-dark-800 rounded-lg p-3 text-center">
+                    <div class="text-[10px] text-gray-500">Total Trades</div>
+                    <div class="text-xl font-bold text-white">${d.total}</div>
+                    <div class="text-[10px] text-gray-500">${d.open} open</div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 text-center">
+                    <div class="text-[10px] text-gray-500">Win Rate</div>
+                    <div class="text-xl font-bold ${wrColor(d.win_rate)}">${d.win_rate}%</div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 text-center">
+                    <div class="text-[10px] text-gray-500">Avg Win / Loss</div>
+                    <div class="text-sm font-bold"><span class="text-green-400">${pnlSign(d.avg_win)}${d.avg_win}%</span> / <span class="text-red-400">${d.avg_loss}%</span></div>
+                </div>
+                <div class="bg-dark-800 rounded-lg p-3 text-center">
+                    <div class="text-[10px] text-gray-500">Prediction Error</div>
+                    <div class="text-xl font-bold ${d.prediction_error.avg <= 2 ? 'text-green-400' : 'text-yellow-400'}">${d.prediction_error.avg || '-'}%</div>
+                    <div class="text-[10px] text-gray-500">${d.prediction_error.within_1pct}% within 1%</div>
+                </div>
+            </div>
+
+            <!-- Status Breakdown -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Result Breakdown</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    ${Object.entries(d.status_counts || {}).map(([s, c]) => {
+                        const colors = { target_hit: 'text-green-400 bg-green-900/20', sl_hit: 'text-red-400 bg-red-900/20', correct: 'text-green-400 bg-green-900/10', wrong: 'text-red-400 bg-red-900/10' };
+                        return `<div class="rounded-lg p-2 text-center ${colors[s] || 'bg-dark-700'}">
+                            <div class="text-lg font-bold">${c}</div>
+                            <div class="text-[10px]">${s.replace('_', ' ')}</div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <!-- By Direction -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-white mb-3">By Direction</h3>
+                    ${Object.entries(d.by_direction || {}).map(([dir, s]) => {
+                        const c = dir === 'BULLISH' ? 'border-green-700/50 bg-green-900/10' : 'border-red-700/50 bg-red-900/10';
+                        const arrow = dir === 'BULLISH' ? '▲' : '▼';
+                        return `<div class="rounded-lg p-3 border ${c} mb-2">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-sm font-medium text-white">${arrow} ${dir}</span>
+                                <span class="text-sm font-bold ${wrColor(s.win_rate)}">${s.win_rate}% WR</span>
+                            </div>
+                            <div class="text-xs text-gray-400">${s.total} trades | Avg P&L: <span class="${pnlColor(s.avg_pnl)}">${pnlSign(s.avg_pnl)}${s.avg_pnl}%</span> | Best: <span class="text-green-400">${pnlSign(s.best)}${s.best}%</span> | Worst: <span class="text-red-400">${s.worst}%</span></div>
+                        </div>`;
+                    }).join('')}
+                </div>
+
+                <!-- By Timeframe -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-white mb-3">By Timeframe</h3>
+                    ${Object.entries(d.by_timeframe || {}).sort((a,b) => b[1].win_rate - a[1].win_rate).map(([tf, s]) => {
+                        const border = s.win_rate >= 65 ? 'border-green-700/50 bg-green-900/10' : s.win_rate >= 50 ? 'border-yellow-700/50 bg-yellow-900/10' : 'border-red-700/50 bg-red-900/10';
+                        return `<div class="rounded-lg p-2 border ${border} mb-1.5 flex justify-between items-center">
+                            <div>
+                                <span class="text-xs text-white font-medium">${tfShort[tf] || tf}</span>
+                                <span class="text-[10px] text-gray-500 ml-2">${s.total} trades</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-sm font-bold ${wrColor(s.win_rate)}">${s.win_rate}%</span>
+                                <span class="text-[10px] ${pnlColor(s.avg_pnl)} ml-1">${pnlSign(s.avg_pnl)}${s.avg_pnl}%</span>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <!-- By Confidence -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-white mb-3">By Confidence Level</h3>
+                    ${(d.by_confidence || []).map(b => {
+                        const barWidth = Math.min(100, b.win_rate);
+                        const barColor = b.win_rate >= 60 ? 'bg-green-500' : b.win_rate >= 45 ? 'bg-yellow-500' : 'bg-red-500';
+                        return `<div class="mb-2">
+                            <div class="flex justify-between text-xs mb-0.5">
+                                <span class="text-gray-400">${b.range} <span class="text-gray-600">(${b.total})</span></span>
+                                <span class="${wrColor(b.win_rate)} font-bold">${b.win_rate}%</span>
+                            </div>
+                            <div class="h-2 bg-dark-600 rounded-full"><div class="h-2 rounded-full ${barColor}" style="width:${barWidth}%"></div></div>
+                        </div>`;
+                    }).join('')}
+                </div>
+
+                <!-- By Time of Day -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-white mb-3">Best Time to Trade</h3>
+                    ${(d.by_hour || []).map(h => {
+                        const barWidth = Math.min(100, h.win_rate);
+                        const barColor = h.win_rate >= 60 ? 'bg-green-500' : h.win_rate >= 45 ? 'bg-yellow-500' : 'bg-red-500';
+                        const isBest = h.win_rate >= 65;
+                        return `<div class="mb-2">
+                            <div class="flex justify-between text-xs mb-0.5">
+                                <span class="text-gray-400">${h.hour} <span class="text-gray-600">(${h.total})</span>${isBest ? ' <span class="text-green-400 text-[10px]">★ Best</span>' : ''}</span>
+                                <span class="${wrColor(h.win_rate)} font-bold">${h.win_rate}%</span>
+                            </div>
+                            <div class="h-2 bg-dark-600 rounded-full"><div class="h-2 rounded-full ${barColor}" style="width:${barWidth}%"></div></div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+
+            <!-- Top Stocks -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Stock Performance</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead><tr class="text-gray-500 border-b border-gray-700">
+                            <th class="text-left px-2 py-1.5">Stock</th>
+                            <th class="text-right px-2 py-1.5">Trades</th>
+                            <th class="text-right px-2 py-1.5">Win Rate</th>
+                            <th class="text-right px-2 py-1.5">Avg P&L</th>
+                        </tr></thead>
+                        <tbody>${(d.by_stock || []).map(s => {
+                            const rowBg = s.win_rate >= 65 ? 'bg-green-900/5 border-l-2 border-l-green-600' : s.win_rate < 40 ? 'bg-red-900/5 border-l-2 border-l-red-600' : '';
+                            return `<tr class="${rowBg} hover:bg-dark-700/50">
+                                <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${s.symbol}','')">${s.symbol}</td>
+                                <td class="px-2 py-1.5 text-right text-gray-300">${s.total}</td>
+                                <td class="px-2 py-1.5 text-right ${wrColor(s.win_rate)} font-bold">${s.win_rate}%</td>
+                                <td class="px-2 py-1.5 text-right ${pnlColor(s.avg_pnl)}">${pnlSign(s.avg_pnl)}${s.avg_pnl}%</td>
+                            </tr>`;
+                        }).join('')}</tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <!-- Best Trades -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-green-400 mb-2">🏆 Best Trades</h3>
+                    ${(d.best_trades || []).map(t => `<div class="flex justify-between py-1 border-b border-gray-800 text-xs">
+                        <span class="text-white cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol} <span class="text-gray-500">${tfShort[t.timeframe] || t.timeframe}</span></span>
+                        <span class="text-green-400 font-bold">+${t.pnl}%</span>
+                    </div>`).join('')}
+                </div>
+                <!-- Worst Trades -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                    <h3 class="text-sm font-semibold text-red-400 mb-2">💀 Worst Trades</h3>
+                    ${(d.worst_trades || []).map(t => `<div class="flex justify-between py-1 border-b border-gray-800 text-xs">
+                        <span class="text-white cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol} <span class="text-gray-500">${tfShort[t.timeframe] || t.timeframe}</span></span>
+                        <span class="text-red-400 font-bold">${t.pnl}%</span>
+                    </div>`).join('')}
+                </div>
+            </div>
+
+            <!-- Daily Trend -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-3">Daily P&L Trend</h3>
+                <div class="flex flex-wrap gap-1">
+                    ${(d.daily_trend || []).map(day => {
+                        const c = day.pnl >= 0 ? 'bg-green-900/50 text-green-400 border-green-800/50' : 'bg-red-900/50 text-red-400 border-red-800/50';
+                        return `<div class="rounded px-2 py-1 text-[10px] border ${c}">
+                            <div class="font-medium">${day.date.slice(5)}</div>
+                            <div>${pnlSign(day.pnl)}${day.pnl}%</div>
+                            <div class="text-[8px] opacity-70">${day.trades}t ${day.win_rate}%</div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500">Failed to load analysis</div>';
+        }
+    },
+
     async loadTrackRecord() {
         if (this._trackRecordLoadTime && Date.now() - this._trackRecordLoadTime < 30000) return;
         this._trackRecordLoadTime = Date.now();
