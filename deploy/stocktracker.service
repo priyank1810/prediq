@@ -12,11 +12,17 @@ ExecStart=/home/ubuntu/stock-tracker/venv/bin/uvicorn main:app \
     --port 8000 \
     --timeout-keep-alive 120 \
     --access-log
-Restart=on-failure
+Restart=always
 RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=stocktracker
+
+# Health check — restart if app hangs
+WatchdogSec=120
+ExecStartPost=/bin/sleep 5
 
 # Security hardening
 NoNewPrivileges=true
