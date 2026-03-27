@@ -435,6 +435,7 @@ def trade_history(
     timeframe: str = Query(None),
     min_pnl: float = Query(None, description="Minimum P&L %"),
     max_pnl: float = Query(None, description="Maximum P&L %"),
+    min_confidence: float = Query(None, description="Minimum confidence %"),
     sort_by: str = Query("created_at", description="created_at, outcome_pct, confidence, symbol"),
     sort_order: str = Query("desc", description="asc or desc"),
     date_from: str = Query(None, description="YYYY-MM-DD"),
@@ -461,6 +462,8 @@ def trade_history(
             query = query.filter(TradeSignalLog.outcome_pct >= min_pnl)
         if max_pnl is not None:
             query = query.filter(TradeSignalLog.outcome_pct <= max_pnl)
+        if min_confidence is not None:
+            query = query.filter(TradeSignalLog.confidence >= min_confidence)
         if date_from:
             try:
                 dt = datetime.strptime(date_from, "%Y-%m-%d")

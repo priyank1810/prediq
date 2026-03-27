@@ -349,19 +349,46 @@ window.Insights = {
                 bwEl.innerHTML = '';
             }
 
-            // All trades table
-            const trades = data.recent_trades || [];
-            const tbody = document.getElementById('vpTradesTable');
-            document.getElementById('vpTradeCount').textContent = `${trades.length} trades`;
+            // Store trades for filtering
+            this._vpAllTrades = data.recent_trades || [];
+            this._filterPortfolioTrades();
+        } catch (e) {}
+    },
 
-            if (trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">No trades yet. Virtual portfolio follows bullish signals from your watchlist.</td></tr>';
-                return;
-            }
+    _filterPortfolioTrades() {
+        const trades = this._vpAllTrades || [];
+        const tbody = document.getElementById('vpTradesTable');
+        if (!tbody) return;
 
-            const tfShort = { intraday_10m: '10m', intraday_30m: '30m', short_15m: '15m', short_1h: '1h', short_4h: '4h' };
+        const resultFilter = document.getElementById('vpFilterResult')?.value || '';
+        const sortBy = document.getElementById('vpSortBy')?.value || 'date_desc';
+        const symbolFilter = (document.getElementById('vpFilterSymbol')?.value || '').toUpperCase();
 
-            tbody.innerHTML = trades.reverse().map(t => {
+        // Filter
+        let filtered = trades.filter(t => {
+            if (resultFilter === 'win' && t.pnl < 0) return false;
+            if (resultFilter === 'loss' && t.pnl >= 0) return false;
+            if (symbolFilter && !t.symbol.includes(symbolFilter)) return false;
+            return true;
+        });
+
+        // Sort
+        if (sortBy === 'date_desc') filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        else if (sortBy === 'date_asc') filtered.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        else if (sortBy === 'pnl_desc') filtered.sort((a, b) => (b.pnl || 0) - (a.pnl || 0));
+        else if (sortBy === 'pnl_asc') filtered.sort((a, b) => (a.pnl || 0) - (b.pnl || 0));
+        else if (sortBy === 'invested_desc') filtered.sort((a, b) => (b.invested || 0) - (a.invested || 0));
+
+        document.getElementById('vpTradeCount').textContent = `${filtered.length} of ${trades.length} trades`;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">No trades match filters</td></tr>';
+            return;
+        }
+
+        const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+
+        tbody.innerHTML = filtered.map(t => {
                 const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
                 const sign = t.pnl >= 0 ? '+' : '';
                 const rowBg = t.status === 'target_hit' ? 'bg-green-900/10 border-l-2 border-l-green-500' :
@@ -668,6 +695,8 @@ window.Insights = {
         const symbol = document.getElementById('thFilterSymbol')?.value || '';
         const date = document.getElementById('thFilterDate')?.value || '';
         const sort = document.getElementById('thSort')?.value || 'created_at';
+        const conf = document.getElementById('thFilterConf')?.value || '40';
+        const pnlFilter = document.getElementById('thFilterPnl')?.value || '';
 
         let url = `${API.baseUrl}/api/signals/stats/trades/history?page=${page}&per_page=20&sort_by=${sort}&sort_order=${sort === 'outcome_pct' ? 'desc' : 'desc'}`;
         if (dir) url += `&direction=${dir}`;
@@ -675,6 +704,9 @@ window.Insights = {
         if (tf) url += `&timeframe=${tf}`;
         if (symbol) url += `&symbol=${symbol}`;
         if (date) url += `&date_from=${date}&date_to=${date}`;
+        if (conf && conf !== '0') url += `&min_confidence=${conf}`;
+        if (pnlFilter === 'profit') url += `&min_pnl=0.01`;
+        if (pnlFilter === 'loss') url += `&max_pnl=-0.01`;
 
         try {
             const resp = await fetch(url);

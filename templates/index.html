@@ -728,10 +728,23 @@
                 <div id="vpDailyPnl" class="mb-3"></div>
                 <!-- Best / Worst Trade -->
                 <div id="vpBestWorst" class="mb-3"></div>
-                <!-- All Trades -->
-                <div class="flex items-center justify-between mb-2">
+                <!-- All Trades with Filters -->
+                <div class="flex flex-wrap items-center gap-2 mb-2">
                     <h4 class="text-sm font-medium text-white">All Trades</h4>
-                    <span id="vpTradeCount" class="text-xs text-gray-500"></span>
+                    <select id="vpFilterResult" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._filterPortfolioTrades()">
+                        <option value="">All Results</option>
+                        <option value="win">Wins</option>
+                        <option value="loss">Losses</option>
+                    </select>
+                    <select id="vpSortBy" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._filterPortfolioTrades()">
+                        <option value="date_desc">Newest</option>
+                        <option value="date_asc">Oldest</option>
+                        <option value="pnl_desc">Highest P&L</option>
+                        <option value="pnl_asc">Lowest P&L</option>
+                        <option value="invested_desc">Most Invested</option>
+                    </select>
+                    <input type="text" id="vpFilterSymbol" placeholder="Symbol" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1 w-20 uppercase" onchange="Insights._filterPortfolioTrades()">
+                    <span id="vpTradeCount" class="text-xs text-gray-500 ml-auto"></span>
                 </div>
                 <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
                     <table class="w-full text-xs">
@@ -830,6 +843,17 @@
                     </select>
                     <input type="text" id="thFilterSymbol" placeholder="Symbol" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1 w-20 uppercase" onchange="Insights._loadTradeHistory()">
                     <input type="date" id="thFilterDate" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                    <select id="thFilterConf" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                        <option value="40" selected>Conf ≥ 40%</option>
+                        <option value="0">All Confidence</option>
+                        <option value="20">Conf ≥ 20%</option>
+                        <option value="60">Conf ≥ 60%</option>
+                    </select>
+                    <select id="thFilterPnl" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
+                        <option value="">All P&L</option>
+                        <option value="profit">Profit only</option>
+                        <option value="loss">Loss only</option>
+                    </select>
                     <select id="thSort" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
                         <option value="created_at">Newest</option>
                         <option value="outcome_pct">P&L</option>
