@@ -391,14 +391,14 @@ async def trade_job_enqueuer():
                 if not job_service.has_pending("trade_validate"):
                     job_service.enqueue("trade_validate", {}, priority=0)
 
-                # Intraday scan (15m, 30m): every 15 min
-                if now_ts - _last_intraday_scan >= 900:  # 15 min
+                # Intraday scan (15m, 30m): every 10 min
+                if now_ts - _last_intraday_scan >= 600:  # 10 min
                     if not job_service.has_pending("watchlist_trade_scan"):
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "intraday"}, priority=0)
                         _last_intraday_scan = now_ts
 
-                # Short-term scan (1h, 4h): every 45 min
-                if now_ts - _last_shortterm_scan >= 2700:  # 45 min
+                # Short-term scan (1h, 4h): every 30 min
+                if now_ts - _last_shortterm_scan >= 1800:  # 30 min
                     if not job_service.has_pending("watchlist_trade_scan"):
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "short"}, priority=0)
                         _last_shortterm_scan = now_ts

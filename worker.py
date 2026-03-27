@@ -141,7 +141,7 @@ class Worker:
                 logged += 1
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
-            _time.sleep(5 if scan_type == "intraday" else 10)
+            _time.sleep(3 if scan_type == "intraday" else 8)
 
         # Adaptive threshold: if watchlist is all bearish, lower popular stock threshold
         if watchlist_bullish == 0 and len(watchlist) > 0:
@@ -185,7 +185,7 @@ class Worker:
                 logged += 1
             except Exception as e:
                 log.debug("Trade scan failed for %s: %s", sym, e)
-            _time.sleep(5 if scan_type == "intraday" else 10)
+            _time.sleep(3 if scan_type == "intraday" else 8)
 
         # Save near-bullish stocks to cache for the UI
         if near_bullish:
