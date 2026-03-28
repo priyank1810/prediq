@@ -448,6 +448,146 @@ async def daily_stock_learner():
             await asyncio.sleep(600)
 
 
+async def weekly_analysis_report():
+    """Friday 5 PM IST: automated weekly analysis with recommendations."""
+    await asyncio.sleep(900)
+
+    while True:
+        try:
+            from app.utils.helpers import now_ist
+            current = now_ist()
+
+            # Run on Friday at 5 PM IST
+            if current.weekday() == 4 and current.hour == 17 and 0 <= current.minute <= 10:
+                from app.database import SessionLocal
+                from app.models import TradeSignalLog
+                from collections import defaultdict
+
+                db = SessionLocal()
+                try:
+                    resolved = db.query(TradeSignalLog).filter(
+                        TradeSignalLog.status != "open",
+                        TradeSignalLog.confidence >= 40,
+                    ).all()
+
+                    if len(resolved) < 20:
+                        await asyncio.sleep(3600)
+                        continue
+
+                    total = len(resolved)
+                    wins = sum(1 for r in resolved if r.status in ("target_hit", "correct"))
+                    wr = round(wins / total * 100, 1)
+
+                    # By timeframe
+                    tf_stats = {}
+                    for r in resolved:
+                        tf = r.timeframe or "unknown"
+                        if tf not in tf_stats:
+                            tf_stats[tf] = {"wins": 0, "total": 0, "pnl": 0}
+                        tf_stats[tf]["total"] += 1
+                        if r.status in ("target_hit", "correct"):
+                            tf_stats[tf]["wins"] += 1
+                        if r.outcome_pct:
+                            tf_stats[tf]["pnl"] += r.outcome_pct
+
+                    # By confidence
+                    conf_stats = {}
+                    for lo, hi in [(40, 50), (50, 60), (60, 80), (80, 100)]:
+                        bucket = [r for r in resolved if r.confidence and lo <= r.confidence < hi]
+                        if bucket:
+                            b_wins = sum(1 for r in bucket if r.status in ("target_hit", "correct"))
+                            conf_stats[f"{lo}-{hi}%"] = {
+                                "total": len(bucket),
+                                "wr": round(b_wins / len(bucket) * 100, 1),
+                            }
+
+                    # By hour
+                    hour_stats = {}
+                    for h in range(9, 16):
+                        h_trades = [r for r in resolved if r.created_at and r.created_at.hour == h]
+                        if h_trades:
+                            h_wins = sum(1 for r in h_trades if r.status in ("target_hit", "correct"))
+                            hour_stats[h] = {
+                                "total": len(h_trades),
+                                "wr": round(h_wins / len(h_trades) * 100, 1),
+                            }
+
+                    # By direction
+                    bull = [r for r in resolved if r.direction == "BULLISH"]
+                    bear = [r for r in resolved if r.direction == "BEARISH"]
+                    bull_wr = round(sum(1 for r in bull if r.status in ("target_hit", "correct")) / max(len(bull), 1) * 100, 1)
+                    bear_wr = round(sum(1 for r in bear if r.status in ("target_hit", "correct")) / max(len(bear), 1) * 100, 1)
+
+                    # Build recommendations
+                    recs = []
+
+                    # TF recommendations
+                    best_tf = max(tf_stats.items(), key=lambda x: x[1]["wins"] / max(x[1]["total"], 1))
+                    worst_tf = min(tf_stats.items(), key=lambda x: x[1]["wins"] / max(x[1]["total"], 1))
+                    if worst_tf[1]["total"] >= 10:
+                        worst_wr = worst_tf[1]["wins"] / worst_tf[1]["total"] * 100
+                        if worst_wr < 45:
+                            recs.append(f"⚠️ Consider dropping {worst_tf[0]} ({worst_wr:.0f}% WR)")
+                    recs.append(f"✅ Best timeframe: {best_tf[0]} ({best_tf[1]['wins'] / best_tf[1]['total'] * 100:.0f}% WR)")
+
+                    # Hour recommendations
+                    if hour_stats:
+                        worst_hour = min(hour_stats.items(), key=lambda x: x[1]["wr"])
+                        best_hour = max(hour_stats.items(), key=lambda x: x[1]["wr"])
+                        if worst_hour[1]["wr"] < 35 and worst_hour[1]["total"] >= 10:
+                            recs.append(f"⚠️ Avoid trading at {worst_hour[0]}:00 ({worst_hour[1]['wr']}% WR)")
+                        recs.append(f"✅ Best time: {best_hour[0]}:00 ({best_hour[1]['wr']}% WR)")
+
+                    # Direction
+                    if bull_wr < 40 and len(bull) >= 10:
+                        recs.append(f"⚠️ Bullish signals weak ({bull_wr}% WR) — market may be bearish")
+                    if bear_wr > 65 and len(bear) >= 10:
+                        recs.append(f"✅ Bearish signals strong ({bear_wr}% WR)")
+
+                    # Build report
+                    report = f"""
+📊 <b>Weekly AI Analysis — {current.strftime('%d %b %Y')}</b>
+
+<b>Overall: {wr}% Win Rate ({total} trades)</b>
+Bullish: {bull_wr}% ({len(bull)} trades)
+Bearish: {bear_wr}% ({len(bear)} trades)
+
+<b>By Timeframe:</b>"""
+                    for tf, s in sorted(tf_stats.items(), key=lambda x: -x[1]["wins"] / max(x[1]["total"], 1)):
+                        tf_wr = round(s["wins"] / s["total"] * 100, 1) if s["total"] > 0 else 0
+                        emoji = "🟢" if tf_wr >= 60 else "🟡" if tf_wr >= 45 else "🔴"
+                        report += f"\n{emoji} {tf}: {tf_wr}% WR ({s['total']} trades)"
+
+                    report += "\n\n<b>By Confidence:</b>"
+                    for conf, s in conf_stats.items():
+                        emoji = "🟢" if s["wr"] >= 60 else "🟡" if s["wr"] >= 45 else "🔴"
+                        report += f"\n{emoji} {conf}: {s['wr']}% WR ({s['total']} trades)"
+
+                    report += "\n\n<b>Recommendations:</b>"
+                    for rec in recs:
+                        report += f"\n{rec}"
+
+                    report += "\n\n🔗 prediq.duckdns.org/#analysis"
+
+                    # Send via Telegram
+                    from app.services.telegram_service import send_message
+                    from app.models import User
+                    users = db.query(User).filter(User.telegram_chat_id.isnot(None)).all()
+                    for user in users:
+                        await send_message(user.telegram_chat_id, report.strip())
+
+                    logging.getLogger(__name__).info(f"Weekly analysis sent to {len(users)} users")
+                finally:
+                    db.close()
+
+                await asyncio.sleep(86400)  # Sleep 1 day
+            else:
+                await asyncio.sleep(300)
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Weekly analysis error: {e}")
+            await asyncio.sleep(600)
+
+
 async def daily_telegram_report():
     """Send daily portfolio + track record summary via Telegram at 4:30 PM IST."""
     await asyncio.sleep(900)
@@ -639,6 +779,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(live_scanner()),
         asyncio.create_task(daily_stock_learner()),
         asyncio.create_task(daily_telegram_report()),
+        asyncio.create_task(weekly_analysis_report()),
         asyncio.create_task(trade_job_enqueuer()),
     ]
     yield
