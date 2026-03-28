@@ -1,5 +1,6 @@
 """Tests for signal endpoints: /api/signals."""
 
+import os
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
@@ -9,10 +10,13 @@ from app.models import SignalLog
 
 
 class TestGetSignal:
+    @pytest.mark.skipif(
+        not os.environ.get("RUN_SLOW_TESTS"),
+        reason="MTF signal test requires FinBERT + live data — skip in CI"
+    )
     def test_mtf_signal_returns_data(self, client, db):
         """Multi-timeframe signal endpoint should return data or timeout."""
         resp = client.get("/api/signals/multi-timeframe/RELIANCE")
-        # 200=success, 500=data error, 504=timeout (FinBERT loading + data fetch)
         assert resp.status_code in (200, 500, 504)
         if resp.status_code == 200:
             data = resp.json()
