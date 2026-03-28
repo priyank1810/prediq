@@ -416,9 +416,6 @@ window.Insights = {
                     <td class="px-2 py-1.5 text-center">${badge}</td>
                 </tr>`;
             }).join('');
-        } catch (e) {
-            // Silently fail
-        }
     },
 
     async _loadScanStatus() {

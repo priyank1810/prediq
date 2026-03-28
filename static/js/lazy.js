@@ -10,7 +10,7 @@ const Lazy = {
     _modules: {
         predictions:  { src: '/static/js/predictions.js?v=40' },
         watchlist:    { src: '/static/js/watchlist.js?v=40' },
-        insights:     { src: '/static/js/insights.js?v=40' },
+        insights:     { src: '/static/js/insights.js?v=41' },
         fundamentals: { src: '/static/js/fundamentals.js?v=40' },
         signals:      { src: '/static/js/signals.js?v=40' },
     },
