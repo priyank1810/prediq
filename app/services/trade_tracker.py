@@ -229,6 +229,10 @@ class TradeTracker:
         if not signal_data or signal_data.get("direction") == "NEUTRAL":
             return
 
+        # Only track signals with 40%+ confidence
+        if (signal_data.get("confidence") or 0) < 40:
+            return
+
         # Skip stocks near earnings announcements (too risky)
         if signal_data.get("direction") == "BULLISH" and self._is_near_earnings(symbol):
             logger.debug(f"Skipped {symbol}: near earnings announcement")

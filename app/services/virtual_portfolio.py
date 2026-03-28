@@ -65,6 +65,13 @@ class VirtualPortfolio:
         return round(allocation, 2)
 
     def get_portfolio(self, capital: float = DEFAULT_CAPITAL) -> dict:
+        # Cache for 30 seconds to avoid recomputing on every request
+        from app.utils.cache import cache
+        cache_key = f"virtual_portfolio:{capital}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         db = SessionLocal()
         try:
             resolved = (
@@ -188,16 +195,18 @@ class VirtualPortfolio:
 
             # Open positions with smart allocation + live P&L
             open_positions = []
-            # Fetch live prices for open positions
-            open_symbols = list({t.symbol for t in open_trades if t.direction == "BULLISH"})
+            # Only fetch live prices during market hours
             live_quotes = {}
-            if open_symbols:
-                try:
-                    from app.services.data_fetcher import data_fetcher
-                    quotes = data_fetcher.get_bulk_quotes(open_symbols)
-                    live_quotes = {q["symbol"]: q for q in quotes if q.get("symbol")}
-                except Exception:
-                    pass
+            from app.utils.helpers import is_market_open
+            if is_market_open():
+                open_symbols = list({t.symbol for t in open_trades if t.direction == "BULLISH"})
+                if open_symbols:
+                    try:
+                        from app.services.data_fetcher import data_fetcher
+                        quotes = data_fetcher.get_bulk_quotes(open_symbols)
+                        live_quotes = {q["symbol"]: q for q in quotes if q.get("symbol")}
+                    except Exception:
+                        pass
 
             for trade in open_trades:
                 if trade.direction != "BULLISH" or not trade.entry or trade.entry <= 0:
@@ -281,7 +290,7 @@ class VirtualPortfolio:
                     }
             scan_overview = sorted(seen.values(), key=lambda x: -x["confidence"])
 
-            return {
+            result = {
                 "initial_capital": capital,
                 "current_value": round(equity, 2),
                 "total_pnl": total_pnl,
@@ -307,6 +316,9 @@ class VirtualPortfolio:
                     "loss_streak_reduce": LOSS_STREAK_REDUCE,
                 },
             }
+
+            cache.set(cache_key, result, 30)  # Cache 30 seconds
+            return result
         finally:
             db.close()
 
