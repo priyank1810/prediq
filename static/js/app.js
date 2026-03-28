@@ -25,8 +25,8 @@ const App = {
 
         Search.init();
         Notifications.init();
-        // Signals must init early for WebSocket handlers
-        await Lazy.loadAndInit('signals');
+        // Signals init early for WebSocket handlers — don't block if it fails
+        try { await Lazy.loadAndInit('signals'); } catch (e) { console.warn('Signals init failed:', e); }
         this.setupNavigation();
         this.setupChartControls();
         this.setupStockTabs();
