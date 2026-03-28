@@ -691,6 +691,47 @@ def ai_analysis():
         db.close()
 
 
+@router.get("/stats/model-comparison/{symbol}")
+def compare_models(symbol: str):
+    """Compare v1 vs v2 XGBoost predictions for a stock."""
+    from app.services.data_fetcher import data_fetcher
+    sym = symbol.upper()
+    try:
+        df = data_fetcher.get_historical_data(sym, "2y")
+        if df is None or df.empty or len(df) < 200:
+            raise HTTPException(status_code=400, detail=f"Need 200+ data points for {sym}")
+
+        results = {}
+
+        # V1
+        try:
+            from app.ai.xgboost_model import XGBoostPredictor
+            v1 = XGBoostPredictor()
+            v1_result = v1.predict(df, sym)
+            results["v1"] = {
+                "predictions": v1_result.get("predictions", [])[-1] if v1_result.get("predictions") else None,
+                "confidence": v1_result.get("confidence_score"),
+                "mape": v1_result.get("mape"),
+                "features": len(v1_result.get("feature_cols_used", [])),
+            }
+        except Exception as e:
+            results["v1"] = {"error": str(e)}
+
+        # V2
+        try:
+            from app.ai.xgboost_v2 import xgboost_v2
+            v2_result = xgboost_v2.predict(df, sym)
+            results["v2"] = v2_result
+        except Exception as e:
+            results["v2"] = {"error": str(e)}
+
+        return {"symbol": sym, "current_price": float(df["close"].iloc[-1]), **results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/stats/scan-status")
 def get_scan_status():
     """Get last scan status — when it ran, how many stocks, results."""
