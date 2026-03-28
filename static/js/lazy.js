@@ -8,11 +8,11 @@ const Lazy = {
 
     // Module registry: name → {src, init}
     _modules: {
-        predictions:  { src: '/static/js/predictions.js?v=31' },
-        watchlist:    { src: '/static/js/watchlist.js?v=31' },
-        insights:     { src: '/static/js/insights.js?v=31' },
-        fundamentals: { src: '/static/js/fundamentals.js?v=31' },
-        signals:      { src: '/static/js/signals.js?v=31' },
+        predictions:  { src: '/static/js/predictions.js?v=40' },
+        watchlist:    { src: '/static/js/watchlist.js?v=40' },
+        insights:     { src: '/static/js/insights.js?v=40' },
+        fundamentals: { src: '/static/js/fundamentals.js?v=40' },
+        signals:      { src: '/static/js/signals.js?v=40' },
     },
 
     /**
