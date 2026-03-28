@@ -205,6 +205,73 @@ window.Insights = {
         }
     },
 
+    async compareModels() {
+        const symbol = document.getElementById('modelCompSymbol')?.value?.toUpperCase();
+        const el = document.getElementById('modelCompResult');
+        if (!symbol || !el) return;
+
+        el.innerHTML = '<div class="text-center py-4 text-gray-500">Computing predictions...</div>';
+
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/model-comparison/${encodeURIComponent(symbol)}`);
+            if (!resp.ok) {
+                const err = await resp.json();
+                el.innerHTML = `<div class="text-red-400 text-sm">${err.detail || 'Failed'}</div>`;
+                return;
+            }
+            const d = await resp.json();
+
+            const v1 = d.v1 || {};
+            const v2 = d.v2 || {};
+            const price = d.current_price;
+
+            let html = `<div class="text-xs text-gray-400 mb-3">${d.symbol} — Current: ₹${price?.toFixed(2)}</div>`;
+
+            html += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
+
+            // V1 card
+            const v1Err = v1.error;
+            html += `<div class="bg-dark-700 rounded-lg p-3 border border-gray-700">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm font-bold text-white">V1 (Regression)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">Current</span>
+                </div>
+                ${v1Err ? `<div class="text-red-400 text-xs">${v1Err}</div>` : `
+                    <div class="text-xs text-gray-400">Predicted: <span class="text-white font-medium">₹${v1.predictions?.toFixed(2) || '-'}</span></div>
+                    <div class="text-xs text-gray-400">MAPE: <span class="text-white">${v1.mape?.toFixed(2) || '-'}%</span></div>
+                    <div class="text-xs text-gray-400">Confidence: <span class="text-white">${v1.confidence?.toFixed(1) || '-'}%</span></div>
+                    <div class="text-xs text-gray-400">Features: <span class="text-white">${v1.features || '-'}</span></div>
+                `}
+            </div>`;
+
+            // V2 card
+            const v2Err = v2.error;
+            const dirColor = v2.direction === 'BULLISH' ? 'text-green-400' : v2.direction === 'BEARISH' ? 'text-red-400' : 'text-yellow-400';
+            html += `<div class="bg-dark-700 rounded-lg p-3 border border-purple-700/50">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm font-bold text-white">V2 (Classifier)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-400">New</span>
+                </div>
+                ${v2Err ? `<div class="text-red-400 text-xs">${v2Err}</div>` : `
+                    <div class="text-xs text-gray-400">Direction: <span class="${dirColor} font-bold">${v2.direction || '-'}</span></div>
+                    <div class="text-xs text-gray-400">Probability: <span class="text-white font-medium">${((v2.probability || 0.5) * 100).toFixed(1)}% up</span></div>
+                    <div class="text-xs text-gray-400">Predicted: <span class="text-white">₹${v2.predicted_price?.toFixed(2) || '-'}</span></div>
+                    <div class="text-xs text-gray-400">Confidence: <span class="text-white">${v2.confidence_score?.toFixed(1) || '-'}%</span></div>
+                    <div class="text-xs text-gray-400">Features: <span class="text-white">${v2.features_used || '-'}</span></div>
+                    <div class="text-xs text-gray-400">Best iteration: <span class="text-white">${v2.best_iteration ?? '-'}</span></div>
+                    ${v2.top_features?.length ? `<div class="mt-2 text-[10px] text-gray-500">Top features:</div>
+                        ${v2.top_features.map(f => `<div class="flex justify-between text-[10px]"><span class="text-gray-400">${f.name}</span><span class="text-white">${f.importance}%</span></div>`).join('')}` : ''}
+                `}
+            </div>`;
+
+            html += `</div>`;
+
+            el.innerHTML = html;
+        } catch (e) {
+            el.innerHTML = `<div class="text-red-400 text-sm">Error: ${e.message}</div>`;
+        }
+    },
+
     async loadTrackRecord() {
         if (this._trackRecordLoadTime && Date.now() - this._trackRecordLoadTime < 30000) return;
         this._trackRecordLoadTime = Date.now();

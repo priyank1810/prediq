@@ -897,6 +897,16 @@
             <div id="aiAnalysisContent">
                 <div class="text-center py-8 text-gray-500">Loading AI Analysis...</div>
             </div>
+
+            <!-- Model V2 Comparison -->
+            <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mt-4">
+                <h3 class="text-base sm:text-lg font-semibold text-white mb-3">Model Comparison (V1 vs V2)</h3>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <input type="text" id="modelCompSymbol" placeholder="Symbol (e.g. SBIN)" class="bg-dark-700 border border-gray-600 text-gray-300 text-xs rounded px-2 py-1.5 w-32 uppercase">
+                    <button onclick="Insights.compareModels()" class="px-3 py-1.5 bg-accent-blue text-white text-xs rounded hover:bg-blue-600">Compare</button>
+                </div>
+                <div id="modelCompResult" class="text-sm text-gray-500">Enter a stock symbol to compare V1 (regression) vs V2 (classifier)</div>
+            </div>
         </div>
 
     </main>
