@@ -31,6 +31,15 @@ MIN_LOG_INTERVAL_MINUTES = {
     "short_4h": 240,
 }
 
+# Daily loss limit: stop taking new trades if daily P&L drops below this %
+DAILY_LOSS_LIMIT_PCT = -2.0
+
+# Cooldown after SL hit: don't re-enter same stock for this many minutes
+SL_COOLDOWN_MINUTES = 120
+
+# Market regime: suppress bullish signals if NIFTY is down more than this %
+MARKET_DOWN_THRESHOLD_PCT = -1.0
+
 
 class TradeTracker:
     """Tracks trade signal predictions and validates outcomes."""
@@ -38,6 +47,10 @@ class TradeTracker:
     def __init__(self):
         self._open_trades_cache = {}  # symbol -> [trade dicts]
         self._cache_loaded = False
+        self._daily_loss_breaker = False  # circuit breaker for the day
+        self._breaker_date = None  # date when breaker was last set
+        self._market_regime_cache = None  # (timestamp, nifty_change_pct)
+
 
     def _load_open_trades_cache(self):
         """Load all open trades into memory for fast tick checking."""
@@ -223,6 +236,80 @@ class TradeTracker:
         except Exception:
             return False
 
+    def _check_daily_loss_limit(self, db) -> bool:
+        """Return True if daily loss limit has been breached — stop new trades."""
+        today = now_ist().replace(tzinfo=None).date()
+
+        # Reset breaker on new day
+        if self._breaker_date != today:
+            self._daily_loss_breaker = False
+            self._breaker_date = today
+
+        if self._daily_loss_breaker:
+            return True
+
+        # Calculate today's realized P&L
+        today_start = datetime.combine(today, datetime.min.time())
+        today_resolved = (
+            db.query(TradeSignalLog)
+            .filter(
+                TradeSignalLog.status != "open",
+                TradeSignalLog.resolved_at >= today_start,
+            )
+            .all()
+        )
+        if not today_resolved:
+            return False
+
+        # Approximate P&L as % of capital (assume ₹5000 per trade avg)
+        total_pnl_pct = sum(t.outcome_pct or 0 for t in today_resolved) / len(today_resolved)
+        if total_pnl_pct <= DAILY_LOSS_LIMIT_PCT:
+            self._daily_loss_breaker = True
+            logger.warning(f"Daily loss limit hit: avg {total_pnl_pct:.2f}% across {len(today_resolved)} trades — pausing new entries")
+            return True
+        return False
+
+    def _check_market_regime(self) -> bool:
+        """Return True if market is in risk-off mode (NIFTY down >1%). Suppress bullish signals."""
+        try:
+            import time
+            # Cache for 5 minutes
+            if self._market_regime_cache:
+                ts, change_pct = self._market_regime_cache
+                if time.time() - ts < 300:
+                    return change_pct <= MARKET_DOWN_THRESHOLD_PCT
+
+            from app.services.data_fetcher import data_fetcher
+            quotes = data_fetcher.get_bulk_quotes(["NIFTY 50"])
+            if quotes:
+                q = quotes[0] if isinstance(quotes, list) else quotes.get("NIFTY 50", {})
+                change_pct = q.get("change_pct") or q.get("pChange") or 0
+                self._market_regime_cache = (time.time(), change_pct)
+                if change_pct <= MARKET_DOWN_THRESHOLD_PCT:
+                    logger.info(f"Market risk-off: NIFTY {change_pct:+.2f}% — suppressing bullish signals")
+                    return True
+            return False
+        except Exception as e:
+            logger.debug(f"Market regime check failed: {e}")
+            return False
+
+    def _check_sl_cooldown(self, symbol: str, db) -> bool:
+        """Return True if this stock hit a stop-loss recently — needs cooldown."""
+        cooldown_cutoff = now_ist().replace(tzinfo=None) - timedelta(minutes=SL_COOLDOWN_MINUTES)
+        recent_sl = (
+            db.query(TradeSignalLog)
+            .filter(
+                TradeSignalLog.symbol == symbol,
+                TradeSignalLog.status == "sl_hit",
+                TradeSignalLog.resolved_at >= cooldown_cutoff,
+            )
+            .first()
+        )
+        if recent_sl:
+            logger.debug(f"Skipped {symbol}: SL cooldown ({SL_COOLDOWN_MINUTES}min)")
+            return True
+        return False
+
     def log_signal(self, symbol: str, timeframe: str, signal_data: dict,
                    current_price: float):
         """Log a trade prediction from an MTF signal computation."""
@@ -231,6 +318,10 @@ class TradeTracker:
 
         # Only track signals with 45%+ confidence
         if (signal_data.get("confidence") or 0) < 45:
+            return
+
+        # Market regime filter: skip bullish signals when NIFTY is tanking
+        if self._check_market_regime():
             return
 
         # Skip stocks near earnings announcements (too risky)
@@ -247,6 +338,14 @@ class TradeTracker:
 
         db = SessionLocal()
         try:
+            # Daily loss circuit breaker
+            if self._check_daily_loss_limit(db):
+                return
+
+            # SL cooldown: don't re-enter a stock that just hit stop-loss
+            if self._check_sl_cooldown(symbol, db):
+                return
+
             # Check for recent duplicate (same symbol + timeframe)
             min_interval = MIN_LOG_INTERVAL_MINUTES.get(timeframe, 30)
             cutoff = now_ist().replace(tzinfo=None) - timedelta(minutes=min_interval)
