@@ -316,11 +316,6 @@ class TradeTracker:
         if not signal_data or signal_data.get("direction") != "BULLISH":
             return  # Only track bullish signals (portfolio is long-only)
 
-        # Skip index symbols — not tradeable as stocks
-        from app.config import INDICES
-        if symbol in INDICES:
-            return
-
         # Only track signals with 45%+ confidence
         if (signal_data.get("confidence") or 0) < 45:
             return
@@ -339,6 +334,11 @@ class TradeTracker:
         stop_loss = signal_data.get("stop_loss")
 
         if not entry or not target:
+            return
+
+        # Sanity check: entry should be within 5% of current price
+        if current_price and abs(entry - current_price) / current_price > 0.05:
+            logger.debug(f"Skipped {symbol}: entry ₹{entry:.2f} too far from current ₹{current_price:.2f}")
             return
 
         db = SessionLocal()
