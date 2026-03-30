@@ -229,8 +229,8 @@ class TradeTracker:
         if not signal_data or signal_data.get("direction") == "NEUTRAL":
             return
 
-        # Only track signals with 40%+ confidence
-        if (signal_data.get("confidence") or 0) < 40:
+        # Only track signals with 45%+ confidence
+        if (signal_data.get("confidence") or 0) < 45:
             return
 
         # Skip stocks near earnings announcements (too risky)
