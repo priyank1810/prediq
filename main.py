@@ -127,6 +127,13 @@ def _migrate_db_sqlite(database_url: str):
         ("users", "google_id", "TEXT"),
         ("users", "avatar_url", "TEXT"),
         ("users", "auth_provider", "TEXT DEFAULT 'local'"),
+        # V1 vs V2 shadow tracking
+        ("trade_signal_logs", "model_used", "TEXT"),
+        ("trade_signal_logs", "v1_predicted_price", "REAL"),
+        ("trade_signal_logs", "v1_confidence", "REAL"),
+        ("trade_signal_logs", "v2_predicted_price", "REAL"),
+        ("trade_signal_logs", "v2_confidence", "REAL"),
+        ("trade_signal_logs", "v2_direction", "TEXT"),
     ]
 
     for table, column, col_type in migrations:
@@ -187,6 +194,13 @@ def _migrate_db_postgres():
         ("users", "google_id", "TEXT"),
         ("users", "avatar_url", "TEXT"),
         ("users", "auth_provider", "TEXT DEFAULT 'local'"),
+        # V1 vs V2 shadow tracking
+        ("trade_signal_logs", "model_used", "TEXT"),
+        ("trade_signal_logs", "v1_predicted_price", "DOUBLE PRECISION"),
+        ("trade_signal_logs", "v1_confidence", "DOUBLE PRECISION"),
+        ("trade_signal_logs", "v2_predicted_price", "DOUBLE PRECISION"),
+        ("trade_signal_logs", "v2_confidence", "DOUBLE PRECISION"),
+        ("trade_signal_logs", "v2_direction", "TEXT"),
     ]
 
     with engine.begin() as conn:
@@ -368,9 +382,9 @@ async def news_alert_scanner():
 async def trade_job_enqueuer():
     """Tiered trade scanning + validation.
 
-    Intraday (10m, 15m, 30m): every 30 min during market hours
-    Short-term (1h, 4h):      every 2 hours during market hours
-    Validation:               every 10 min (real-time via ticks + worker fallback)
+    Intraday (15m, 30m):  every 5 min during market hours
+    Short-term (1h, 4h):  every 15 min during market hours
+    Validation:           every 5 min (real-time via ticks + worker fallback)
     """
     await asyncio.sleep(300)  # Let services warm up
 
@@ -391,14 +405,14 @@ async def trade_job_enqueuer():
                 if not job_service.has_pending("trade_validate"):
                     job_service.enqueue("trade_validate", {}, priority=0)
 
-                # Intraday scan (15m, 30m): every 10 min
-                if now_ts - _last_intraday_scan >= 600:  # 10 min
+                # Intraday scan (15m, 30m): every 5 min
+                if now_ts - _last_intraday_scan >= 300:  # 5 min
                     if not job_service.has_pending("watchlist_trade_scan"):
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "intraday"}, priority=0)
                         _last_intraday_scan = now_ts
 
-                # Short-term scan (1h, 4h): every 30 min
-                if now_ts - _last_shortterm_scan >= 1800:  # 30 min
+                # Short-term scan (1h, 4h): every 15 min
+                if now_ts - _last_shortterm_scan >= 900:  # 15 min
                     if not job_service.has_pending("watchlist_trade_scan"):
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "short"}, priority=0)
                         _last_shortterm_scan = now_ts
