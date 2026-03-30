@@ -247,7 +247,7 @@ class TradeTracker:
 
         db = SessionLocal()
         try:
-            # Check for recent duplicate
+            # Check for recent duplicate (same symbol + timeframe)
             min_interval = MIN_LOG_INTERVAL_MINUTES.get(timeframe, 30)
             cutoff = now_ist().replace(tzinfo=None) - timedelta(minutes=min_interval)
             recent = (
@@ -261,6 +261,18 @@ class TradeTracker:
             )
             if recent:
                 return  # Already logged recently
+
+            # Cross-timeframe dedup: max 2 open trades per symbol
+            open_for_symbol = (
+                db.query(TradeSignalLog)
+                .filter(
+                    TradeSignalLog.symbol == symbol,
+                    TradeSignalLog.status == "open",
+                )
+                .count()
+            )
+            if open_for_symbol >= 2:
+                return  # Already have 2 open positions on this stock
 
             window = TIMEFRAME_WINDOWS.get(timeframe, timedelta(days=1))
             expires_at = now_ist().replace(tzinfo=None) + window
@@ -277,8 +289,15 @@ class TradeTracker:
                 stop_loss=stop_loss,
                 risk_reward=signal_data.get("risk_reward"),
                 model_confidence=signal_data.get("model_confidence"),
+                model_used=signal_data.get("model_used", "v1"),
                 regime=signal_data.get("regime"),
                 volume_conviction=signal_data.get("volume_conviction"),
+                # Shadow tracking: both V1 and V2 predictions
+                v1_predicted_price=signal_data.get("v1_predicted_price"),
+                v1_confidence=signal_data.get("v1_confidence"),
+                v2_predicted_price=signal_data.get("v2_predicted_price"),
+                v2_confidence=signal_data.get("v2_confidence"),
+                v2_direction=signal_data.get("v2_direction"),
                 status="open",
                 expires_at=expires_at,
             )
