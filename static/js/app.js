@@ -178,6 +178,9 @@ const App = {
                 if (tab.dataset.stockTab === 'predictions' && this.currentSymbol) {
                     Lazy.loadAndInit('predictions').then(() => { const m = Lazy._getGlobal('predictions'); if (m) m.loadPredictions(this.currentSymbol); }).catch(() => {});
                 }
+                if (tab.dataset.stockTab === 'trades' && this.currentSymbol) {
+                    this._loadStockTrades(this.currentSymbol);
+                }
                 if (tab.dataset.stockTab === 'ailearning' && this.currentSymbol) {
                     const _sig = Lazy._getGlobal('signals');
                     if (_sig) _sig.loadLearningProfile(this.currentSymbol);
@@ -1148,6 +1151,152 @@ const App = {
         toast.textContent = message;
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 5000);
+    },
+
+    // ── Stock Trades Tab ──
+    _stockTradePage_current: 1,
+
+    async _loadStockTrades(symbol) {
+        this._stockTradePage_current = 1;
+        await Promise.all([
+            this._fetchStockTrades(symbol, 1),
+            this._fetchStockPortfolioTrades(symbol),
+        ]);
+    },
+
+    _stockTradePage(delta) {
+        this._stockTradePage_current += delta;
+        this._fetchStockTrades(this.currentSymbol, this._stockTradePage_current);
+    },
+
+    async _fetchStockTrades(symbol, page) {
+        const tbody = document.getElementById('stockTradeTable');
+        if (!tbody) return;
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/trades/history?symbol=${encodeURIComponent(symbol)}&page=${page}&per_page=15&sort_by=created_at&sort_order=desc`);
+            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
+            const d = await resp.json();
+            const trades = d.trades || [];
+            const total = d.total || 0;
+            const totalPages = d.total_pages || 1;
+
+            document.getElementById('stockTradeCount').textContent = `${total} predictions`;
+            const prevBtn = document.getElementById('stockTradePrev');
+            const nextBtn = document.getElementById('stockTradeNext');
+            const pageInfo = document.getElementById('stockTradePageInfo');
+            if (prevBtn) prevBtn.disabled = page <= 1;
+            if (nextBtn) nextBtn.disabled = page >= totalPages;
+            if (pageInfo) pageInfo.textContent = total > 0 ? `Page ${page} of ${totalPages}` : '';
+
+            if (!trades.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">No trade predictions for this stock</td></tr>';
+                return;
+            }
+
+            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            tbody.innerHTML = trades.map(t => {
+                const pColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
+                const sign = (t.outcome_pct || 0) >= 0 ? '+' : '';
+                const rowBg = t.status === 'target_hit' ? 'bg-green-900/10 border-l-2 border-l-green-500' :
+                              t.status === 'sl_hit' ? 'bg-red-900/10 border-l-2 border-l-red-500' :
+                              t.status === 'correct' ? 'bg-green-900/5 border-l-2 border-l-green-600' :
+                              t.status === 'wrong' ? 'bg-red-900/5 border-l-2 border-l-red-600' : '';
+                let badge = '';
+                if (t.status === 'target_hit') badge = '<span class="px-1 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">✓ Target</span>';
+                else if (t.status === 'sl_hit') badge = '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗ SL</span>';
+                else if (t.status === 'correct') badge = '<span class="px-1 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">✓</span>';
+                else if (t.status === 'wrong') badge = '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗</span>';
+                else badge = '<span class="px-1 py-0.5 rounded bg-blue-900/50 text-blue-400 text-[10px]">Open</span>';
+                const confColor = (t.confidence || 0) >= 60 ? 'text-green-400' : (t.confidence || 0) >= 45 ? 'text-yellow-400' : 'text-gray-500';
+                const date = t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+                return `<tr class="${rowBg} hover:bg-dark-700/50">
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${date}</td>
+                    <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe || '-'}</td>
+                    <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
+                    <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry ? t.entry.toFixed(2) : '-'}</td>
+                    <td class="px-2 py-1.5 text-right text-gray-300">₹${t.target ? t.target.toFixed(2) : '-'}</td>
+                    <td class="px-2 py-1.5 text-right text-white">${t.outcome_price ? '₹' + t.outcome_price.toFixed(2) : '-'}</td>
+                    <td class="px-2 py-1.5 text-right ${pColor} font-bold">${t.outcome_pct != null ? sign + t.outcome_pct.toFixed(2) + '%' : '-'}</td>
+                    <td class="px-2 py-1.5 text-center">${badge}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">Error loading trades</td></tr>';
+        }
+    },
+
+    async _fetchStockPortfolioTrades(symbol) {
+        const tbody = document.getElementById('stockPortfolioTable');
+        if (!tbody) return;
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/virtual-portfolio?capital=100000`);
+            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
+            const d = await resp.json();
+            const allTrades = d.recent_trades || [];
+            const trades = allTrades.filter(t => t.symbol === symbol);
+            const open = (d.open_positions || []).filter(p => p.symbol === symbol);
+
+            document.getElementById('stockPortfolioCount').textContent = `${trades.length} closed${open.length ? ` · ${open.length} open` : ''}`;
+
+            let rows = '';
+
+            // Open positions first
+            if (open.length) {
+                rows += open.map(p => {
+                    const pnlC = (p.live_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400';
+                    const sign = (p.live_pnl || 0) >= 0 ? '+' : '';
+                    const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+                    return `<tr class="bg-blue-900/10 border-l-2 border-l-blue-500 hover:bg-dark-700/50">
+                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">${p.scanned_at || '-'}</td>
+                        <td class="px-2 py-1.5 text-gray-400">${tfShort[p.timeframe] || p.timeframe || '-'}</td>
+                        <td class="px-2 py-1.5 text-right text-yellow-400">${(p.confidence || 0).toFixed(0)}%</td>
+                        <td class="px-2 py-1.5 text-right text-gray-300">${p.qty}</td>
+                        <td class="px-2 py-1.5 text-right text-gray-300">₹${p.entry.toFixed(2)}</td>
+                        <td class="px-2 py-1.5 text-right text-white">${p.current_price ? '₹' + p.current_price.toFixed(2) : '-'}</td>
+                        <td class="px-2 py-1.5 text-right text-gray-300">₹${(p.invested || p.qty * p.entry).toFixed(0)}</td>
+                        <td class="px-2 py-1.5 text-right ${pnlC} font-bold">${sign}₹${Math.abs(p.live_pnl || 0).toFixed(0)}</td>
+                        <td class="px-2 py-1.5 text-center"><span class="px-1 py-0.5 rounded bg-blue-900/50 text-blue-400 text-[10px]">Open</span></td>
+                    </tr>`;
+                }).join('');
+            }
+
+            // Closed trades
+            if (trades.length) {
+                const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+                rows += trades.map(t => {
+                    const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                    const sign = t.pnl >= 0 ? '+' : '';
+                    const rowBg = t.status === 'target_hit' ? 'bg-green-900/10 border-l-2 border-l-green-500' :
+                                  t.status === 'sl_hit' ? 'bg-red-900/10 border-l-2 border-l-red-500' : '';
+                    let badge = '';
+                    if (t.status === 'target_hit') badge = '<span class="px-1 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">✓ Win</span>';
+                    else if (t.status === 'sl_hit') badge = '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗ Loss</span>';
+                    else if (t.status === 'correct') badge = '<span class="px-1 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">✓</span>';
+                    else if (t.status === 'wrong') badge = '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗</span>';
+                    else badge = `<span class="px-1 py-0.5 rounded bg-gray-800 ${pColor} text-[10px]">Expired</span>`;
+                    const confColor = (t.confidence || 0) >= 60 ? 'text-green-400' : 'text-yellow-400';
+                    return `<tr class="${rowBg} hover:bg-dark-700/50">
+                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">${t.date || '-'}</td>
+                        <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe || '-'}</td>
+                        <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
+                        <td class="px-2 py-1.5 text-right text-gray-300">${t.qty}</td>
+                        <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry.toFixed(2)}</td>
+                        <td class="px-2 py-1.5 text-right text-gray-300">₹${t.exit_price.toFixed(2)}</td>
+                        <td class="px-2 py-1.5 text-right text-gray-300">₹${t.invested.toFixed(0)}</td>
+                        <td class="px-2 py-1.5 text-right ${pColor} font-bold">${sign}₹${Math.abs(t.pnl).toFixed(0)}</td>
+                        <td class="px-2 py-1.5 text-center">${badge}</td>
+                    </tr>`;
+                }).join('');
+            }
+
+            if (!rows) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">No portfolio trades for this stock</td></tr>';
+            } else {
+                tbody.innerHTML = rows;
+            }
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">Error loading portfolio</td></tr>';
+        }
     }
 };
 

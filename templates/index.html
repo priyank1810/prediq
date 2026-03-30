@@ -196,6 +196,7 @@
                     <button class="stock-tab" data-stock-tab="fundamentals" role="tab" aria-selected="false" aria-controls="stockTab-fundamentals">Fundamentals</button>
                     <button class="stock-tab" data-stock-tab="news" role="tab" aria-selected="false" aria-controls="stockTab-news">News & Events</button>
                     <button class="stock-tab" data-stock-tab="predictions" role="tab" aria-selected="false" aria-controls="stockTab-predictions">Predictions</button>
+                    <button class="stock-tab" data-stock-tab="trades" role="tab" aria-selected="false" aria-controls="stockTab-trades">Trades</button>
                     <button class="stock-tab" data-stock-tab="ailearning" role="tab" aria-selected="false" aria-controls="stockTab-ailearning">AI Learning</button>
                 </nav>
 
@@ -468,6 +469,68 @@
                     </div>
                 </div>
 
+
+                <!-- ═══════ TRADES TAB ═══════ -->
+                <div id="stockTab-trades" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-trades">
+                    <!-- Trade Predictions Track Record -->
+                    <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-semibold text-white">Trade Predictions</h3>
+                            <span id="stockTradeCount" class="text-xs text-gray-500"></span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead class="sticky top-0 bg-dark-800">
+                                    <tr class="text-gray-500 border-b border-gray-700">
+                                        <th class="text-left px-2 py-1.5">Date</th>
+                                        <th class="text-left px-2 py-1.5">TF</th>
+                                        <th class="text-right px-2 py-1.5">Conf</th>
+                                        <th class="text-right px-2 py-1.5">Entry</th>
+                                        <th class="text-right px-2 py-1.5">Target</th>
+                                        <th class="text-right px-2 py-1.5">Actual</th>
+                                        <th class="text-right px-2 py-1.5">P&L</th>
+                                        <th class="text-center px-2 py-1.5">Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockTradeTable">
+                                    <tr><td colspan="8" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="flex items-center justify-between mt-2">
+                            <button id="stockTradePrev" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-2.5 py-1 disabled:opacity-30" onclick="App._stockTradePage(-1)" disabled>← Prev</button>
+                            <span id="stockTradePageInfo" class="text-[10px] text-gray-500"></span>
+                            <button id="stockTradeNext" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-2.5 py-1 disabled:opacity-30" onclick="App._stockTradePage(1)" disabled>Next →</button>
+                        </div>
+                    </div>
+                    <!-- Virtual Portfolio Trades -->
+                    <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-semibold text-white">Portfolio Trades</h3>
+                            <span id="stockPortfolioCount" class="text-xs text-gray-500"></span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead class="sticky top-0 bg-dark-800">
+                                    <tr class="text-gray-500 border-b border-gray-700">
+                                        <th class="text-left px-2 py-1.5">Date</th>
+                                        <th class="text-left px-2 py-1.5">TF</th>
+                                        <th class="text-right px-2 py-1.5">Conf</th>
+                                        <th class="text-right px-2 py-1.5">Qty</th>
+                                        <th class="text-right px-2 py-1.5">Entry</th>
+                                        <th class="text-right px-2 py-1.5">Exit</th>
+                                        <th class="text-right px-2 py-1.5">Invested</th>
+                                        <th class="text-right px-2 py-1.5">P&L</th>
+                                        <th class="text-center px-2 py-1.5">Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockPortfolioTable">
+                                    <tr><td colspan="9" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- ═══════ AI LEARNING TAB ═══════ -->
                 <div id="stockTab-ailearning" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-ailearning">
