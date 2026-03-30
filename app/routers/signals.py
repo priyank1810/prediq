@@ -534,7 +534,12 @@ def ai_analysis():
 
     db = SessionLocal()
     try:
-        resolved = db.query(TradeSignalLog).filter(TradeSignalLog.status != "open").all()
+        from app.config import INDICES
+        index_symbols = list(INDICES.keys())
+        resolved = db.query(TradeSignalLog).filter(
+            TradeSignalLog.status != "open",
+            ~TradeSignalLog.symbol.in_(index_symbols),
+        ).all()
         open_count = db.query(TradeSignalLog).filter(TradeSignalLog.status == "open").count()
 
         if not resolved:
