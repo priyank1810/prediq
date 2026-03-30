@@ -151,26 +151,38 @@ def prediction_leaderboard():
         # Sort by lowest MAPE (best first)
         models.sort(key=lambda x: x["avg_mape"])
 
-        # --- Per-model per-symbol breakdown (top 15 most predicted) ---
+        # --- Per-symbol breakdown (aggregate across models, min 5 predictions) ---
         symbol_stats = {}
         for log in all_logs:
-            key = (log.model_type, log.symbol)
-            if key not in symbol_stats:
-                symbol_stats[key] = {"mape_sum": 0, "total": 0}
-            s = symbol_stats[key]
+            sym = log.symbol
+            if sym not in symbol_stats:
+                symbol_stats[sym] = {"mape_sum": 0, "total": 0, "correct_dir": 0, "accurate": 0}
+            s = symbol_stats[sym]
             s["total"] += 1
-            s["mape_sum"] += abs(log.predicted_price - log.actual_price) / log.actual_price * 100
+            mape = abs(log.predicted_price - log.actual_price) / log.actual_price * 100
+            s["mape_sum"] += mape
+            threshold = _get_accuracy_threshold(log)
+            if mape <= threshold:
+                s["accurate"] += 1
+            # Direction: predicted vs actual relative to previous close
+            if log.predicted_price and log.actual_price and log.current_price:
+                pred_up = log.predicted_price > log.current_price
+                actual_up = log.actual_price > log.current_price
+                if pred_up == actual_up:
+                    s["correct_dir"] += 1
 
         by_symbol = []
-        for (model, symbol), s in symbol_stats.items():
-            if s["total"] >= 2:  # Need at least 2 predictions
+        for symbol, s in symbol_stats.items():
+            if s["total"] >= 5:
                 by_symbol.append({
-                    "model": model, "symbol": symbol,
+                    "symbol": symbol,
                     "total": s["total"],
                     "avg_mape": round(s["mape_sum"] / s["total"], 2),
+                    "win_rate": round(s["accurate"] / s["total"] * 100, 1),
+                    "direction_accuracy": round(s["correct_dir"] / s["total"] * 100, 1),
                 })
-        by_symbol.sort(key=lambda x: x["avg_mape"])
-        by_symbol = by_symbol[:30]
+        by_symbol.sort(key=lambda x: -x["win_rate"])
+        by_symbol = by_symbol[:20]
 
         # --- Per-model per-sector breakdown ---
         sector_stats = {}

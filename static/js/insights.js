@@ -855,18 +855,17 @@ window.Insights = {
             const bySymEl = document.getElementById('predLeaderboardBySymbol');
             if (bySymEl && data.by_symbol) {
                 bySymEl.innerHTML = data.by_symbol.slice(0, 15).map(s => {
-                    const mapeColor = s.avg_mape <= 1 ? 'text-green-400' : s.avg_mape <= 3 ? 'text-yellow-400' : 'text-red-400';
-                    return `<div class="flex items-center justify-between py-1 border-b border-gray-800">
-                        <div class="flex items-center gap-2">
-                            <span class="text-[9px] px-1 py-0.5 rounded bg-dark-600 text-gray-400 uppercase">${s.model}</span>
-                            <span class="text-xs text-white cursor-pointer hover:text-accent-blue" onclick="Search.select('${s.symbol}','')">${s.symbol}</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-[10px] text-gray-500">${s.total}x</span>
-                            <span class="text-xs font-bold ${mapeColor}">${s.avg_mape}%</span>
+                    const wrColor = s.win_rate >= 60 ? 'text-green-400' : s.win_rate >= 40 ? 'text-yellow-400' : 'text-red-400';
+                    const dirColor = s.direction_accuracy >= 60 ? 'text-green-400' : s.direction_accuracy >= 40 ? 'text-yellow-400' : 'text-red-400';
+                    return `<div class="flex items-center justify-between py-1.5 border-b border-gray-800">
+                        <span class="text-xs text-white font-medium cursor-pointer hover:text-accent-blue" onclick="Search.select('${s.symbol}','')">${s.symbol}</span>
+                        <div class="flex items-center gap-3 text-[10px]">
+                            <span class="text-gray-500">${s.total} pred</span>
+                            <span class="${wrColor} font-bold">${s.win_rate}% acc</span>
+                            <span class="${dirColor}">${s.direction_accuracy}% dir</span>
                         </div>
                     </div>`;
-                }).join('') || '<div class="text-center py-2 text-gray-500 text-xs">No data</div>';
+                }).join('') || '<div class="text-center py-2 text-gray-500 text-xs">Not enough data yet (min 5 predictions per stock)</div>';
             }
 
             // By sector
