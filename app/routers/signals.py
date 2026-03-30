@@ -661,7 +661,8 @@ def ai_analysis():
                     daily_pnl[day]["wins"] += 1
 
         daily_trend = [
-            {"date": d, "pnl": round(v["pnl"], 2), "trades": v["trades"],
+            {"date": d, "pnl": round(v["pnl"] / v["trades"], 2) if v["trades"] > 0 else 0,
+             "trades": v["trades"],
              "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] > 0 else 0}
             for d, v in sorted(daily_pnl.items())
         ]
