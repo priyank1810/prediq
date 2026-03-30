@@ -857,22 +857,6 @@ def model_accuracy_comparison():
         db.close()
 
 
-@router.delete("/stats/trades/cleanup-indices")
-def cleanup_index_trades():
-    """One-time cleanup: delete trades logged for index symbols."""
-    from app.models import TradeSignalLog
-    from app.config import INDICES
-    db = SessionLocal()
-    try:
-        deleted = db.query(TradeSignalLog).filter(
-            TradeSignalLog.symbol.in_(list(INDICES.keys()))
-        ).delete(synchronize_session=False)
-        db.commit()
-        return {"deleted": deleted}
-    finally:
-        db.close()
-
-
 @router.get("/stats/scan-status")
 def get_scan_status():
     """Get last scan status — when it ran, how many stocks, results."""
