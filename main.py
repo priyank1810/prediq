@@ -103,6 +103,21 @@ def _migrate_db():
     else:
         _migrate_db_postgres()
 
+    # One-time cleanup: remove index trades (NIFTY 50, NIFTY IT, etc.)
+    try:
+        from app.config import INDICES
+        from app.models import TradeSignalLog
+        db = SessionLocal()
+        deleted = db.query(TradeSignalLog).filter(
+            TradeSignalLog.symbol.in_(list(INDICES.keys()))
+        ).delete(synchronize_session=False)
+        if deleted:
+            db.commit()
+            logger.info(f"Cleaned up {deleted} index trades")
+        db.close()
+    except Exception:
+        pass
+
 
 def _migrate_db_sqlite(database_url: str):
     """SQLite-specific migration using sqlite3 module."""
