@@ -199,9 +199,116 @@ window.Insights = {
                 </div>
             </div>`;
 
+            // V1 vs V2 Model Accuracy section
+            html += `<div id="modelAccuracySection" class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                <h3 class="text-sm font-semibold text-white mb-2">V1 vs V2 Model Accuracy</h3>
+                <div class="text-xs text-gray-500">Loading real accuracy data...</div>
+            </div>`;
+
             container.innerHTML = html;
+
+            // Load model accuracy comparison async
+            this._loadModelAccuracy();
         } catch (e) {
             container.innerHTML = '<div class="text-center py-8 text-gray-500">Failed to load analysis</div>';
+        }
+    },
+
+    async _loadModelAccuracy() {
+        const section = document.getElementById('modelAccuracySection');
+        if (!section) return;
+
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/model-accuracy`);
+            if (!resp.ok) { section.innerHTML = '<h3 class="text-sm font-semibold text-white mb-2">V1 vs V2 Model Accuracy</h3><div class="text-xs text-gray-500">Not available yet</div>'; return; }
+            const d = await resp.json();
+
+            if (!d || d.total_trades === 0) {
+                section.innerHTML = `<h3 class="text-sm font-semibold text-white mb-2">V1 vs V2 Model Accuracy</h3>
+                    <div class="text-xs text-gray-500">${d.message || 'No trades with both V1 and V2 data yet. Tracking started — check back after market hours.'}</div>`;
+                return;
+            }
+
+            const s = d.summary;
+            const v1Better = s.better_model === 'v1';
+            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            const errColor = (e) => e <= 1 ? 'text-green-400' : e <= 2 ? 'text-yellow-400' : 'text-red-400';
+            const wrColor = (wr) => wr >= 65 ? 'text-green-400' : wr >= 50 ? 'text-yellow-400' : 'text-red-400';
+
+            let html = `<h3 class="text-sm font-semibold text-white mb-3">V1 vs V2 Model Accuracy <span class="text-[10px] text-gray-500">(${d.total_trades} trades)</span></h3>`;
+
+            // Summary cards: V1 vs V2
+            html += `<div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="rounded-lg p-3 border ${v1Better ? 'border-green-600/50 bg-green-900/10' : 'border-gray-700 bg-dark-700'}">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-sm font-bold text-white">V1</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">Regression</span>
+                        ${v1Better ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-green-900/50 text-green-400">Winner</span>' : ''}
+                    </div>
+                    <div class="text-xs text-gray-400">Avg Error: <span class="${errColor(s.v1_avg_error_pct)} font-bold">${s.v1_avg_error_pct}%</span></div>
+                    <div class="text-xs text-gray-400">Direction: <span class="${wrColor(s.v1_direction_accuracy)} font-bold">${s.v1_direction_accuracy}%</span></div>
+                    <div class="text-xs text-gray-400">Closer: <span class="text-white">${s.v1_closer_count}x</span></div>
+                </div>
+                <div class="rounded-lg p-3 border ${!v1Better ? 'border-purple-600/50 bg-purple-900/10' : 'border-gray-700 bg-dark-700'}">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-sm font-bold text-white">V2</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-400">Classifier</span>
+                        ${!v1Better ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-green-900/50 text-green-400">Winner</span>' : ''}
+                    </div>
+                    <div class="text-xs text-gray-400">Avg Error: <span class="${errColor(s.v2_avg_error_pct)} font-bold">${s.v2_avg_error_pct}%</span></div>
+                    <div class="text-xs text-gray-400">Direction: <span class="${wrColor(s.v2_direction_accuracy)} font-bold">${s.v2_direction_accuracy}%</span></div>
+                    <div class="text-xs text-gray-400">Closer: <span class="text-white">${s.v2_closer_count}x</span></div>
+                </div>
+            </div>`;
+
+            // By timeframe breakdown
+            if (Object.keys(d.by_timeframe || {}).length > 0) {
+                html += `<div class="mb-3"><div class="text-xs font-medium text-gray-400 mb-2">By Timeframe</div>`;
+                for (const [tf, data] of Object.entries(d.by_timeframe).sort((a,b) => b[1].count - a[1].count)) {
+                    const v1Wins = data.v1_avg_error < data.v2_avg_error;
+                    html += `<div class="flex items-center justify-between py-1.5 border-b border-gray-800 text-xs">
+                        <span class="text-white font-medium">${tfShort[tf] || tf} <span class="text-gray-600">(${data.count})</span></span>
+                        <div class="flex gap-4">
+                            <span class="${v1Wins ? 'text-green-400 font-bold' : 'text-gray-400'}">V1: ${data.v1_avg_error}% err / ${data.v1_direction_accuracy}% dir</span>
+                            <span class="${!v1Wins ? 'text-purple-400 font-bold' : 'text-gray-400'}">V2: ${data.v2_avg_error}% err / ${data.v2_direction_accuracy}% dir</span>
+                        </div>
+                    </div>`;
+                }
+                html += `</div>`;
+            }
+
+            // Recent trades table
+            if ((d.recent_trades || []).length > 0) {
+                html += `<div class="text-xs font-medium text-gray-400 mb-2">Recent Trades — Side by Side</div>
+                <div class="overflow-x-auto"><table class="w-full text-[10px]">
+                    <thead><tr class="text-gray-500 border-b border-gray-700">
+                        <th class="text-left px-1 py-1">Stock</th><th class="text-left px-1">TF</th>
+                        <th class="text-right px-1">Entry</th><th class="text-right px-1">Actual</th>
+                        <th class="text-right px-1">V1 Pred</th><th class="text-right px-1">V1 Err</th>
+                        <th class="text-right px-1">V2 Pred</th><th class="text-right px-1">V2 Err</th>
+                        <th class="text-center px-1">Winner</th>
+                    </tr></thead><tbody>`;
+                for (const t of d.recent_trades) {
+                    const winnerColor = t.winner === 'v1' ? 'text-green-400' : 'text-purple-400';
+                    html += `<tr class="border-b border-gray-800/50 hover:bg-dark-700/50">
+                        <td class="px-1 py-1 text-white">${t.symbol}</td>
+                        <td class="px-1 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
+                        <td class="px-1 text-right text-gray-300">${t.entry_price}</td>
+                        <td class="px-1 text-right text-white">${t.actual_price}</td>
+                        <td class="px-1 text-right ${t.v1_direction_correct ? 'text-green-400' : 'text-red-400'}">${t.v1_predicted}</td>
+                        <td class="px-1 text-right text-gray-300">${t.v1_error_pct}%</td>
+                        <td class="px-1 text-right ${t.v2_direction_correct ? 'text-green-400' : 'text-red-400'}">${t.v2_predicted}</td>
+                        <td class="px-1 text-right text-gray-300">${t.v2_error_pct}%</td>
+                        <td class="px-1 text-center ${winnerColor} font-bold">${t.winner.toUpperCase()}</td>
+                    </tr>`;
+                }
+                html += `</tbody></table></div>`;
+            }
+
+            section.innerHTML = html;
+        } catch (e) {
+            section.innerHTML = `<h3 class="text-sm font-semibold text-white mb-2">V1 vs V2 Model Accuracy</h3>
+                <div class="text-xs text-gray-500">Loading failed — tracking in background</div>`;
         }
     },
 
@@ -343,7 +450,7 @@ window.Insights = {
                                     ${p.current_price ? `<span class="text-white">Now: ₹${p.current_price.toFixed(2)}</span>` : ''}
                                     ${p.live_pnl != null ? `<span class="${pnlC} font-bold">${pnlSign}₹${Math.abs(p.live_pnl).toFixed(0)} (${pnlSign}${p.live_pnl_pct}%)</span>` : ''}
                                 </div>
-                                <div class="text-[10px] text-gray-600 ml-auto">${p.why_picked || ''} · ${p.scanned_at || ''}</div>
+                                <div class="text-[10px] text-gray-600 ml-auto whitespace-nowrap">${p.why_picked || ''} · ${p.scanned_at || ''}</div>
                             </div>`;
                         }).join('')}
                     </div>`;
@@ -422,40 +529,89 @@ window.Insights = {
         } catch (e) {}
     },
 
-    _filterPortfolioTrades() {
-        const trades = this._vpAllTrades || [];
-        const tbody = document.getElementById('vpTradesTable');
-        if (!tbody) return;
+    _vpPage: 1,
+    _vpPerPage: 15,
 
+    _filterPortfolioTrades() {
+        this._vpPage = 1;
+        this._renderPaginatedTrades();
+    },
+
+    _vpChangePage(delta) {
+        this._vpPage += delta;
+        this._renderPaginatedTrades();
+    },
+
+    _getFilteredTrades() {
+        const trades = this._vpAllTrades || [];
         const resultFilter = document.getElementById('vpFilterResult')?.value || '';
         const sortBy = document.getElementById('vpSortBy')?.value || 'date_desc';
         const symbolFilter = (document.getElementById('vpFilterSymbol')?.value || '').toUpperCase();
+        const dateFilter = document.getElementById('vpFilterDate')?.value || '';
 
-        // Filter
+        const now = new Date();
+        const istOffset = 5.5 * 60 * 60000;
+        const istNow = new Date(now.getTime() + istOffset + now.getTimezoneOffset() * 60000);
+        const todayStr = istNow.toISOString().slice(0, 10);
+        const yesterday = new Date(istNow); yesterday.setDate(istNow.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().slice(0, 10);
+        const weekAgo = new Date(istNow); weekAgo.setDate(istNow.getDate() - istNow.getDay());
+        const weekStr = weekAgo.toISOString().slice(0, 10);
+        const monthStr = todayStr.slice(0, 7);
+
         let filtered = trades.filter(t => {
             if (resultFilter === 'win' && t.pnl < 0) return false;
             if (resultFilter === 'loss' && t.pnl >= 0) return false;
             if (symbolFilter && !t.symbol.includes(symbolFilter)) return false;
+            if (dateFilter && t.date) {
+                const d = t.date.slice(0, 10);
+                if (dateFilter === 'today' && d !== todayStr) return false;
+                if (dateFilter === 'yesterday' && d !== yesterdayStr) return false;
+                if (dateFilter === 'week' && d < weekStr) return false;
+                if (dateFilter === 'month' && !d.startsWith(monthStr)) return false;
+            }
             return true;
         });
 
-        // Sort
         if (sortBy === 'date_desc') filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
         else if (sortBy === 'date_asc') filtered.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
         else if (sortBy === 'pnl_desc') filtered.sort((a, b) => (b.pnl || 0) - (a.pnl || 0));
         else if (sortBy === 'pnl_asc') filtered.sort((a, b) => (a.pnl || 0) - (b.pnl || 0));
         else if (sortBy === 'invested_desc') filtered.sort((a, b) => (b.invested || 0) - (a.invested || 0));
 
-        document.getElementById('vpTradeCount').textContent = `${filtered.length} of ${trades.length} trades`;
+        return filtered;
+    },
 
-        if (filtered.length === 0) {
+    _renderPaginatedTrades() {
+        const tbody = document.getElementById('vpTradesTable');
+        if (!tbody) return;
+
+        const allTrades = this._vpAllTrades || [];
+        const filtered = this._getFilteredTrades();
+        const totalPages = Math.max(1, Math.ceil(filtered.length / this._vpPerPage));
+        if (this._vpPage > totalPages) this._vpPage = totalPages;
+        if (this._vpPage < 1) this._vpPage = 1;
+
+        const start = (this._vpPage - 1) * this._vpPerPage;
+        const page = filtered.slice(start, start + this._vpPerPage);
+
+        document.getElementById('vpTradeCount').textContent = `${filtered.length} of ${allTrades.length} trades`;
+
+        const prevBtn = document.getElementById('vpPagePrev');
+        const nextBtn = document.getElementById('vpPageNext');
+        const pageInfo = document.getElementById('vpPageInfo');
+        if (prevBtn) prevBtn.disabled = this._vpPage <= 1;
+        if (nextBtn) nextBtn.disabled = this._vpPage >= totalPages;
+        if (pageInfo) pageInfo.textContent = filtered.length > 0 ? `Page ${this._vpPage} of ${totalPages}` : '';
+
+        if (page.length === 0) {
             tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">No trades match filters</td></tr>';
             return;
         }
 
         const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
 
-        tbody.innerHTML = filtered.map(t => {
+        tbody.innerHTML = page.map(t => {
                 const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
                 const sign = t.pnl >= 0 ? '+' : '';
                 const rowBg = t.status === 'target_hit' ? 'bg-green-900/10 border-l-2 border-l-green-500' :
@@ -822,7 +978,7 @@ window.Insights = {
             return `<tr class="${rowBg} hover:bg-dark-700/50">
                 <td class="px-2 py-1.5 text-gray-400 text-[10px]">${date}</td>
                 <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
-                <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
+                <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe} ${t.model_used === 'v2' ? '<span class="text-[8px] px-1 rounded bg-purple-900/50 text-purple-400">V2</span>' : ''}</td>
                 <td class="px-2 py-1.5 text-center ${dirColor}">${dirArrow}</td>
                 <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
                 <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry ? t.entry.toFixed(2) : '-'}</td>

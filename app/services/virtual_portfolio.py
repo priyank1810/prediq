@@ -248,7 +248,7 @@ class VirtualPortfolio:
                     "live_pnl_pct": live_pnl_pct,
                     "why_picked": f"Conf {(trade.confidence or 0):.0f}% ({conf_mult:.1f}x) × TF {trade.timeframe} ({tf_mult:.1f}x)",
                     "created_at": trade.created_at.isoformat() if trade.created_at else None,
-                    "scanned_at": trade.created_at.strftime("%H:%M") if trade.created_at else None,
+                    "scanned_at": trade.created_at.strftime("%d %b %H:%M") if trade.created_at else None,
                 })
 
             total_pnl = round(equity - capital, 2)
