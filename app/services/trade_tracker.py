@@ -226,15 +226,15 @@ class TradeTracker:
     def log_signal(self, symbol: str, timeframe: str, signal_data: dict,
                    current_price: float):
         """Log a trade prediction from an MTF signal computation."""
-        if not signal_data or signal_data.get("direction") == "NEUTRAL":
-            return
+        if not signal_data or signal_data.get("direction") != "BULLISH":
+            return  # Only track bullish signals (portfolio is long-only)
 
         # Only track signals with 45%+ confidence
         if (signal_data.get("confidence") or 0) < 45:
             return
 
         # Skip stocks near earnings announcements (too risky)
-        if signal_data.get("direction") == "BULLISH" and self._is_near_earnings(symbol):
+        if self._is_near_earnings(symbol):
             logger.debug(f"Skipped {symbol}: near earnings announcement")
             return
 
