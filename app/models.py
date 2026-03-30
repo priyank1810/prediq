@@ -132,8 +132,16 @@ class TradeSignalLog(Base):
 
     # Model info
     model_confidence = Column(Float, nullable=True)
+    model_used = Column(String, nullable=True)  # "v1" or "v2" — which model was active
     regime = Column(String, nullable=True)
     volume_conviction = Column(String, nullable=True)
+
+    # Shadow tracking: store both V1 and V2 predictions for accuracy comparison
+    v1_predicted_price = Column(Float, nullable=True)
+    v1_confidence = Column(Float, nullable=True)
+    v2_predicted_price = Column(Float, nullable=True)
+    v2_confidence = Column(Float, nullable=True)
+    v2_direction = Column(String, nullable=True)
 
     # Outcome tracking
     status = Column(String, default="open")  # "open", "target_hit", "sl_hit", "expired"

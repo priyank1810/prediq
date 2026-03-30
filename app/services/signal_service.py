@@ -540,6 +540,36 @@ class SignalService:
 
             confidence_score = ensemble.get("confidence_score") or result.get("xgboost", {}).get("confidence_score")
 
+            # --- V2 model: run alongside V1, track both, pick higher confidence ---
+            model_used = "v1"
+            v1_predicted_price = predicted_price
+            v1_confidence = confidence_score or 0
+            v2_predicted_price = None
+            v2_confidence = 0
+            v2_direction = None
+            try:
+                from app.ai.xgboost_v2 import xgboost_v2
+                df_for_v2 = daily_df if daily_df is not None and not daily_df.empty else None
+                if df_for_v2 is not None:
+                    v2_result = xgboost_v2.predict(df_for_v2, symbol, horizon=horizon)
+                    v2_confidence = v2_result.get("confidence_score", 0)
+                    v2_predicted_price = v2_result.get("predicted_price")
+                    v2_direction = v2_result.get("direction")
+
+                    if v2_confidence > v1_confidence and v2_predicted_price is not None:
+                        # V2 wins — use its prediction
+                        predicted_price = v2_predicted_price
+                        change_pct = ((predicted_price - current_price) / current_price) * 100
+                        pred_score = (change_pct / expected_move) * 50
+                        pred_score = max(-100, min(100, round(pred_score, 2)))
+                        confidence_score = v2_confidence
+                        model_used = "v2"
+                        logger.info(f"V2 wins for {symbol} {horizon}: conf={v2_confidence} vs V1={v1_confidence}")
+                    else:
+                        logger.info(f"V1 wins for {symbol} {horizon}: conf={v1_confidence} vs V2={v2_confidence}")
+            except Exception as e:
+                logger.debug(f"V2 prediction failed for {symbol} {horizon}: {e}")
+
             # Extract regime info
             regime_info = result.get("regime")
             regime_label = regime_info.get("label") if regime_info else None
@@ -572,6 +602,13 @@ class SignalService:
                 "ensemble_method": ensemble.get("method"),
                 "xgboost_weight": ensemble.get("xgboost_weight"),
                 "prophet_weight": ensemble.get("prophet_weight"),
+                "model_used": model_used,
+                # Shadow tracking: store both models' predictions
+                "v1_predicted_price": v1_predicted_price,
+                "v1_confidence": v1_confidence,
+                "v2_predicted_price": v2_predicted_price,
+                "v2_confidence": v2_confidence,
+                "v2_direction": v2_direction,
             }
         except Exception as e:
             logger.warning(f"Prediction for {symbol} horizon={horizon} failed: {e}")
@@ -1008,6 +1045,13 @@ class SignalService:
             "regime": regime,
             "volume_conviction": volume_conviction,
             "model_confidence": round(pred_confidence, 1) if pred_confidence else None,
+            # V1/V2 shadow tracking
+            "model_used": prediction.get("model_used", "v1"),
+            "v1_predicted_price": prediction.get("v1_predicted_price"),
+            "v1_confidence": prediction.get("v1_confidence"),
+            "v2_predicted_price": prediction.get("v2_predicted_price"),
+            "v2_confidence": prediction.get("v2_confidence"),
+            "v2_direction": prediction.get("v2_direction"),
         }
 
     def _compute_entry_exit(self, df, current_price, direction, timeframe, details,

@@ -509,6 +509,7 @@ def trade_history(
             "lowest_price": t.lowest_price,
             "prediction_error": round(abs(t.predicted_price - t.outcome_price) / t.outcome_price * 100, 2)
                 if t.predicted_price and t.outcome_price and t.outcome_price > 0 else None,
+            "model_used": t.model_used or "v1",
             "created_at": t.created_at.isoformat() if t.created_at else None,
             "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
         } for t in trades]
@@ -730,6 +731,129 @@ def compare_models(symbol: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stats/model-accuracy")
+def model_accuracy_comparison():
+    """Compare V1 vs V2 real-world accuracy from trade signal logs.
+    Only includes trades where both V1 and V2 had predictions."""
+    from app.models import TradeSignalLog
+    db = SessionLocal()
+    try:
+        # Get resolved trades that have both V1 and V2 predictions
+        trades = (
+            db.query(TradeSignalLog)
+            .filter(
+                TradeSignalLog.status != "open",
+                TradeSignalLog.outcome_price.isnot(None),
+                TradeSignalLog.v1_predicted_price.isnot(None),
+                TradeSignalLog.v2_predicted_price.isnot(None),
+            )
+            .order_by(TradeSignalLog.resolved_at.desc())
+            .all()
+        )
+
+        if not trades:
+            return {"message": "No resolved trades with both V1 and V2 data yet. Keep tracking!",
+                    "total_trades": 0}
+
+        v1_stats = {"closer": 0, "total_error_pct": 0, "direction_correct": 0}
+        v2_stats = {"closer": 0, "total_error_pct": 0, "direction_correct": 0}
+        by_timeframe = {}
+        recent_trades = []
+
+        for t in trades:
+            actual = t.outcome_price
+            entry = t.current_price or t.entry
+            if not actual or not entry or entry <= 0:
+                continue
+
+            actual_direction = "BULLISH" if actual > entry else "BEARISH"
+
+            # V1 accuracy
+            v1_error = abs(t.v1_predicted_price - actual) / actual * 100
+            v1_dir_correct = (t.v1_predicted_price > entry) == (actual > entry)
+            v1_stats["total_error_pct"] += v1_error
+            if v1_dir_correct:
+                v1_stats["direction_correct"] += 1
+
+            # V2 accuracy
+            v2_error = abs(t.v2_predicted_price - actual) / actual * 100
+            v2_dir_correct = (t.v2_predicted_price > entry) == (actual > entry)
+            v2_stats["total_error_pct"] += v2_error
+            if v2_dir_correct:
+                v2_stats["direction_correct"] += 1
+
+            # Which was closer?
+            if v1_error < v2_error:
+                v1_stats["closer"] += 1
+            else:
+                v2_stats["closer"] += 1
+
+            # By timeframe
+            tf = t.timeframe or "unknown"
+            if tf not in by_timeframe:
+                by_timeframe[tf] = {"v1_error": 0, "v2_error": 0, "v1_dir": 0, "v2_dir": 0, "count": 0}
+            by_timeframe[tf]["v1_error"] += v1_error
+            by_timeframe[tf]["v2_error"] += v2_error
+            if v1_dir_correct:
+                by_timeframe[tf]["v1_dir"] += 1
+            if v2_dir_correct:
+                by_timeframe[tf]["v2_dir"] += 1
+            by_timeframe[tf]["count"] += 1
+
+            # Recent trades detail
+            if len(recent_trades) < 20:
+                recent_trades.append({
+                    "symbol": t.symbol,
+                    "timeframe": tf,
+                    "direction": t.direction,
+                    "entry_price": round(entry, 2),
+                    "actual_price": round(actual, 2),
+                    "v1_predicted": round(t.v1_predicted_price, 2),
+                    "v2_predicted": round(t.v2_predicted_price, 2),
+                    "v1_error_pct": round(v1_error, 2),
+                    "v2_error_pct": round(v2_error, 2),
+                    "v1_direction_correct": v1_dir_correct,
+                    "v2_direction_correct": v2_dir_correct,
+                    "model_used": t.model_used or "v1",
+                    "winner": "v1" if v1_error < v2_error else "v2",
+                    "status": t.status,
+                    "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
+                })
+
+        total = len(trades)
+
+        # Format timeframe breakdown
+        tf_breakdown = {}
+        for tf, data in by_timeframe.items():
+            c = data["count"]
+            tf_breakdown[tf] = {
+                "count": c,
+                "v1_avg_error": round(data["v1_error"] / c, 2),
+                "v2_avg_error": round(data["v2_error"] / c, 2),
+                "v1_direction_accuracy": round(data["v1_dir"] / c * 100, 1),
+                "v2_direction_accuracy": round(data["v2_dir"] / c * 100, 1),
+            }
+
+        return {
+            "total_trades": total,
+            "summary": {
+                "v1_avg_error_pct": round(v1_stats["total_error_pct"] / total, 2),
+                "v2_avg_error_pct": round(v2_stats["total_error_pct"] / total, 2),
+                "v1_direction_accuracy": round(v1_stats["direction_correct"] / total * 100, 1),
+                "v2_direction_accuracy": round(v2_stats["direction_correct"] / total * 100, 1),
+                "v1_closer_count": v1_stats["closer"],
+                "v2_closer_count": v2_stats["closer"],
+                "better_model": "v1" if v1_stats["closer"] > v2_stats["closer"] else "v2",
+            },
+            "by_timeframe": tf_breakdown,
+            "recent_trades": recent_trades,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 
 
 @router.get("/stats/scan-status")
