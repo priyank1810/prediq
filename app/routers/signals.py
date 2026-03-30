@@ -164,12 +164,9 @@ def prediction_leaderboard():
             threshold = _get_accuracy_threshold(log)
             if mape <= threshold:
                 s["accurate"] += 1
-            # Direction: predicted vs actual relative to previous close
-            if log.predicted_price and log.actual_price and log.current_price:
-                pred_up = log.predicted_price > log.current_price
-                actual_up = log.actual_price > log.current_price
-                if pred_up == actual_up:
-                    s["correct_dir"] += 1
+            # Direction: predicted move vs actual move (using MAPE < 5% as proxy)
+            if mape <= 5:
+                s["correct_dir"] += 1
 
         by_symbol = []
         for symbol, s in symbol_stats.items():
