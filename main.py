@@ -778,21 +778,6 @@ async def lifespan(app: FastAPI):
     _setup_audit_logger()
     Base.metadata.create_all(bind=engine)
     _migrate_db()
-
-    # One-time cleanup: remove index trades (NIFTY 50, NIFTY IT, etc.)
-    try:
-        from app.config import INDICES
-        from app.models import TradeSignalLog
-        db = SessionLocal()
-        deleted = db.query(TradeSignalLog).filter(
-            TradeSignalLog.symbol.in_(list(INDICES.keys()))
-        ).delete(synchronize_session=False)
-        if deleted:
-            db.commit()
-            logger.info(f"Cleaned up {deleted} index trades from database")
-        db.close()
-    except Exception:
-        pass
     tasks = [
         asyncio.create_task(price_streamer()),
         asyncio.create_task(alert_checker()),
