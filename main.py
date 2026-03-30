@@ -405,17 +405,15 @@ async def trade_job_enqueuer():
                 if not job_service.has_pending("trade_validate"):
                     job_service.enqueue("trade_validate", {}, priority=0)
 
-                # Intraday scan (15m, 30m): every 5 min
-                if now_ts - _last_intraday_scan >= 300:  # 5 min
-                    if not job_service.has_pending("watchlist_trade_scan"):
-                        job_service.enqueue("watchlist_trade_scan", {"scan_type": "intraday"}, priority=0)
-                        _last_intraday_scan = now_ts
-
-                # Short-term scan (1h, 4h): every 15 min
-                if now_ts - _last_shortterm_scan >= 900:  # 15 min
-                    if not job_service.has_pending("watchlist_trade_scan"):
+                # Only enqueue one scan type per cycle — short-term takes priority
+                # when both are due, since it runs less frequently
+                if not job_service.has_pending("watchlist_trade_scan"):
+                    if now_ts - _last_shortterm_scan >= 900:  # 15 min
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "short"}, priority=0)
                         _last_shortterm_scan = now_ts
+                    elif now_ts - _last_intraday_scan >= 300:  # 5 min
+                        job_service.enqueue("watchlist_trade_scan", {"scan_type": "intraday"}, priority=0)
+                        _last_intraday_scan = now_ts
 
         except Exception:
             pass
