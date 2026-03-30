@@ -316,6 +316,11 @@ class TradeTracker:
         if not signal_data or signal_data.get("direction") != "BULLISH":
             return  # Only track bullish signals (portfolio is long-only)
 
+        # Skip index symbols — not tradeable as stocks
+        from app.config import INDICES
+        if symbol in INDICES:
+            return
+
         # Only track signals with 45%+ confidence
         if (signal_data.get("confidence") or 0) < 45:
             return
