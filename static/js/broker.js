@@ -159,7 +159,7 @@ const BrokerUI = {
                     : 'bg-red-900/30 text-red-400';
                 var paper = o.paper_trade ? '<span class="text-[9px] text-yellow-500 ml-1">PAPER</span>' : '';
                 var priceStr = o.price ? (' @ ' + o.price.toFixed(2)) : '';
-                var time = o.created_at ? new Date(o.created_at).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'}) : '';
+                var time = o.created_at ? new Date(o.created_at).toLocaleTimeString('en-IN', {timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit'}) : '';
                 var cancelBtn = (o.status === 'pending' || o.status === 'placed')
                     ? '<button class="text-[9px] text-gray-500 hover:text-red-400 ml-auto" onclick="BrokerUI.cancelOrder(' + o.id + ')">Cancel</button>'
                     : '';

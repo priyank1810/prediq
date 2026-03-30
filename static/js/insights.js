@@ -973,7 +973,7 @@ window.Insights = {
             const rowBg = (t.status === 'target_hit' || t.status === 'correct') ? 'bg-green-900/5 border-l-2 border-l-green-600' :
                           (t.status === 'sl_hit' || t.status === 'wrong') ? 'bg-red-900/5 border-l-2 border-l-red-600' : '';
 
-            const date = t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+            const date = t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
             return `<tr class="${rowBg} hover:bg-dark-700/50">
                 <td class="px-2 py-1.5 text-gray-400 text-[10px]">${date}</td>

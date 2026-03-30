@@ -444,7 +444,7 @@ const API = {
                         const filters = (d.matched_filters || []).join(', ');
                         const color = d.change_pct >= 0 ? 'text-green-400' : 'text-red-400';
                         const sign = d.change_pct >= 0 ? '+' : '';
-                        const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                        const time = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
                         const item = document.createElement('div');
                         item.className = 'flex items-center justify-between py-1 px-2 bg-dark-700 rounded text-xs cursor-pointer hover:bg-dark-600 transition';
                         item.onclick = () => Search.select(d.symbol, d.symbol);

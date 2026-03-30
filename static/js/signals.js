@@ -694,6 +694,13 @@ window.Signals = {
                 ? `<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/30 text-purple-300">AI conf:${sig.model_confidence}%</span>`
                 : '';
 
+            // V1/V2 model version badge
+            const modelVerBadge = sig.model_used === 'v2'
+                ? '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/50 text-purple-400 font-bold">V2</span>'
+                : sig.model_used === 'v1'
+                ? '<span class="text-[9px] px-1 py-0.5 rounded bg-gray-800 text-gray-400">V1</span>'
+                : '';
+
             return `${groupHeader}<div class="border ${c.border} ${c.bg} rounded-lg p-3">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-xs text-gray-400 font-medium">${sig.label}${modelBadge}</span>
@@ -714,6 +721,7 @@ window.Signals = {
                     }
                 </div>
                 <div class="flex flex-wrap items-center gap-1 mt-2">
+                    ${modelVerBadge}
                     ${rrBadge}
                     ${regimeBadge}
                     ${volBadge}
@@ -746,7 +754,7 @@ window.Signals = {
         const html = history.map(h => {
             const c = h.direction === 'BULLISH' ? 'text-green-400' :
                       (h.direction === 'BEARISH' ? 'text-red-400' : 'text-yellow-400');
-            const time = h.created_at ? new Date(h.created_at + '+05:30').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
+            const time = h.created_at ? new Date(h.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
             const signalPrice = h.price_at_signal ? '₹' + h.price_at_signal.toFixed(2) : '-';
             return `
                 <tr class="border-b border-gray-800">
@@ -891,7 +899,8 @@ window.Signals = {
             const pctChange = currentPrice > 0 ? ((sig.predicted_price - currentPrice) / currentPrice * 100).toFixed(1) : 0;
             const sign = pctChange >= 0 ? '+' : '';
             const color = pctChange >= 0 ? 'text-green-400' : 'text-red-400';
-            aiPriceEl.innerHTML = `AI Target: <span class="${color}">₹${sig.predicted_price.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span> <span class="text-xs ${color}">(${sign}${pctChange}%)</span>`;
+            const verTag = sig.model_used === 'v2' ? '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-900/50 text-purple-400 font-bold ml-1">V2</span>' : sig.model_used === 'v1' ? '<span class="text-[9px] px-1 py-0.5 rounded bg-gray-800 text-gray-400 ml-1">V1</span>' : '';
+            aiPriceEl.innerHTML = `AI Target: <span class="${color}">₹${sig.predicted_price.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span> <span class="text-xs ${color}">(${sign}${pctChange}%)</span>${verTag}`;
         } else {
             aiPriceEl.textContent = '';
         }

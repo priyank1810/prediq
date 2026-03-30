@@ -47,7 +47,7 @@ const Alerts = {
         tbody.innerHTML = alerts.map(a => {
             const statusColor = a.is_triggered ? 'text-green-400' : 'text-yellow-400';
             const statusText = a.is_triggered ? 'Triggered' : 'Active';
-            const created = new Date(a.created_at).toLocaleDateString('en-IN');
+            const created = new Date(a.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
 
             return `
                 <tr class="border-b border-gray-800 hover:bg-dark-700">

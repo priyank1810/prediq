@@ -324,7 +324,7 @@ window.Watchlist = {
         list.innerHTML = this._alerts.map(a => {
             const icon = a.condition === 'above' ? '&#9650;' : '&#9660;';
             const condLabel = a.condition === 'above' ? 'goes above' : 'drops below';
-            const created = a.created_at ? new Date(a.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
+            const created = a.created_at ? new Date(a.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : '';
             return `
                 <div class="flex items-center justify-between bg-dark-700 rounded px-3 py-2">
                     <div class="flex items-center gap-2">
