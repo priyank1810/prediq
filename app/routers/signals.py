@@ -176,7 +176,7 @@ def prediction_leaderboard():
                 s["correct_dir"] += 1
 
         models = []
-        for model_name in ["ensemble", "xgboost"]:
+        for model_name in ["xgboost"]:
             s = model_stats.get(model_name)
             if not s or s["total"] == 0:
                 continue

@@ -297,7 +297,7 @@ class BacktestService:
 
         xgb = XGBoostPredictor()
 
-        results = {"xgboost": [], "ensemble": []}
+        results = {"xgboost": []}
 
         for i in range(test_days):
             idx = test_start + i
@@ -320,9 +320,7 @@ class BacktestService:
             except Exception as e:
                 logger.debug(f"XGBoost predict failed at step {i}: {e}")
 
-            ensemble_pred = xgb_pred  # Single model = ensemble
-
-            for model_name, pred in [("xgboost", xgb_pred), ("ensemble", ensemble_pred)]:
+            for model_name, pred in [("xgboost", xgb_pred)]:
                 if pred is not None:
                     error = pred - actual_price
                     pct_error = error / actual_price * 100
