@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import os
 import logging
 import numpy as np
 import pandas as pd
-import joblib
 import ta
 from concurrent.futures import ThreadPoolExecutor
 from app.ai.xgboost_model import XGBoostPredictor
 from app.ai.explainer import prediction_explainer
 from app.services.data_fetcher import data_fetcher
-from app.config import PREDICTION_HORIZONS, MODEL_DIR
+from app.config import PREDICTION_HORIZONS
 from app.utils.cache import cache
 
 logger = logging.getLogger(__name__)
@@ -19,10 +17,6 @@ logger = logging.getLogger(__name__)
 class PredictionService:
     def __init__(self):
         self.xgboost = XGBoostPredictor()
-
-    def _meta_learner_path(self, symbol: str) -> str:
-        safe = symbol.replace(" ", "_").replace("^", "")
-        return str(MODEL_DIR / f"meta_{safe}.joblib")
 
     def _detect_regime(self, df: pd.DataFrame) -> dict:
         """Detect market regime using HMM when available, ADX heuristic as fallback."""
@@ -81,250 +75,6 @@ class PredictionService:
             },
         }
 
-    def _inverse_mape_ensemble(self, model_results: dict, daily_df=None, regime: dict = None,
-                               symbol: str = "", horizon: str = "1d") -> dict:
-        """Inverse-MAPE weighted ensemble with direction consensus and regime awareness."""
-        mapes = {}
-        for name, result in model_results.items():
-            mapes[name] = max(result.get("mape", 5.0), 0.01)
-
-        # Inverse MAPE weighting
-        weights = {name: 1.0 / mape for name, mape in mapes.items()}
-
-        # --- Regime-based multipliers ---
-        if regime:
-            if regime.get("high_vol") and "xgboost" in weights:
-                weights["xgboost"] *= 1.2
-                logger.info(f"Regime: high-volatility (ratio={regime.get('vol_ratio')}), XGBoost weight boosted")
-
-        # --- Directional consensus ---
-        # If 2/3 models agree on direction, boost majority and penalize outlier
-        if daily_df is not None and not daily_df.empty and len(model_results) >= 2:
-            current_price = float(daily_df["close"].iloc[-1])
-            directions = {}
-            for name, res in model_results.items():
-                if res.get("predictions"):
-                    pred_price = res["predictions"][-1]
-                    change_pct = ((pred_price - current_price) / current_price) * 100
-                    if change_pct > 0.3:
-                        directions[name] = "bullish"
-                    elif change_pct < -0.3:
-                        directions[name] = "bearish"
-                    else:
-                        directions[name] = "neutral"
-
-            if directions:
-                bullish = [n for n, d in directions.items() if d == "bullish"]
-                bearish = [n for n, d in directions.items() if d == "bearish"]
-
-                majority = None
-                if len(bullish) >= 2:
-                    majority = bullish
-                    minority = bearish
-                elif len(bearish) >= 2:
-                    majority = bearish
-                    minority = bullish
-
-                if majority:
-                    for name in majority:
-                        if name in weights:
-                            weights[name] *= 1.4
-                    for name in (minority or []):
-                        if name in weights:
-                            weights[name] *= 0.6
-                    logger.info(f"Direction consensus: {len(majority)} models agree, boosted {majority}")
-
-        total = sum(weights.values())
-        weights = {name: w / total for name, w in weights.items()}
-
-        # Compute ensemble predictions
-        min_len = min(len(r["predictions"]) for r in model_results.values())
-        ensemble_preds = []
-        for i in range(min_len):
-            val = sum(
-                weights[name] * model_results[name]["predictions"][i]
-                for name in model_results
-            )
-            ensemble_preds.append(round(val, 2))
-
-        # Use dates from first model
-        first_result = next(iter(model_results.values()))
-        ensemble_dates = first_result["dates"][:min_len]
-
-        result = {
-            "predictions": ensemble_preds,
-            "dates": ensemble_dates,
-        }
-        for name in model_results:
-            result[f"{name}_weight"] = round(float(weights[name]), 3)
-
-        return result
-
-    def _neural_meta_learner(self, symbol: str, model_results: dict, daily_df=None,
-                            regime: dict = None, horizon: str = "1d",
-                            fundamental: dict = None) -> dict:
-        """Neural network meta-learner (2-layer feedforward) to combine model predictions.
-        Falls back to Ridge when < 100 data points, then to inverse-MAPE.
-        Incorporates fundamental score + quarterly signals when available."""
-        meta_path = self._meta_learner_path(symbol)
-
-        # Build fundamental features vector
-        fund_feats = self._build_fund_features(fundamental)
-
-        # Check if we have a trained meta-learner
-        if os.path.exists(meta_path):
-            try:
-                meta_data = joblib.load(meta_path)
-                meta_model = meta_data["model"]
-                model_order = meta_data["model_order"]
-                meta_type = meta_data.get("type", "ridge")
-                has_fund = meta_data.get("has_fund_features", False)
-
-                min_len = min(len(r["predictions"]) for r in model_results.values())
-                available = [m for m in model_order if m in model_results]
-
-                if len(available) >= 2:
-                    X_base = np.column_stack([
-                        model_results[m]["predictions"][:min_len] for m in available
-                    ])
-
-                    # Add regime features if neural meta-learner
-                    if meta_type == "neural" and regime and regime.get("regime_onehot"):
-                        onehot = regime["regime_onehot"]
-                        vol_ratio = regime.get("vol_ratio", 1.0)
-                        regime_feats = np.array([[
-                            onehot.get("bull", 0), onehot.get("bear", 0),
-                            onehot.get("sideways", 0), onehot.get("volatile", 0),
-                            vol_ratio
-                        ]])
-                        regime_tiled = np.tile(regime_feats, (min_len, 1))
-                        X_meta = np.hstack([X_base, regime_tiled])
-
-                        # Add fundamental features if model was trained with them
-                        if has_fund:
-                            fund_tiled = np.tile(fund_feats.reshape(1, -1), (min_len, 1))
-                            X_meta = np.hstack([X_meta, fund_tiled])
-                    else:
-                        X_meta = X_base
-
-                    ensemble_preds = meta_model.predict(X_meta)
-                    if hasattr(ensemble_preds, 'numpy'):
-                        ensemble_preds = ensemble_preds.numpy()
-                    ensemble_preds = [round(float(p), 2) for p in ensemble_preds.flatten()]
-
-                    first_result = next(iter(model_results.values()))
-                    result = {
-                        "predictions": ensemble_preds,
-                        "dates": first_result["dates"][:min_len],
-                        "method": meta_type,
-                    }
-                    return result
-            except Exception as e:
-                logger.debug(f"Meta-learner load failed: {e}")
-
-        # Fall back to inverse-MAPE
-        result = self._inverse_mape_ensemble(model_results, daily_df=daily_df, regime=regime,
-                                             symbol=symbol, horizon=horizon)
-
-        # Try to train and save meta-learner for future use
-        try:
-            self._train_meta_learner(symbol, model_results, daily_df=daily_df, regime=regime,
-                                     fundamental=fundamental)
-        except Exception:
-            pass
-
-        return result
-
-    @staticmethod
-    def _build_fund_features(fundamental):
-        """Extract a fixed-size feature vector from fundamental bias data."""
-        if not fundamental or not fundamental.get("score"):
-            return np.zeros(3)
-        score = fundamental.get("score", 0)
-        # Classification as numeric: value=-1, balanced=0, growth=1
-        cls = fundamental.get("classification", "balanced")
-        cls_num = -1.0 if cls == "value" else (1.0 if cls == "growth" else 0.0)
-        # Average of detail scores
-        details = fundamental.get("details", {})
-        detail_scores = [d.get("score", 0) for d in details.values() if isinstance(d, dict)]
-        avg_detail = float(np.mean(detail_scores)) if detail_scores else 0.0
-        return np.array([score, cls_num, avg_detail])
-
-    def _train_meta_learner(self, symbol: str, model_results: dict, daily_df=None,
-                           regime: dict = None, fundamental: dict = None):
-        """Train meta-learner: Neural network when enough data, Ridge otherwise.
-        Includes fundamental features when available."""
-        if len(model_results) < 2:
-            return
-
-        min_len = min(len(r["predictions"]) for r in model_results.values())
-        if min_len < 5:
-            return
-
-        model_order = sorted(model_results.keys())
-        X = np.column_stack([
-            model_results[m]["predictions"][:min_len] for m in model_order
-        ])
-
-        # Use the model with lowest MAPE as anchor target
-        mapes = {}
-        for name, result in model_results.items():
-            if name == "prophet":
-                mapes[name] = self._estimate_prophet_mape(result, df=daily_df, symbol=symbol)
-            else:
-                mapes[name] = max(result.get("mape", 5.0), 0.01)
-
-        best_model = min(mapes, key=mapes.get)
-        y = np.array(model_results[best_model]["predictions"][:min_len])
-
-        fund_feats = self._build_fund_features(fundamental)
-        has_fund = bool(fundamental and fundamental.get("score"))
-        meta_type = "ridge"
-
-        # Try neural meta-learner when enough data
-        if min_len >= 50 and regime:
-            try:
-                import tensorflow as tf
-
-                # Add regime features
-                onehot = regime.get("regime_onehot", {})
-                vol_ratio = regime.get("vol_ratio", 1.0)
-                regime_feats = np.array([[
-                    onehot.get("bull", 0), onehot.get("bear", 0),
-                    onehot.get("sideways", 0), onehot.get("volatile", 0),
-                    vol_ratio
-                ]])
-                regime_tiled = np.tile(regime_feats, (min_len, 1))
-                X_full = np.hstack([X, regime_tiled])
-
-                # Add fundamental features
-                if has_fund:
-                    fund_tiled = np.tile(fund_feats.reshape(1, -1), (min_len, 1))
-                    X_full = np.hstack([X_full, fund_tiled])
-
-                input_dim = X_full.shape[1]
-                nn_model = tf.keras.Sequential([
-                    tf.keras.layers.Dense(16, activation='relu', input_shape=(input_dim,)),
-                    tf.keras.layers.Dense(1)
-                ])
-                nn_model.compile(optimizer='adam', loss='mse')
-                nn_model.fit(X_full, y, epochs=50, batch_size=min(32, min_len), verbose=0)
-
-                meta_path = self._meta_learner_path(symbol)
-                joblib.dump({"model": nn_model, "model_order": model_order, "type": "neural",
-                             "has_fund_features": has_fund}, meta_path)
-                return
-            except Exception as e:
-                logger.debug(f"Neural meta-learner training failed, using Ridge: {e}")
-
-        # Ridge fallback
-        from sklearn.linear_model import Ridge
-        meta_model = Ridge(alpha=1.0)
-        meta_model.fit(X, y)
-
-        meta_path = self._meta_learner_path(symbol)
-        joblib.dump({"model": meta_model, "model_order": model_order, "type": "ridge",
-                     "has_fund_features": False}, meta_path)
 
     def _compute_volume_analysis(self, df: pd.DataFrame, ensemble_result: dict | None = None) -> dict:
         """Compute volume analysis: ratio, trend, conviction relative to prediction direction."""
@@ -517,61 +267,25 @@ class PredictionService:
 
     def _compute_contribution_breakdown(self, ensemble_result: dict, adj_info: dict = None,
                                         fund_adj_info: dict = None) -> dict:
-        """Compute contribution breakdown using actual ensemble weights.
-
-        Uses the weights from the ensemble (already reflecting MAPE + regime adjustments)
-        rather than recomputing from raw MAPEs which misses Prophet.
-        Includes fundamental contribution when fundamentals are used.
-        """
-        # Extract actual weights from ensemble result
-        xgb_w = ensemble_result.get("xgboost_weight", 0)
-        prophet_w = ensemble_result.get("prophet_weight", 0)
-
-        total_model_w = xgb_w + prophet_w
-        if total_model_w <= 0:
-            return {"technical": 50.0, "seasonal": 15.0, "fundamental": 0.0, "sentiment": 35.0}
-
-        # Normalize model weights to sum to 1
-        xgb_w /= total_model_w
-        prophet_w /= total_model_w
-
-        # Sentiment contribution based on context weight
+        """Compute contribution breakdown for the prediction."""
         context_w = adj_info.get("context_weight", 0) if adj_info else 0
         sentiment_share = min(45.0, round(context_w * 55, 1))
 
-        # Fundamental contribution based on adjustment magnitude
         fund_share = 0.0
         if fund_adj_info and fund_adj_info.get("fund_score"):
             fund_share = min(15.0, round(abs(fund_adj_info["fund_score"]) * 15, 1))
 
-        model_share = 100.0 - sentiment_share - fund_share
-
-        # XGBoost → Technical, Prophet → Seasonal
-        technical = xgb_w * model_share
-        seasonal = prophet_w * model_share
+        technical = 100.0 - sentiment_share - fund_share
 
         return {
             "technical": round(technical, 1),
-            "seasonal": round(seasonal, 1),
             "fundamental": round(fund_share, 1),
             "sentiment": round(sentiment_share, 1),
         }
 
-    def _select_models_for_horizon(self, horizon: str) -> list:
-        """Auto-select best model(s) for a given prediction horizon.
-
-        XGBoost is always included as a reliable fallback.
-        Prophet is added for longer horizons where seasonality matters.
-        """
-        cfg = PREDICTION_HORIZONS.get(horizon, {})
-        is_intraday = cfg.get("intraday", False)
-        days = cfg.get("days", 1) if not is_intraday else 0
-
-        return ["xgboost"]
-
     def predict(self, symbol: str, horizon: str = "1d", models: list = None) -> dict:
         if models is None:
-            models = self._select_models_for_horizon(horizon)
+            models = ["xgboost"]
 
         cfg = PREDICTION_HORIZONS.get(horizon, {})
         is_intraday = cfg.get("intraday", False)
@@ -709,15 +423,11 @@ class PredictionService:
         except Exception:
             pass
 
-        if len(model_results) >= 2:
-            result["ensemble"] = self._neural_meta_learner(symbol, model_results, daily_df=daily_df,
-                                                            regime=regime, horizon=horizon,
-                                                            fundamental=fundamental)
-        elif len(model_results) == 1:
+        if model_results:
             single = next(iter(model_results.values()))
             result["ensemble"] = {
-                "predictions": single["predictions"],
-                "dates": single["dates"],
+                "predictions": list(single["predictions"]),
+                "dates": list(single["dates"]),
             }
 
         # Apply market context adjustment to ensemble predictions
