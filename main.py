@@ -382,8 +382,8 @@ async def news_alert_scanner():
 async def trade_job_enqueuer():
     """Tiered trade scanning + validation.
 
-    Intraday (15m, 30m):  every 5 min during market hours
-    Short-term (1h, 4h):  every 15 min during market hours
+    Intraday (15m, 30m):  every 10 min during market hours (~193 stocks)
+    Short-term (1h, 4h):  every 20 min during market hours
     Validation:           every 5 min (real-time via ticks + worker fallback)
     """
     await asyncio.sleep(300)  # Let services warm up
@@ -414,10 +414,10 @@ async def trade_job_enqueuer():
                 # Only enqueue one scan type per cycle — short-term takes priority
                 # when both are due, since it runs less frequently
                 if not job_service.has_pending("watchlist_trade_scan"):
-                    if now_ts - _last_shortterm_scan >= 900:  # 15 min
+                    if now_ts - _last_shortterm_scan >= 1200:  # 20 min
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "short"}, priority=0)
                         _last_shortterm_scan = now_ts
-                    elif now_ts - _last_intraday_scan >= 300:  # 5 min
+                    elif now_ts - _last_intraday_scan >= 600:  # 10 min
                         job_service.enqueue("watchlist_trade_scan", {"scan_type": "intraday"}, priority=0)
                         _last_intraday_scan = now_ts
 

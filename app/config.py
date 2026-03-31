@@ -135,28 +135,56 @@ NIFTY_50_SYMBOLS = [
     "BRITANNIA", "M&M", "HINDALCO", "UPL", "SHRIRAMFIN",
 ]
 
-# Popular NSE stocks for quick access
+# Popular NSE stocks for scanning (~200 high-volume stocks)
 POPULAR_STOCKS = [
-    # Nifty 50 top weights
+    # ── Nifty 50 ──
     "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
     "HINDUNILVR", "SBIN", "BHARTIARTL", "KOTAKBANK", "ITC",
     "LT", "AXISBANK", "BAJFINANCE", "MARUTI", "TITAN",
     "ASIANPAINT", "SUNPHARMA", "HCLTECH", "WIPRO", "ULTRACEMCO",
-    # Additional high-volume stocks
     "TATAMOTORS", "POWERGRID", "NTPC", "ONGC", "COALINDIA",
     "ADANIENT", "ADANIPORTS", "JSWSTEEL", "TATASTEEL", "HINDALCO",
     "TECHM", "DIVISLAB", "DRREDDY", "CIPLA", "APOLLOHOSP",
     "EICHERMOT", "HEROMOTOCO", "M&M", "BAJAJ-AUTO", "TATACONSUM",
-    # Midcap & sector leaders
+    "NESTLEIND", "BRITANNIA", "BPCL", "IOC", "GRASIM",
+    "INDUSINDBK", "HDFCLIFE", "SBILIFE", "BAJAJFINSV", "SHRIRAMFIN",
+    # ── Nifty Next 50 ──
     "HAL", "BEL", "IRFC", "PFC", "RECLTD",
     "ZOMATO", "PAYTM", "DMART", "TRENT", "VEDL",
     "INDIGO", "PIIND", "PERSISTENT", "COFORGE", "MPHASIS",
     "BANKBARODA", "PNB", "CANBK", "IDFCFIRSTB", "FEDERALBNK",
-    # More midcap momentum stocks
     "TATAELXSI", "LTIM", "OFSS", "DIXON", "POLYCAB",
     "SIEMENS", "ABB", "HAVELLS", "VOLTAS", "GODREJCP",
     "DABUR", "MARICO", "COLPAL", "PIDILITIND", "TORNTPHARM",
     "LUPIN", "GLENMARK", "IPCALAB", "BIOCON", "LALPATHLAB",
+    "DLF", "GODREJPROP", "OBEROIRLTY", "PRESTIGE", "PHOENIXLTD",
+    "CHOLAFIN", "MUTHOOTFIN", "MANAPPURAM", "LICHSGFIN", "SBICARD",
+    # ── Midcap momentum ──
+    "TATAPOWER", "NHPC", "SJVN", "IREDA", "HUDCO",
+    "NATIONALUM", "NMDC", "SAIL", "JINDALSTEL", "APLAPOLLO",
+    "MAZDOCK", "COCHINSHIP", "GRSE", "BDL", "DATAPATTNS",
+    "KAYNES", "CDSL", "BSE", "MCX", "CAMS",
+    "DEEPAKNTR", "ATUL", "NAVINFLUOR", "SRF", "CLEAN",
+    "SUPREMEIND", "ASTRAL", "AUROPHARMA", "ALKEM", "LAURUSLABS",
+    "MAXHEALTH", "FORTIS", "METROPOLIS", "SYNGENE", "JUBLFOOD",
+    "PAGEIND", "RAJESHEXPO", "VBL", "UBL", "MCDOWELL-N",
+    # ── IT & tech ──
+    "LTTS", "ROUTE", "HAPPSTMNDS", "KPITTECH", "SONATA",
+    "ZENSAR", "BIRLASOFT", "MASTEK", "NEWGEN", "INTELLECT",
+    # ── Infrastructure & capital goods ──
+    "IRCON", "RVNL", "NCC", "KEC", "THERMAX",
+    "CUMMINSIND", "HONAUT", "SCHAEFFLER", "TIMKEN", "SKFINDIA",
+    # ── Auto & auto ancillary ──
+    "MOTHERSON", "BALKRISIND", "MRF", "EXIDEIND", "AMARAJABAT",
+    "SONACOMS", "SUNTV", "PVRINOX", "TVSMOTOR", "ASHOKLEY",
+    # ── Energy & commodities ──
+    "GAIL", "IGL", "MGL", "PETRONET", "ATGL",
+    "TATACOMM", "IDEA", "HFCL", "RAILTEL", "RBLBANK",
+    # ── FMCG & consumer ──
+    "EMAMILTD", "JYOTHYLAB", "BIKAJI", "SAPPHIRE", "FIVESTAR",
+    "HEG", "GRAPHITE", "RAIN", "JYOTICNC", "POONAWALLA",
+    # ── Misc high volume ──
+    "SILVERBEES", "GOLDBEES", "NIFTYBEES",
 ]
 
 # Indian Market Indices (symbol -> yfinance ticker)
