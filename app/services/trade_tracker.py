@@ -38,7 +38,7 @@ DAILY_LOSS_LIMIT_PCT = -2.0
 SL_COOLDOWN_MINUTES = 120
 
 # Market regime: suppress bullish signals if NIFTY is down more than this %
-MARKET_DOWN_THRESHOLD_PCT = -1.0
+MARKET_DOWN_THRESHOLD_PCT = -0.5
 
 
 class TradeTracker:

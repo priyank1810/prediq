@@ -23,7 +23,7 @@ DEFAULT_CAPITAL = 100000
 # Smart allocation config
 MIN_CONFIDENCE = 40          # Only trade signals with 40%+ confidence (data shows 60% WR)
 MAX_STOCK_PCT = 0.30         # Max 30% of capital in one stock
-MAX_CONCURRENT = 20          # Max 20 positions at a time
+MAX_CONCURRENT = 30          # Max 30 positions at a time
 LOSS_STREAK_REDUCE = 0.5     # Halve position after 2 consecutive losses
 
 
