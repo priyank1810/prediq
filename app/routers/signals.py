@@ -82,6 +82,46 @@ def stats_by_horizon():
         db.close()
 
 
+@router.get("/stats/predictions/{symbol}")
+def prediction_history(symbol: str, page: int = 1, per_page: int = 20):
+    """Get prediction history for a specific stock from PredictionLog."""
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func
+        sym = symbol.upper()
+        query = db.query(PredictionLog).filter(
+            PredictionLog.symbol == sym,
+            PredictionLog.actual_price.isnot(None),
+        )
+        total = query.count()
+        logs = query.order_by(PredictionLog.target_date.desc()).offset((page - 1) * per_page).limit(per_page).all()
+
+        predictions = []
+        for log in logs:
+            mape = abs(log.predicted_price - log.actual_price) / log.actual_price * 100 if log.actual_price else None
+            predictions.append({
+                "model": log.model_type,
+                "prediction_date": log.prediction_date.isoformat() if log.prediction_date else None,
+                "target_date": log.target_date.isoformat() if log.target_date else None,
+                "predicted_price": round(log.predicted_price, 2),
+                "actual_price": round(log.actual_price, 2) if log.actual_price else None,
+                "mape": round(mape, 2) if mape is not None else None,
+                "accurate": mape is not None and mape <= 2,
+                "direction_correct": mape is not None and mape <= 5,
+            })
+
+        return {
+            "symbol": sym,
+            "predictions": predictions,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": max(1, -(-total // per_page)),
+        }
+    finally:
+        db.close()
+
+
 @router.get("/stats/prediction-leaderboard")
 def prediction_leaderboard():
     """Prediction accuracy leaderboard: compare Prophet vs XGBoost vs Ensemble.

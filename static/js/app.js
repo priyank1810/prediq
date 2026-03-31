@@ -1156,12 +1156,65 @@ const App = {
     // ── Stock Trades Tab ──
     _stockTradePage_current: 1,
 
+    _stockPredPage_current: 1,
+
     async _loadStockTrades(symbol) {
         this._stockTradePage_current = 1;
+        this._stockPredPage_current = 1;
         await Promise.all([
+            this._fetchStockPredictions(symbol, 1),
             this._fetchStockTrades(symbol, 1),
             this._fetchStockPortfolioTrades(symbol),
         ]);
+    },
+
+    _stockPredPage(delta) {
+        this._stockPredPage_current += delta;
+        this._fetchStockPredictions(this.currentSymbol, this._stockPredPage_current);
+    },
+
+    async _fetchStockPredictions(symbol, page) {
+        const tbody = document.getElementById('stockPredHistoryTable');
+        if (!tbody) return;
+        try {
+            const resp = await fetch(`${API.baseUrl}/api/signals/stats/predictions/${encodeURIComponent(symbol)}?page=${page}&per_page=15`);
+            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
+            const d = await resp.json();
+            const preds = d.predictions || [];
+            const total = d.total || 0;
+            const totalPages = d.total_pages || 1;
+
+            document.getElementById('stockPredHistoryCount').textContent = `${total} predictions`;
+            const prevBtn = document.getElementById('stockPredPrev');
+            const nextBtn = document.getElementById('stockPredNext');
+            const pageInfo = document.getElementById('stockPredPageInfo');
+            if (prevBtn) prevBtn.disabled = page <= 1;
+            if (nextBtn) nextBtn.disabled = page >= totalPages;
+            if (pageInfo) pageInfo.textContent = total > 0 ? `Page ${page} of ${totalPages}` : '';
+
+            if (!preds.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No predictions for this stock yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = preds.map(p => {
+                const mapeColor = p.mape <= 1 ? 'text-green-400' : p.mape <= 3 ? 'text-yellow-400' : 'text-red-400';
+                const badge = p.accurate
+                    ? '<span class="px-1 py-0.5 rounded bg-green-900/50 text-green-400 text-[10px]">✓</span>'
+                    : '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗</span>';
+                const modelBg = p.model === 'ensemble' ? 'bg-blue-900/50 text-blue-400' : p.model === 'xgboost' ? 'bg-green-900/50 text-green-400' : 'bg-purple-900/50 text-purple-400';
+                return `<tr class="hover:bg-dark-700/50 border-b border-gray-800/30">
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${p.target_date || '-'}</td>
+                    <td class="px-2 py-1.5"><span class="px-1 py-0.5 rounded ${modelBg} text-[9px] uppercase">${p.model}</span></td>
+                    <td class="px-2 py-1.5 text-right text-gray-300">₹${p.predicted_price.toFixed(2)}</td>
+                    <td class="px-2 py-1.5 text-right text-white">${p.actual_price ? '₹' + p.actual_price.toFixed(2) : '-'}</td>
+                    <td class="px-2 py-1.5 text-right ${mapeColor} font-bold">${p.mape != null ? p.mape.toFixed(2) + '%' : '-'}</td>
+                    <td class="px-2 py-1.5 text-center">${badge}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Error loading predictions</td></tr>';
+        }
     },
 
     _stockTradePage(delta) {

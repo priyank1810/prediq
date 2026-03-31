@@ -472,10 +472,39 @@
 
                 <!-- ═══════ TRADES TAB ═══════ -->
                 <div id="stockTab-trades" class="stock-tab-content" role="tabpanel" aria-labelledby="stockTab-trades">
-                    <!-- Trade Predictions Track Record -->
+                    <!-- Price Predictions Track Record -->
                     <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
                         <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-sm font-semibold text-white">Trade Predictions</h3>
+                            <h3 class="text-sm font-semibold text-white">Price Predictions</h3>
+                            <span id="stockPredHistoryCount" class="text-xs text-gray-500"></span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead class="sticky top-0 bg-dark-800">
+                                    <tr class="text-gray-500 border-b border-gray-700">
+                                        <th class="text-left px-2 py-1.5">Date</th>
+                                        <th class="text-left px-2 py-1.5">Model</th>
+                                        <th class="text-right px-2 py-1.5">Predicted</th>
+                                        <th class="text-right px-2 py-1.5">Actual</th>
+                                        <th class="text-right px-2 py-1.5">Error</th>
+                                        <th class="text-center px-2 py-1.5">Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockPredHistoryTable">
+                                    <tr><td colspan="6" class="text-center py-4 text-gray-500">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="flex items-center justify-between mt-2">
+                            <button id="stockPredPrev" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-2.5 py-1 disabled:opacity-30" onclick="App._stockPredPage(-1)" disabled>← Prev</button>
+                            <span id="stockPredPageInfo" class="text-[10px] text-gray-500"></span>
+                            <button id="stockPredNext" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-2.5 py-1 disabled:opacity-30" onclick="App._stockPredPage(1)" disabled>Next →</button>
+                        </div>
+                    </div>
+                    <!-- Trade Signals -->
+                    <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-semibold text-white">Trade Signals</h3>
                             <span id="stockTradeCount" class="text-xs text-gray-500"></span>
                         </div>
                         <div class="overflow-x-auto">
