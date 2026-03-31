@@ -114,7 +114,7 @@ class XGBoostV2Predictor:
         feat_df = self._build_features(df)
         feature_cols = self._get_feature_cols(feat_df)
 
-        if len(feat_df) < 200:
+        if len(feat_df) < 60:
             return {"direction": "NEUTRAL", "probability": 0.5, "predicted_price": None,
                     "confidence_score": 0, "version": "v2", "error": "Insufficient data"}
 
@@ -141,14 +141,15 @@ class XGBoostV2Predictor:
             X_train, X_test = X[:split], X[split:]
             y_train, y_test = y[:split], y[split:]
 
+            n_est = 200 if len(X_train) >= 150 else 100
             model = XGBClassifier(
-                n_estimators=200,
+                n_estimators=n_est,
                 max_depth=4,
                 learning_rate=0.1,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                reg_alpha=0.01,       # Much lower than v1's 0.1
-                reg_lambda=0.5,       # Much lower than v1's 1.0
+                reg_alpha=0.01,
+                reg_lambda=0.5,
                 min_child_weight=2,
                 gamma=0.05,
                 objective="binary:logistic",
@@ -158,11 +159,16 @@ class XGBoostV2Predictor:
                 early_stopping_rounds=20,
             )
 
-            val_split = int(len(X_train) * 0.85)
+            val_split = max(int(len(X_train) * 0.85), len(X_train) - 10)
             X_tr, X_val = X_train[:val_split], X_train[val_split:]
             y_tr, y_val = y_train[:val_split], y_train[val_split:]
 
-            model.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
+            if len(X_val) < 3:
+                # Too small for early stopping — train without it
+                model.set_params(early_stopping_rounds=None)
+                model.fit(X_tr, y_tr, verbose=False)
+            else:
+                model.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
 
             # Feature importance pruning — keep features with >0.5% importance
             importances = model.feature_importances_
