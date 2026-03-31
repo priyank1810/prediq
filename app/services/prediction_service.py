@@ -7,7 +7,6 @@ import pandas as pd
 import joblib
 import ta
 from concurrent.futures import ThreadPoolExecutor
-from app.ai.prophet_model import ProphetPredictor
 from app.ai.xgboost_model import XGBoostPredictor
 from app.ai.explainer import prediction_explainer
 from app.services.data_fetcher import data_fetcher
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 class PredictionService:
     def __init__(self):
-        self.prophet = ProphetPredictor()
         self.xgboost = XGBoostPredictor()
 
     def _meta_learner_path(self, symbol: str) -> str:
@@ -83,48 +81,18 @@ class PredictionService:
             },
         }
 
-    def _estimate_prophet_mape(self, prophet_result: dict, df=None, symbol: str = "") -> float:
-        """Get MAPE for the seasonal model. Uses the mape returned by the model
-        if available, otherwise estimates from confidence intervals."""
-        # The new Holt-Winters model returns mape directly
-        if prophet_result.get("mape"):
-            return max(prophet_result["mape"], 0.01)
-
-        # Fallback: CI-based estimate
-        if prophet_result.get("confidence_upper") and prophet_result.get("confidence_lower"):
-            avg_range = sum(
-                abs(u - l) for u, l in
-                zip(prophet_result["confidence_upper"], prophet_result["confidence_lower"])
-            ) / max(len(prophet_result["confidence_upper"]), 1)
-            avg_pred = sum(abs(p) for p in prophet_result["predictions"]) / max(len(prophet_result["predictions"]), 1)
-            return max((avg_range / (2 * avg_pred)) * 100 if avg_pred > 0 else 10.0, 0.01)
-        return 10.0
-
     def _inverse_mape_ensemble(self, model_results: dict, daily_df=None, regime: dict = None,
                                symbol: str = "", horizon: str = "1d") -> dict:
-        """Regime-aware, direction-consensus, horizon-weighted ensemble.
-
-        Improvements over basic inverse-MAPE:
-        1. Directional consensus: if 2/3 models agree, boost majority weights
-        2. Horizon-aware: LSTM (momentum) weighted higher for short horizons,
-           XGBoost/Prophet (mean-reversion) weighted higher for long horizons
-        3. Regime adjustments (existing)
-        """
+        """Inverse-MAPE weighted ensemble with direction consensus and regime awareness."""
         mapes = {}
         for name, result in model_results.items():
-            if name == "prophet":
-                mapes[name] = self._estimate_prophet_mape(result, df=daily_df, symbol=symbol)
-            else:
-                mapes[name] = max(result.get("mape", 5.0), 0.01)
+            mapes[name] = max(result.get("mape", 5.0), 0.01)
 
         # Inverse MAPE weighting
         weights = {name: 1.0 / mape for name, mape in mapes.items()}
 
         # --- Regime-based multipliers ---
         if regime:
-            if not regime.get("trending") and "prophet" in weights:
-                weights["prophet"] *= 1.3
-                logger.info(f"Regime: mean-reverting (ADX={regime.get('adx')}), Prophet weight boosted")
             if regime.get("high_vol") and "xgboost" in weights:
                 weights["xgboost"] *= 1.2
                 logger.info(f"Regime: high-volatility (ratio={regime.get('vol_ratio')}), XGBoost weight boosted")
@@ -599,14 +567,7 @@ class PredictionService:
         is_intraday = cfg.get("intraday", False)
         days = cfg.get("days", 1) if not is_intraday else 0
 
-        if is_intraday:
-            return ["xgboost"]
-        elif days <= 1:
-            return ["xgboost"]
-        elif days <= 5:
-            return ["xgboost", "prophet"]
-        else:
-            return ["xgboost", "prophet"]
+        return ["xgboost"]
 
     def predict(self, symbol: str, horizon: str = "1d", models: list = None) -> dict:
         if models is None:
@@ -629,8 +590,6 @@ class PredictionService:
             # Run models + sentiment/global fetches in parallel
             with ThreadPoolExecutor(max_workers=5) as executor:
                 futures = {}
-                if "prophet" in models and daily_df is not None and not daily_df.empty:
-                    futures["prophet"] = executor.submit(self.prophet.predict, daily_df, horizon, symbol)
                 if "xgboost" in models and intraday_df is not None and not intraday_df.empty:
                     futures["xgboost"] = executor.submit(self.xgboost.predict_intraday, intraday_df, symbol, horizon)
 
@@ -679,8 +638,6 @@ class PredictionService:
             # Run models + sentiment/global/fundamentals fetches in parallel
             with ThreadPoolExecutor(max_workers=6) as executor:
                 futures = {}
-                if "prophet" in models:
-                    futures["prophet"] = executor.submit(self.prophet.predict, df, horizon, symbol)
                 if "xgboost" in models:
                     futures["xgboost"] = executor.submit(self.xgboost.predict, df, symbol, horizon)
 

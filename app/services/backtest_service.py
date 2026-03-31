@@ -271,9 +271,8 @@ class BacktestService:
         horizon: str = "1d",
         test_days: int = 60,
     ) -> dict:
-        """Walk-forward backtest of XGBoost, Prophet, and Ensemble predictions."""
+        """Walk-forward backtest of XGBoost predictions."""
         from app.ai.xgboost_model import XGBoostPredictor
-        from app.ai.prophet_model import ProphetPredictor
         from app.config import PREDICTION_HORIZONS
 
         if horizon not in PREDICTION_HORIZONS:
@@ -297,9 +296,8 @@ class BacktestService:
             raise ValueError("Not enough training data for prediction backtest")
 
         xgb = XGBoostPredictor()
-        prophet = ProphetPredictor()
 
-        results = {"xgboost": [], "prophet": [], "ensemble": []}
+        results = {"xgboost": [], "ensemble": []}
 
         for i in range(test_days):
             idx = test_start + i
@@ -322,19 +320,9 @@ class BacktestService:
             except Exception as e:
                 logger.debug(f"XGBoost predict failed at step {i}: {e}")
 
-            prophet_pred = None
-            try:
-                prophet_result = prophet.predict(train_df, horizon=horizon, symbol=symbol)
-                if prophet_result and prophet_result.get("predictions"):
-                    preds_list = prophet_result["predictions"]
-                    prophet_pred = preds_list[min(bars_ahead - 1, len(preds_list) - 1)]
-            except Exception as e:
-                logger.debug(f"Prophet predict failed at step {i}: {e}")
+            ensemble_pred = xgb_pred  # Single model = ensemble
 
-            preds = [p for p in [xgb_pred, prophet_pred] if p is not None]
-            ensemble_pred = np.mean(preds) if preds else None
-
-            for model_name, pred in [("xgboost", xgb_pred), ("prophet", prophet_pred), ("ensemble", ensemble_pred)]:
+            for model_name, pred in [("xgboost", xgb_pred), ("ensemble", ensemble_pred)]:
                 if pred is not None:
                     error = pred - actual_price
                     pct_error = error / actual_price * 100

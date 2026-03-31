@@ -493,7 +493,7 @@ class SignalService:
 
     def _run_prediction_for_horizon(self, symbol: str, horizon: str,
                                      intraday_df=None, daily_df=None):
-        """Run full XGBoost + Prophet prediction for a given horizon.
+        """Run XGBoost prediction for a given horizon.
         Returns a rich dict with score, predicted_price, confidence,
         regime, volume conviction, confidence intervals, and contribution breakdown."""
         empty = {
@@ -501,7 +501,7 @@ class SignalService:
             "regime": None, "volume_conviction": None,
             "confidence_lower": None, "confidence_upper": None,
             "contribution": None, "ensemble_method": None,
-            "xgboost_weight": None, "prophet_weight": None,
+            "xgboost_weight": None,
         }
         try:
             from app.services.prediction_service import prediction_service
@@ -601,8 +601,7 @@ class SignalService:
                 "contribution": contribution,
                 "ensemble_method": ensemble.get("method"),
                 "xgboost_weight": ensemble.get("xgboost_weight"),
-                "prophet_weight": ensemble.get("prophet_weight"),
-                "model_used": model_used,
+                                "model_used": model_used,
                 # Shadow tracking: store both models' predictions
                 "v1_predicted_price": v1_predicted_price,
                 "v1_confidence": v1_confidence,
@@ -696,8 +695,7 @@ class SignalService:
                         "regime": None, "volume_conviction": None,
                         "confidence_lower": None, "confidence_upper": None,
                         "contribution": None, "ensemble_method": None,
-                        "xgboost_weight": None, "prophet_weight": None,
-                    }
+                        "xgboost_weight": None,                     }
 
         sentiment_score = sent_result.get("score", 0)
         global_score = global_result.get("score", 0)
@@ -1139,10 +1137,10 @@ class SignalService:
             if entry < current_price * 0.97:
                 entry = current_price * 0.995
 
-            # Stop loss: use confidence_lower from Prophet if available
+            # Stop loss: use confidence_lower if available
             atr_stop = entry - (atr * atr_multiplier_sl)
             if confidence_lower is not None and confidence_lower < entry:
-                # Blend Prophet lower bound with ATR-based stop
+                # Blend confidence lower bound with ATR-based stop
                 stop_loss = confidence_lower * 0.4 + atr_stop * 0.6
             else:
                 stop_loss = atr_stop

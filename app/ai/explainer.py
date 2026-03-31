@@ -247,7 +247,7 @@ class PredictionExplainer:
 
         # 5. Model agreement (informational — lower weight to avoid double-counting with Price Forecast)
         model_changes = []
-        for model_name in ("prophet", "xgboost"):
+        for model_name in ("xgboost",):
             model_data = prediction_result.get(model_name)
             if model_data and model_data.get("predictions"):
                 pred = model_data["predictions"][-1]

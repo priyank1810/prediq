@@ -53,7 +53,7 @@ window.Predictions = {
         // Model label — show which models succeeded/failed
         const modelLabelEl = document.getElementById('predModelLabel');
         if (modelLabelEl && data.models_used) {
-            const nameMap = { prophet: 'Prophet', xgboost: 'XGBoost' };
+            const nameMap = { xgboost: 'XGBoost', ensemble: 'Ensemble' };
             const parts = data.models_used.map(m => {
                 const name = nameMap[m] || m;
                 if (data[m + '_error']) return `<span class="text-red-400">${name} (failed)</span>`;
