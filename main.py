@@ -401,6 +401,12 @@ async def trade_job_enqueuer():
             now_ts = time.time()
 
             if is_market_open():
+                # Release stuck jobs so scans don't get blocked forever
+                try:
+                    job_service.release_stale_jobs(timeout_minutes=10)
+                except Exception:
+                    pass
+
                 # Validate open trades every 5 min (fallback for missed ticks)
                 if not job_service.has_pending("trade_validate"):
                     job_service.enqueue("trade_validate", {}, priority=0)
