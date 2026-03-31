@@ -10,6 +10,7 @@ Smart allocation rules:
 
 import logging
 from collections import defaultdict
+from datetime import timedelta
 
 from app.database import SessionLocal
 from app.models import TradeSignalLog
@@ -270,11 +271,16 @@ class VirtualPortfolio:
                     })
             stock_summary.sort(key=lambda x: -x["trades"])
 
-            # Scan overview — show all scanned stocks with best confidence
-            scan_overview = []
-            all_trades = list(resolved) + list(open_trades)
+            # Scan overview — show recently scanned stocks (last 24h only)
+            scan_cutoff = now_ist().replace(tzinfo=None) - timedelta(hours=24)
+            recent_scans = (
+                db.query(TradeSignalLog)
+                .filter(TradeSignalLog.created_at >= scan_cutoff)
+                .order_by(TradeSignalLog.created_at.desc())
+                .all()
+            )
             seen = {}
-            for trade in all_trades:
+            for trade in recent_scans:
                 key = trade.symbol
                 conf = trade.confidence or 0
                 if key not in seen or conf > seen[key]["confidence"]:
