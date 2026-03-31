@@ -166,8 +166,9 @@ class VirtualPortfolio:
                 # Track exposure
                 stock_exposure[trade.symbol] = stock_exposure.get(trade.symbol, 0) + invested
 
-                trade_date = (trade.resolved_at or trade.created_at).strftime("%Y-%m-%d") \
-                    if (trade.resolved_at or trade.created_at) else "unknown"
+                ts = trade.resolved_at or trade.created_at
+                trade_date = ts.strftime("%Y-%m-%d") if ts else "unknown"
+                trade_datetime = ts.strftime("%Y-%m-%d %H:%M") if ts else "unknown"
 
                 daily_pnl[trade_date] += pnl
                 equity_curve.append({"date": trade_date, "value": round(equity, 2)})
@@ -185,7 +186,7 @@ class VirtualPortfolio:
                     "pnl_pct": pnl_pct,
                     "status": trade.status,
                     "confidence": trade.confidence,
-                    "date": trade_date,
+                    "date": trade_datetime,
                 }
                 trades_detail.append(trade_info)
 
