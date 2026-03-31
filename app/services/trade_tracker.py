@@ -320,6 +320,18 @@ class TradeTracker:
         if (signal_data.get("confidence") or 0) < 45:
             return
 
+        # Don't log signals near market close — not enough time to play out
+        current = now_ist().replace(tzinfo=None)
+        market_close_hour, market_close_min = 15, 10
+        if timeframe.startswith("intraday"):
+            # Intraday signals: stop 20 min before close (15:10)
+            market_close_min = 10
+        else:
+            # Short-term: stop 5 min before close (15:25)
+            market_close_min = 25
+        if current.hour > market_close_hour or (current.hour == market_close_hour and current.minute >= market_close_min):
+            return
+
         # Market regime filter: skip bullish signals when NIFTY is tanking
         if self._check_market_regime():
             return
