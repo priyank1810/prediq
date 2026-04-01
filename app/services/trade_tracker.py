@@ -38,7 +38,7 @@ DAILY_LOSS_LIMIT_PCT = -2.0
 SL_COOLDOWN_MINUTES = 120
 
 # Market regime: suppress bullish signals if NIFTY is down more than this %
-MARKET_DOWN_THRESHOLD_PCT = -1.5
+MARKET_DOWN_THRESHOLD_PCT = -1.0
 
 
 class TradeTracker:
@@ -280,14 +280,25 @@ class TradeTracker:
                     return change_pct <= MARKET_DOWN_THRESHOLD_PCT
 
             from app.services.data_fetcher import data_fetcher
-            quotes = data_fetcher.get_bulk_quotes(["NIFTY 50"])
-            if quotes:
-                q = quotes[0] if isinstance(quotes, list) else quotes.get("NIFTY 50", {})
-                change_pct = q.get("change_pct") or q.get("pChange") or 0
-                self._market_regime_cache = (time.time(), change_pct)
-                if change_pct <= MARKET_DOWN_THRESHOLD_PCT:
-                    logger.info(f"Market risk-off: NIFTY {change_pct:+.2f}% — suppressing bullish signals")
-                    return True
+            # Use historical data for accurate prev close (Angel One quote 'close' field is unreliable for indices)
+            hist = data_fetcher.get_historical_data("NIFTY 50", period="5d")
+            if hist is not None and not hist.empty and len(hist) >= 2:
+                prev_close = float(hist["close"].iloc[-2])
+                current = float(hist["close"].iloc[-1])
+                change_pct = round((current - prev_close) / prev_close * 100, 2)
+            else:
+                # Fallback to quote API
+                quotes = data_fetcher.get_bulk_quotes(["NIFTY 50"])
+                if quotes:
+                    q = quotes[0] if isinstance(quotes, list) else quotes.get("NIFTY 50", {})
+                    change_pct = q.get("change_pct") or q.get("pChange") or 0
+                else:
+                    change_pct = 0
+
+            self._market_regime_cache = (time.time(), change_pct)
+            if change_pct <= MARKET_DOWN_THRESHOLD_PCT:
+                logger.info(f"Market risk-off: NIFTY {change_pct:+.2f}% — suppressing bullish signals")
+                return True
             return False
         except Exception as e:
             logger.debug(f"Market regime check failed: {e}")
