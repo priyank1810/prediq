@@ -7,6 +7,7 @@ import pytest
 
 from app.models import TradeSignalLog
 from app.services.trade_tracker import TradeTracker
+from app.utils.helpers import now_ist
 
 # Market hours time for tests (11 AM IST)
 MARKET_TIME = datetime(2026, 4, 1, 11, 0, 0)
@@ -202,7 +203,7 @@ class TestDailyLossLimit:
 
     def test_blocks_after_heavy_losses(self, tracker, db):
         """If avg P&L drops below -2%, should block new trades."""
-        today = datetime.now().replace(hour=10, minute=0, second=0, microsecond=0)
+        today = now_ist().replace(tzinfo=None, hour=10, minute=0, second=0, microsecond=0)
         for i in range(5):
             trade = TradeSignalLog(
                 symbol=f"STOCK{i}", timeframe="short_1h", direction="BULLISH",
@@ -218,7 +219,7 @@ class TestDailyLossLimit:
 
     def test_allows_after_small_losses(self, tracker, db):
         """Avg -0.5% should not trigger the -2% limit."""
-        today = datetime.now().replace(hour=10, minute=0, second=0, microsecond=0)
+        today = now_ist().replace(tzinfo=None, hour=10, minute=0, second=0, microsecond=0)
         for i in range(5):
             trade = TradeSignalLog(
                 symbol=f"STOCK{i}", timeframe="short_1h", direction="BULLISH",
@@ -241,7 +242,7 @@ class TestSLCooldown:
         trade = TradeSignalLog(
             symbol="SBIN", timeframe="short_1h", direction="BULLISH",
             confidence=50, current_price=100, entry=100, target=105, status="sl_hit",
-            resolved_at=datetime.now() - timedelta(minutes=30),
+            resolved_at=now_ist().replace(tzinfo=None) - timedelta(minutes=30),
         )
         db.add(trade)
         db.commit()
@@ -252,7 +253,7 @@ class TestSLCooldown:
         trade = TradeSignalLog(
             symbol="SBIN", timeframe="short_1h", direction="BULLISH",
             confidence=50, current_price=100, entry=100, target=105, status="sl_hit",
-            resolved_at=datetime.now() - timedelta(minutes=180),
+            resolved_at=now_ist().replace(tzinfo=None) - timedelta(minutes=180),
         )
         db.add(trade)
         db.commit()
@@ -263,7 +264,7 @@ class TestSLCooldown:
         trade = TradeSignalLog(
             symbol="RELIANCE", timeframe="short_1h", direction="BULLISH",
             confidence=50, current_price=100, entry=100, target=105, status="sl_hit",
-            resolved_at=datetime.now() - timedelta(minutes=30),
+            resolved_at=now_ist().replace(tzinfo=None) - timedelta(minutes=30),
         )
         db.add(trade)
         db.commit()
