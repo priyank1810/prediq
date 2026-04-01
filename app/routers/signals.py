@@ -912,6 +912,29 @@ def model_accuracy_comparison():
         db.close()
 
 
+@router.get("/stats/job-status")
+def job_queue_status():
+    """Diagnostic: show job queue state."""
+    from app.models import JobQueue
+    from sqlalchemy import func
+    db = SessionLocal()
+    try:
+        counts = dict(db.query(JobQueue.status, func.count()).group_by(JobQueue.status).all())
+        recent = db.query(JobQueue).order_by(JobQueue.created_at.desc()).limit(10).all()
+        return {
+            "counts": counts,
+            "recent": [{
+                "id": j.id, "type": j.job_type, "status": j.status,
+                "error": j.error[:200] if j.error else None,
+                "created": j.created_at.isoformat() if j.created_at else None,
+                "started": j.started_at.isoformat() if j.started_at else None,
+                "completed": j.completed_at.isoformat() if j.completed_at else None,
+            } for j in recent]
+        }
+    finally:
+        db.close()
+
+
 @router.get("/stats/scan-status")
 def get_scan_status():
     """Get last scan status — when it ran, how many stocks, results."""
