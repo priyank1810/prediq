@@ -152,47 +152,45 @@ class TestCrossTimeframeDedup:
 class TestMarketRegimeFilter:
     def test_blocks_when_nifty_down(self, tracker, db):
         """Should block signals when NIFTY is down more than threshold."""
-        hist_df = MagicMock()
-        hist_df.empty = False
-        hist_df.__len__ = lambda self: 5
-        hist_df.__getitem__ = lambda self, key: MagicMock(
-            iloc=MagicMock(__getitem__=lambda s, i: 22000.0 if i == -2 else 21500.0)
-        )
+        import pandas as pd
+        hist_df = pd.DataFrame({"close": [22000, 22100, 22200], "date": ["d1", "d2", "d3"]})
+        mock_quotes = [{"symbol": "NIFTY 50", "ltp": 21500}]
 
-        with patch("app.services.trade_tracker.SessionLocal", return_value=db), \
-             patch("app.services.data_fetcher.data_fetcher.get_historical_data", return_value=hist_df):
-            # -2.3% change should block
+        with patch("app.services.data_fetcher.data_fetcher.get_historical_data", return_value=hist_df), \
+             patch("app.services.data_fetcher.data_fetcher.get_bulk_quotes", return_value=mock_quotes):
+            tracker._market_regime_cache = None
             result = tracker._check_market_regime()
             assert result is True
 
     def test_allows_when_nifty_up(self, tracker, db):
         """Should allow signals when NIFTY is up."""
-        hist_df = MagicMock()
-        hist_df.empty = False
-        hist_df.__len__ = lambda self: 5
-        hist_df.__getitem__ = lambda self, key: MagicMock(
-            iloc=MagicMock(__getitem__=lambda s, i: 22000.0 if i == -2 else 22500.0)
-        )
+        import pandas as pd
+        hist_df = pd.DataFrame({"close": [22000, 22100, 22200], "date": ["d1", "d2", "d3"]})
+        mock_quotes = [{"symbol": "NIFTY 50", "ltp": 22500}]
 
-        with patch("app.services.data_fetcher.data_fetcher.get_historical_data", return_value=hist_df):
-            tracker._market_regime_cache = None  # Clear cache
+        with patch("app.services.data_fetcher.data_fetcher.get_historical_data", return_value=hist_df), \
+             patch("app.services.data_fetcher.data_fetcher.get_bulk_quotes", return_value=mock_quotes):
+            tracker._market_regime_cache = None
             result = tracker._check_market_regime()
             assert result is False
 
     def test_stale_angel_close_doesnt_trigger(self, tracker, db):
         """Real bug: Angel One returned March 24 close instead of yesterday.
-        NIFTY was +1.5% but appeared -1%. Historical data should fix this."""
+        NIFTY was +1.5% but appeared -1%. Use prev close + live LTP."""
         import pandas as pd
-        # Simulate: yesterday close=22331, today=22677 (+1.55%)
+        # History: last close = 22331 (yesterday)
         hist_df = pd.DataFrame({
-            "close": [22500, 22600, 22912, 22331, 22677],
-            "date": ["2026-03-24", "2026-03-25", "2026-03-27", "2026-03-30", "2026-04-01"],
+            "close": [22500, 22600, 22912, 22331],
+            "date": ["2026-03-24", "2026-03-25", "2026-03-27", "2026-03-30"],
         })
+        # Live LTP = 22677 (+1.55% from yesterday)
+        mock_quotes = [{"symbol": "NIFTY 50", "ltp": 22677, "change_pct": -1.01}]
 
-        with patch("app.services.data_fetcher.data_fetcher.get_historical_data", return_value=hist_df):
+        with patch("app.services.data_fetcher.data_fetcher.get_historical_data", return_value=hist_df), \
+             patch("app.services.data_fetcher.data_fetcher.get_bulk_quotes", return_value=mock_quotes):
             tracker._market_regime_cache = None
             result = tracker._check_market_regime()
-            # +1.55% — should NOT block
+            # +1.55% from prev close — should NOT block
             assert result is False
 
 

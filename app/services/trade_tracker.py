@@ -280,20 +280,30 @@ class TradeTracker:
                     return change_pct <= MARKET_DOWN_THRESHOLD_PCT
 
             from app.services.data_fetcher import data_fetcher
-            # Use historical data for accurate prev close (Angel One quote 'close' field is unreliable for indices)
+            # Use yesterday's close from history + live LTP for accurate change%
+            # (Angel One quote 'close' field is unreliable for indices)
+            change_pct = 0
             hist = data_fetcher.get_historical_data("NIFTY 50", period="5d")
-            if hist is not None and not hist.empty and len(hist) >= 2:
-                prev_close = float(hist["close"].iloc[-2])
-                current = float(hist["close"].iloc[-1])
-                change_pct = round((current - prev_close) / prev_close * 100, 2)
-            else:
-                # Fallback to quote API
+            if hist is not None and not hist.empty:
+                prev_close = float(hist["close"].iloc[-1])  # Last completed day's close
+
+                # Get live price for today's value
+                quotes = data_fetcher.get_bulk_quotes(["NIFTY 50"])
+                ltp = None
+                if quotes:
+                    q = quotes[0] if isinstance(quotes, list) else quotes.get("NIFTY 50", {})
+                    ltp = q.get("ltp")
+
+                if ltp and prev_close > 0:
+                    change_pct = round((ltp - prev_close) / prev_close * 100, 2)
+                    logger.debug(f"Market regime: NIFTY prev_close={prev_close} ltp={ltp} change={change_pct}%")
+
+            if change_pct == 0:
+                # Fallback: trust quote API pct_change
                 quotes = data_fetcher.get_bulk_quotes(["NIFTY 50"])
                 if quotes:
                     q = quotes[0] if isinstance(quotes, list) else quotes.get("NIFTY 50", {})
                     change_pct = q.get("change_pct") or q.get("pChange") or 0
-                else:
-                    change_pct = 0
 
             self._market_regime_cache = (time.time(), change_pct)
             if change_pct <= MARKET_DOWN_THRESHOLD_PCT:
