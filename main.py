@@ -766,11 +766,29 @@ async def live_scanner():
         await asyncio.sleep(300)  # Every 5 minutes
 
 
+async def cache_cleanup():
+    """Periodically purge expired cache entries to free memory."""
+    from app.utils.cache import cache
+    await asyncio.sleep(120)
+    while True:
+        try:
+            if hasattr(cache, "purge_expired"):
+                cache.purge_expired()
+        except Exception:
+            pass
+        await asyncio.sleep(600)  # Every 10 minutes
+
+
 def _setup_audit_logger():
-    """Configure audit logger to write to logs/audit.log."""
+    """Configure audit logger to write to logs/audit.log with rotation."""
+    from logging.handlers import RotatingFileHandler
     log_dir = os.path.join(os.path.dirname(__file__), "logs")
     os.makedirs(log_dir, exist_ok=True)
-    handler = logging.FileHandler(os.path.join(log_dir, "audit.log"))
+    handler = RotatingFileHandler(
+        os.path.join(log_dir, "audit.log"),
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=3,
+    )
     handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
     audit = logging.getLogger("audit")
     audit.setLevel(logging.INFO)
@@ -799,6 +817,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(daily_telegram_report()),
         asyncio.create_task(weekly_analysis_report()),
         asyncio.create_task(trade_job_enqueuer()),
+        asyncio.create_task(cache_cleanup()),
     ]
     yield
     # Shutdown

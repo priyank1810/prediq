@@ -30,6 +30,14 @@ class TTLCache:
     def delete(self, key: str):
         self._store.pop(key, None)
 
+    def purge_expired(self):
+        """Remove all expired entries to free memory."""
+        now = time.time()
+        expired = [k for k, (_, exp) in self._store.items() if now >= exp]
+        for k in expired:
+            del self._store[k]
+        return len(expired)
+
     def clear(self):
         self._store.clear()
 

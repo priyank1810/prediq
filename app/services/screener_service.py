@@ -52,7 +52,7 @@ class ScreenerService:
                 logger.debug(f"Screener: failed to evaluate {symbol}: {e}")
                 return None
 
-        with ThreadPoolExecutor(max_workers=10) as pool:
+        with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {pool.submit(_process_symbol, sym): sym for sym in POPULAR_STOCKS}
             for future in as_completed(futures):
                 result = future.result()

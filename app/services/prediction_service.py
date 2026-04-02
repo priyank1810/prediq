@@ -302,7 +302,7 @@ class PredictionService:
             daily_df = data_fetcher.get_historical_data(symbol, period="2y")
 
             # Run models + sentiment/global fetches in parallel
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            with ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {}
                 if "xgboost" in models and intraday_df is not None and not intraday_df.empty:
                     futures["xgboost"] = executor.submit(self.xgboost.predict_intraday, intraday_df, symbol, horizon)
@@ -350,7 +350,7 @@ class PredictionService:
                 raise ValueError(f"No historical data available for {symbol}")
 
             # Run models + sentiment/global/fundamentals fetches in parallel
-            with ThreadPoolExecutor(max_workers=6) as executor:
+            with ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {}
                 if "xgboost" in models:
                     futures["xgboost"] = executor.submit(self.xgboost.predict, df, symbol, horizon)

@@ -1178,7 +1178,7 @@ const App = {
         if (!tbody) return;
         try {
             const resp = await fetch(`${API.baseUrl}/api/signals/stats/predictions/${encodeURIComponent(symbol)}?page=${page}&per_page=15`);
-            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
+            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
             const d = await resp.json();
             const preds = d.predictions || [];
             const total = d.total || 0;
@@ -1193,9 +1193,11 @@ const App = {
             if (pageInfo) pageInfo.textContent = total > 0 ? `Page ${page} of ${totalPages}` : '';
 
             if (!preds.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No predictions for this stock yet</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">No predictions for this stock yet</td></tr>';
                 return;
             }
+
+            const _fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' }) : '-';
 
             tbody.innerHTML = preds.map(p => {
                 const mapeColor = p.mape <= 1 ? 'text-green-400' : p.mape <= 3 ? 'text-yellow-400' : 'text-red-400';
@@ -1204,7 +1206,8 @@ const App = {
                     : '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗</span>';
                 const modelBg = p.model === 'ensemble' ? 'bg-blue-900/50 text-blue-400' : p.model === 'xgboost' ? 'bg-green-900/50 text-green-400' : 'bg-purple-900/50 text-purple-400';
                 return `<tr class="hover:bg-dark-700/50 border-b border-gray-800/30">
-                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${p.target_date || '-'}</td>
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDate(p.prediction_date)}</td>
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDate(p.target_date)}</td>
                     <td class="px-2 py-1.5"><span class="px-1 py-0.5 rounded ${modelBg} text-[9px] uppercase">${p.model}</span></td>
                     <td class="px-2 py-1.5 text-right text-gray-300">₹${p.predicted_price.toFixed(2)}</td>
                     <td class="px-2 py-1.5 text-right text-white">${p.actual_price ? '₹' + p.actual_price.toFixed(2) : '-'}</td>
@@ -1213,7 +1216,7 @@ const App = {
                 </tr>`;
             }).join('');
         } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Error loading predictions</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-500">Error loading predictions</td></tr>';
         }
     },
 
@@ -1227,7 +1230,7 @@ const App = {
         if (!tbody) return;
         try {
             const resp = await fetch(`${API.baseUrl}/api/signals/stats/trades/history?symbol=${encodeURIComponent(symbol)}&page=${page}&per_page=15&sort_by=created_at&sort_order=desc`);
-            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
+            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
             const d = await resp.json();
             const trades = d.trades || [];
             const total = d.total || 0;
@@ -1242,11 +1245,12 @@ const App = {
             if (pageInfo) pageInfo.textContent = total > 0 ? `Page ${page} of ${totalPages}` : '';
 
             if (!trades.length) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">No trade predictions for this stock</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">No trade predictions for this stock</td></tr>';
                 return;
             }
 
             const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            const _fmtDt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
             tbody.innerHTML = trades.map(t => {
                 const pColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
                 const sign = (t.outcome_pct || 0) >= 0 ? '+' : '';
@@ -1261,9 +1265,9 @@ const App = {
                 else if (t.status === 'wrong') badge = '<span class="px-1 py-0.5 rounded bg-red-900/50 text-red-400 text-[10px]">✗</span>';
                 else badge = '<span class="px-1 py-0.5 rounded bg-blue-900/50 text-blue-400 text-[10px]">Open</span>';
                 const confColor = (t.confidence || 0) >= 60 ? 'text-green-400' : (t.confidence || 0) >= 45 ? 'text-yellow-400' : 'text-gray-500';
-                const date = t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
                 return `<tr class="${rowBg} hover:bg-dark-700/50">
-                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${date}</td>
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(t.created_at)}</td>
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(t.resolved_at)}</td>
                     <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe || '-'}</td>
                     <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
                     <td class="px-2 py-1.5 text-right text-gray-300">₹${t.entry ? t.entry.toFixed(2) : '-'}</td>
@@ -1274,7 +1278,7 @@ const App = {
                 </tr>`;
             }).join('');
         } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-gray-500">Error loading trades</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">Error loading trades</td></tr>';
         }
     },
 

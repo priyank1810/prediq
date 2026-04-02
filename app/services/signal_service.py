@@ -115,7 +115,7 @@ class SignalService:
         sector_result = {"available": False, "score": 0}
         fund_result = {"score": 0, "classification": "balanced", "details": {}}
 
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             future_intraday = executor.submit(
                 data_fetcher.get_intraday_data, symbol, "5d", "15m"
             )
@@ -624,7 +624,7 @@ class SignalService:
         fund_result = {"score": 0, "classification": "balanced", "details": {}}
         pred_results = {}
 
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             # Fetch only 2 intervals (15m + daily) — resample for others
             f_15m = executor.submit(data_fetcher.get_intraday_data, symbol, "5d", "15m")
             f_daily = executor.submit(data_fetcher.get_historical_data, symbol, period="6mo")
@@ -670,6 +670,7 @@ class SignalService:
                 hourly = tmp[["open", "high", "low", "close", "volume"]].resample("1h").agg({
                     "open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"
                 }).dropna(subset=["open"]).reset_index()
+                del tmp
                 hourly = hourly.rename(columns={"_dt": "datetime"})
                 hourly["datetime_str"] = hourly["datetime"].dt.strftime("%Y-%m-%d %H:%M")
                 if len(hourly) >= 20:
@@ -678,7 +679,7 @@ class SignalService:
                 pass
 
         # Run ML predictions for each horizon (in parallel)
-        with ThreadPoolExecutor(max_workers=3) as pred_executor:
+        with ThreadPoolExecutor(max_workers=2) as pred_executor:
             pred_futures = {}
             for tf, horizon in self._TIMEFRAME_HORIZON_MAP.items():
                 pred_futures[tf] = pred_executor.submit(
