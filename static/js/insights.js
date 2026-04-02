@@ -610,7 +610,7 @@ window.Insights = {
         }
 
         const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
-        const _fmtDt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+        const _fmtDt = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
         tbody.innerHTML = page.map(t => {
                 const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
@@ -957,7 +957,7 @@ window.Insights = {
         }
 
         const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
-        const _fmtDt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+        const _fmtDt = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
         tbody.innerHTML = data.trades.map(t => {
             const dirColor = t.direction === 'BULLISH' ? 'text-green-400' : 'text-red-400';

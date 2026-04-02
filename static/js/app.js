@@ -1250,7 +1250,7 @@ const App = {
             }
 
             const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
-            const _fmtDt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+            const _fmtDt = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
             tbody.innerHTML = trades.map(t => {
                 const pColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
                 const sign = (t.outcome_pct || 0) >= 0 ? '+' : '';
@@ -1295,7 +1295,7 @@ const App = {
 
             document.getElementById('stockPortfolioCount').textContent = `${trades.length} closed${open.length ? ` · ${open.length} open` : ''}`;
 
-            const _fmtDt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+            const _fmtDt = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
             let rows = '';
 
             // Open positions first
