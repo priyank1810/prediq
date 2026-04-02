@@ -1287,7 +1287,7 @@ const App = {
         if (!tbody) return;
         try {
             const resp = await fetch(`${API.baseUrl}/api/signals/stats/virtual-portfolio?capital=100000`);
-            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
+            if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">Failed to load</td></tr>'; return; }
             const d = await resp.json();
             const allTrades = d.recent_trades || [];
             const trades = allTrades.filter(t => t.symbol === symbol);
@@ -1295,6 +1295,7 @@ const App = {
 
             document.getElementById('stockPortfolioCount').textContent = `${trades.length} closed${open.length ? ` · ${open.length} open` : ''}`;
 
+            const _fmtDt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
             let rows = '';
 
             // Open positions first
@@ -1304,7 +1305,8 @@ const App = {
                     const sign = (p.live_pnl || 0) >= 0 ? '+' : '';
                     const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
                     return `<tr class="bg-blue-900/10 border-l-2 border-l-blue-500 hover:bg-dark-700/50">
-                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">${p.scanned_at || '-'}</td>
+                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(p.created_at)}</td>
+                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">-</td>
                         <td class="px-2 py-1.5 text-gray-400">${tfShort[p.timeframe] || p.timeframe || '-'}</td>
                         <td class="px-2 py-1.5 text-right text-yellow-400">${(p.confidence || 0).toFixed(0)}%</td>
                         <td class="px-2 py-1.5 text-right text-gray-300">${p.qty}</td>
@@ -1333,7 +1335,8 @@ const App = {
                     else badge = `<span class="px-1 py-0.5 rounded bg-gray-800 ${pColor} text-[10px]">Expired</span>`;
                     const confColor = (t.confidence || 0) >= 60 ? 'text-green-400' : 'text-yellow-400';
                     return `<tr class="${rowBg} hover:bg-dark-700/50">
-                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">${t.date || '-'}</td>
+                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(t.created_at)}</td>
+                        <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(t.resolved_at)}</td>
                         <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe || '-'}</td>
                         <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
                         <td class="px-2 py-1.5 text-right text-gray-300">${t.qty}</td>
@@ -1347,12 +1350,12 @@ const App = {
             }
 
             if (!rows) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">No portfolio trades for this stock</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">No portfolio trades for this stock</td></tr>';
             } else {
                 tbody.innerHTML = rows;
             }
         } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-gray-500">Error loading portfolio</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">Error loading portfolio</td></tr>';
         }
     }
 };

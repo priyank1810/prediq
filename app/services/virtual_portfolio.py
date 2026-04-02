@@ -187,6 +187,8 @@ class VirtualPortfolio:
                     "status": trade.status,
                     "confidence": trade.confidence,
                     "date": trade_datetime,
+                    "created_at": trade.created_at.isoformat() if trade.created_at else None,
+                    "resolved_at": trade.resolved_at.isoformat() if trade.resolved_at else None,
                 }
                 trades_detail.append(trade_info)
 
