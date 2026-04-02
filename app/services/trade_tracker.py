@@ -362,17 +362,14 @@ class TradeTracker:
             logger.debug(f"Skipped {symbol}: near earnings announcement")
             return
 
-        entry = signal_data.get("entry")
         target = signal_data.get("target")
         stop_loss = signal_data.get("stop_loss")
 
-        if not entry or not target:
+        if not current_price or not target:
             return
 
-        # Sanity check: entry should be within 5% of current price
-        if current_price and abs(entry - current_price) / current_price > 0.05:
-            logger.debug(f"Skipped {symbol}: entry ₹{entry:.2f} too far from current ₹{current_price:.2f}")
-            return
+        # Use actual market price as entry (what you'd really pay)
+        entry = round(current_price, 2)
 
         db = SessionLocal()
         try:

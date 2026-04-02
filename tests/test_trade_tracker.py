@@ -87,36 +87,32 @@ class TestDirectionFilter:
 
 # ── Entry sanity check ──
 
-class TestEntrySanityCheck:
-    def test_rejects_entry_too_far_above(self, tracker, db):
-        """Entry 10% above current price should be rejected."""
+class TestEntryUsesCurrentPrice:
+    def test_entry_is_current_price(self, tracker, db):
+        """Entry should always be the actual market price, not signal's computed entry."""
         for p in _patch_for_logging(tracker, db): p.start()
         tracker.log_signal("RELIANCE", "short_1h",
                            _make_signal({"entry": 110.0, "target": 115.0}), 100.0)
-        assert db.query(TradeSignalLog).count() == 0
+        logged = db.query(TradeSignalLog).first()
+        assert logged is not None
+        assert logged.entry == 100.0  # current_price, not signal entry
         patch.stopall()
 
-    def test_rejects_entry_too_far_below(self, tracker, db):
-        """Entry 10% below current price should be rejected."""
-        for p in _patch_for_logging(tracker, db): p.start()
-        tracker.log_signal("RELIANCE", "short_1h",
-                           _make_signal({"entry": 90.0, "target": 95.0}), 100.0)
-        assert db.query(TradeSignalLog).count() == 0
-        patch.stopall()
-
-    def test_accepts_entry_within_5pct(self, tracker, db):
-        """Entry 2% below current price should pass."""
-        for p in _patch_for_logging(tracker, db): p.start()
-        tracker.log_signal("RELIANCE", "short_1h",
-                           _make_signal({"entry": 98.0, "target": 103.0}), 100.0)
-        assert db.query(TradeSignalLog).count() == 1
-        patch.stopall()
-
-    def test_nifty_it_bad_entry_rejected(self, tracker, db):
-        """Real bug: NIFTY IT had entry=29249 vs current=20550 — should be rejected."""
+    def test_entry_is_current_price_regardless_of_signal(self, tracker, db):
+        """Even with wildly different signal entry, trade uses current_price."""
         for p in _patch_for_logging(tracker, db): p.start()
         tracker.log_signal("NIFTY IT", "short_4h",
                            _make_signal({"entry": 29249.0, "target": 30000.0}), 20550.0)
+        logged = db.query(TradeSignalLog).first()
+        assert logged is not None
+        assert logged.entry == 20550.0  # current_price
+        patch.stopall()
+
+    def test_no_entry_without_current_price(self, tracker, db):
+        """Signal should be skipped if current_price is missing."""
+        for p in _patch_for_logging(tracker, db): p.start()
+        tracker.log_signal("RELIANCE", "short_1h",
+                           _make_signal({"entry": 100.0, "target": 105.0}), 0)
         assert db.query(TradeSignalLog).count() == 0
         patch.stopall()
 
