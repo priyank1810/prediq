@@ -605,11 +605,12 @@ window.Insights = {
         if (pageInfo) pageInfo.textContent = filtered.length > 0 ? `Page ${this._vpPage} of ${totalPages}` : '';
 
         if (page.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-gray-500">No trades match filters</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-gray-500">No trades match filters</td></tr>';
             return;
         }
 
         const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+        const _fmtDt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
         tbody.innerHTML = page.map(t => {
                 const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
@@ -627,7 +628,8 @@ window.Insights = {
                 const confColor = (t.confidence || 0) >= 70 ? 'text-green-400' : (t.confidence || 0) >= 50 ? 'text-yellow-400' : 'text-gray-500';
 
                 return `<tr class="${rowBg} hover:bg-dark-700/50">
-                    <td class="px-2 py-1.5 text-gray-400">${t.date || '-'}</td>
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(t.created_at)}</td>
+                    <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(t.resolved_at)}</td>
                     <td class="px-2 py-1.5 text-white font-medium cursor-pointer" onclick="Search.select('${t.symbol}','')">${t.symbol}</td>
                     <td class="px-2 py-1.5 text-gray-400">${tfShort[t.timeframe] || t.timeframe}</td>
                     <td class="px-2 py-1.5 text-right ${confColor}">${(t.confidence || 0).toFixed(0)}%</td>
