@@ -845,7 +845,7 @@
                         <option value="pnl_asc">Lowest P&L</option>
                         <option value="invested_desc">Most Invested</option>
                     </select>
-                    <input type="text" id="vpFilterSymbol" placeholder="Symbol" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1 w-20 uppercase" onchange="Insights._filterPortfolioTrades()">
+                    <input type="text" id="vpFilterSymbol" placeholder="Symbol" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1 w-20 uppercase" oninput="Insights._filterPortfolioTrades()">
                     <span id="vpTradeCount" class="text-xs text-gray-500 ml-auto"></span>
                 </div>
                 <div class="overflow-x-auto">

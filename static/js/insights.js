@@ -555,20 +555,29 @@ window.Insights = {
         const todayStr = istNow.toISOString().slice(0, 10);
         const yesterday = new Date(istNow); yesterday.setDate(istNow.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().slice(0, 10);
-        const weekAgo = new Date(istNow); weekAgo.setDate(istNow.getDate() - istNow.getDay());
-        const weekStr = weekAgo.toISOString().slice(0, 10);
+        // Week start = Monday (getDay(): 0=Sun, 1=Mon... so shift Sun to 6)
+        const daysSinceMonday = (istNow.getDay() + 6) % 7;
+        const weekStart = new Date(istNow); weekStart.setDate(istNow.getDate() - daysSinceMonday);
+        const weekStr = weekStart.toISOString().slice(0, 10);
         const monthStr = todayStr.slice(0, 7);
 
         let filtered = trades.filter(t => {
-            if (resultFilter === 'win' && t.pnl < 0) return false;
-            if (resultFilter === 'loss' && t.pnl >= 0) return false;
+            if (resultFilter === 'win' && !(t.pnl > 0)) return false;
+            if (resultFilter === 'loss' && !(t.pnl < 0)) return false;
             if (symbolFilter && !t.symbol.includes(symbolFilter)) return false;
-            if (dateFilter && t.date) {
-                const d = t.date.slice(0, 10);
-                if (dateFilter === 'today' && d !== todayStr) return false;
-                if (dateFilter === 'yesterday' && d !== yesterdayStr) return false;
-                if (dateFilter === 'week' && d < weekStr) return false;
-                if (dateFilter === 'month' && !d.startsWith(monthStr)) return false;
+            // Match against both created_at and resolved_at dates
+            if (dateFilter) {
+                const d1 = t.date ? t.date.slice(0, 10) : '';
+                const d2 = t.created_at ? t.created_at.slice(0, 10) : '';
+                const matchDate = (d) => {
+                    if (!d) return false;
+                    if (dateFilter === 'today') return d === todayStr;
+                    if (dateFilter === 'yesterday') return d === yesterdayStr;
+                    if (dateFilter === 'week') return d >= weekStr;
+                    if (dateFilter === 'month') return d.startsWith(monthStr);
+                    return true;
+                };
+                if (!matchDate(d1) && !matchDate(d2)) return false;
             }
             return true;
         });
