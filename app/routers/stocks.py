@@ -144,10 +144,10 @@ def get_history(symbol: str, period: str = Query("1y")):
         raise HTTPException(status_code=400, detail=f"Invalid period. Use one of: {valid_periods}")
     try:
 
-        # Short periods use intraday (15-min) candles for a meaningful chart
+        # Short periods use intraday (1-min) candles for a detailed chart
         if period in ("1d", "5d"):
             import pandas as pd
-            df = data_fetcher.get_intraday_data(sym, period=period, interval="15m")
+            df = data_fetcher.get_intraday_data(sym, period=period, interval="1m")
             # Fallback to daily data if intraday unavailable (weekends/holidays)
             if df is None or df.empty:
                 df = data_fetcher.get_historical_data(sym, "1mo")

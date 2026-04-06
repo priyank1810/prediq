@@ -64,7 +64,7 @@ class PortfolioService:
         query = db.query(PortfolioHolding)
         if user_id is not None:
             query = query.filter(PortfolioHolding.user_id == user_id)
-        holdings = query.offset(offset).limit(limit).all()
+        holdings = query.order_by(PortfolioHolding.buy_date.desc()).offset(offset).limit(limit).all()
         if not holdings:
             return []
 

@@ -92,6 +92,7 @@ class Worker:
         Popular stocks (not in watchlist): only log high-confidence (>=60%) signals."""
         from app.models import WatchlistItem
         from app.services.trade_tracker import trade_tracker
+        from app.services.data_fetcher import data_fetcher
         from app.config import POPULAR_STOCKS
         import time as _time
 
@@ -123,6 +124,17 @@ class Worker:
                 intraday = result.get("intraday", {})
                 short_term = result.get("short_term", {})
 
+                # Use live LTP for entry price (candle close can lag)
+                live_price = current_price
+                try:
+                    quotes = data_fetcher.get_bulk_quotes([sym])
+                    if quotes:
+                        q = quotes[0] if isinstance(quotes, list) else quotes.get(sym, {})
+                        if q.get("ltp"):
+                            live_price = round(float(q["ltp"]), 2)
+                except Exception:
+                    pass
+
                 all_sigs = list(intraday.values()) + list(short_term.values())
                 for sig in all_sigs:
                     if sig and sig.get("direction") == "BULLISH":
@@ -132,11 +144,11 @@ class Worker:
                 if scan_type in ("intraday", "full"):
                     for tf_key, sig in intraday.items():
                         if sig and sig.get("direction") != "NEUTRAL":
-                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
+                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
                 if scan_type in ("short", "full"):
                     for tf_key, sig in short_term.items():
                         if sig and sig.get("direction") != "NEUTRAL":
-                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
+                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
 
                 logged += 1
             except Exception as e:
@@ -158,6 +170,17 @@ class Worker:
                 intraday = result.get("intraday", {})
                 short_term = result.get("short_term", {})
 
+                # Use live LTP for entry price
+                live_price = current_price
+                try:
+                    quotes = data_fetcher.get_bulk_quotes([sym])
+                    if quotes:
+                        q = quotes[0] if isinstance(quotes, list) else quotes.get(sym, {})
+                        if q.get("ltp"):
+                            live_price = round(float(q["ltp"]), 2)
+                except Exception:
+                    pass
+
                 all_sigs = list(intraday.values()) + list(short_term.values())
 
                 # Track near-bullish stocks (neutral with positive composite)
@@ -174,12 +197,12 @@ class Worker:
                 if scan_type in ("intraday", "full"):
                     for tf_key, sig in intraday.items():
                         if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
-                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, current_price)
+                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
                             popular_logged += 1
                 if scan_type in ("short", "full"):
                     for tf_key, sig in short_term.items():
                         if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
-                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, current_price)
+                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
                             popular_logged += 1
 
                 logged += 1

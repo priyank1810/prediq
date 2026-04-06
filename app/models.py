@@ -153,6 +153,7 @@ class TradeSignalLog(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=now_ist, index=True)
+    check_at = Column(DateTime, nullable=True)    # timeframe checkpoint (e.g. +15m, +30m, +1h)
     expires_at = Column(DateTime, nullable=True)  # when the signal window closes
 
 

@@ -197,10 +197,11 @@ class StockLearner:
 
         target_hits = sum(1 for t in trades if t.status == "target_hit")
         sl_hits = sum(1 for t in trades if t.status == "sl_hit")
-        expired = sum(1 for t in trades if t.status == "expired")
-        expired_profit = sum(1 for t in trades if t.status == "expired" and (t.outcome_pct or 0) > 0)
+        correct = sum(1 for t in trades if t.status == "correct")
+        wrong = sum(1 for t in trades if t.status == "wrong")
 
-        wins = target_hits + expired_profit
+        # Win = any trade with positive P&L (consistent with trade_tracker)
+        wins = sum(1 for t in trades if (t.outcome_pct or 0) > 0)
         win_rate = round(wins / len(trades) * 100, 1) if trades else 0
 
         # Average P&L
@@ -218,7 +219,7 @@ class StockLearner:
             if tf not in by_timeframe:
                 by_timeframe[tf] = {"wins": 0, "total": 0, "pnl_sum": 0}
             by_timeframe[tf]["total"] += 1
-            if t.status == "target_hit" or (t.status == "expired" and (t.outcome_pct or 0) > 0):
+            if (t.outcome_pct or 0) > 0:
                 by_timeframe[tf]["wins"] += 1
             by_timeframe[tf]["pnl_sum"] += t.outcome_pct or 0
 
@@ -239,10 +240,8 @@ class StockLearner:
 
         # Trend
         mid = len(trades) // 2
-        recent_wins = sum(1 for t in trades[:mid]
-                         if t.status == "target_hit" or (t.status == "expired" and (t.outcome_pct or 0) > 0))
-        older_wins = sum(1 for t in trades[mid:]
-                        if t.status == "target_hit" or (t.status == "expired" and (t.outcome_pct or 0) > 0))
+        recent_wins = sum(1 for t in trades[:mid] if (t.outcome_pct or 0) > 0)
+        older_wins = sum(1 for t in trades[mid:] if (t.outcome_pct or 0) > 0)
         recent_wr = recent_wins / max(mid, 1) * 100
         older_wr = older_wins / max(len(trades) - mid, 1) * 100
         trend = "improving" if recent_wr > older_wr + 5 else \
@@ -253,7 +252,8 @@ class StockLearner:
             "win_rate": win_rate,
             "target_hits": target_hits,
             "sl_hits": sl_hits,
-            "expired": expired,
+            "correct": correct,
+            "wrong": wrong,
             "avg_pnl": avg_pnl,
             "avg_win": avg_win,
             "avg_loss": avg_loss,

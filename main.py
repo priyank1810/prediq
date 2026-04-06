@@ -134,6 +134,8 @@ def _migrate_db_sqlite(database_url: str):
         ("trade_signal_logs", "v2_predicted_price", "REAL"),
         ("trade_signal_logs", "v2_confidence", "REAL"),
         ("trade_signal_logs", "v2_direction", "TEXT"),
+        # Timeframe checkpoint
+        ("trade_signal_logs", "check_at", "TIMESTAMP"),
     ]
 
     for table, column, col_type in migrations:
@@ -201,6 +203,8 @@ def _migrate_db_postgres():
         ("trade_signal_logs", "v2_predicted_price", "DOUBLE PRECISION"),
         ("trade_signal_logs", "v2_confidence", "DOUBLE PRECISION"),
         ("trade_signal_logs", "v2_direction", "TEXT"),
+        # Timeframe checkpoint
+        ("trade_signal_logs", "check_at", "TIMESTAMP"),
     ]
 
     with engine.begin() as conn:

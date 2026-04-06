@@ -23,6 +23,14 @@ TIMEFRAME_WINDOWS = {
     "short_4h": timedelta(days=1),
 }
 
+# Timeframe → first checkpoint interval (check prediction at this exact time)
+TIMEFRAME_CHECK_INTERVALS = {
+    "intraday_15m": timedelta(minutes=15),
+    "intraday_30m": timedelta(minutes=30),
+    "short_1h": timedelta(hours=1),
+    "short_4h": timedelta(hours=4),
+}
+
 # Minimum minutes between logging same symbol+timeframe (prevent duplicates)
 MIN_LOG_INTERVAL_MINUTES = {
     "intraday_15m": 15,
@@ -43,6 +51,22 @@ MARKET_DOWN_THRESHOLD_PCT = -1.0
 
 class TradeTracker:
     """Tracks trade signal predictions and validates outcomes."""
+
+    def _check_signal_still_valid(self, symbol: str, direction: str) -> bool:
+        """Re-evaluate AI signal at checkpoint time.
+        Returns True if AI still agrees with the trade direction."""
+        try:
+            from app.services.signal_service import signal_service
+            mtf = signal_service.get_multi_timeframe_signals(symbol)
+            if not mtf:
+                return False
+            for group in (mtf.get("intraday", {}), mtf.get("short_term", {})):
+                for tf_sig in group.values():
+                    if tf_sig and tf_sig.get("direction") == direction:
+                        return True
+            return False
+        except Exception:
+            return True  # If signal check fails, assume still valid (don't exit on error)
 
     def __init__(self):
         self._open_trades_cache = {}  # symbol -> [trade dicts]
@@ -70,6 +94,7 @@ class TradeTracker:
                     "direction": t.direction,
                     "entry": t.entry, "target": t.target,
                     "stop_loss": t.stop_loss, "timeframe": t.timeframe,
+                    "check_at": t.check_at,
                     "expires_at": t.expires_at,
                 })
             self._cache_loaded = True
@@ -157,6 +182,30 @@ class TradeTracker:
                                 logger.info(f"Smart exit: {symbol} — AI flipped, selling at +{outcome_pct}%")
                         except Exception:
                             pass  # If check fails, hold
+                elif trade.get("check_at") and now > trade["check_at"]:
+                    # Timeframe checkpoint: re-evaluate AI signal to decide continue/book
+                    outcome_pct = round((ltp - entry) / entry * 100, 2) if entry else 0
+                    target_move = (target - entry) if target and entry else 0
+                    achieved = (ltp - entry) if entry else 0
+                    hit_half_target = target_move > 0 and achieved >= target_move * 0.5
+                    still_valid = self._check_signal_still_valid(symbol, "BULLISH")
+                    if still_valid and hit_half_target:
+                        # AI agrees but already captured 50%+ of target — book profit
+                        status = "target_hit"
+                        logger.info(f"Checkpoint {symbol}: AI BULLISH + {outcome_pct:+.2f}% (>=50% target) — booking profit")
+                    elif still_valid:
+                        # AI agrees, not yet at 50% — continue to target/SL/expiry
+                        trade["check_at"] = None
+                        trade["_check_at_cleared"] = True
+                        logger.info(f"Checkpoint {symbol}: AI still BULLISH ({outcome_pct:+.2f}%) — continuing")
+                    elif outcome_pct > 0:
+                        # AI flipped but in profit — book profit
+                        status = "target_hit"
+                        logger.info(f"Checkpoint {symbol}: AI flipped, booking profit +{outcome_pct:.2f}%")
+                    else:
+                        # AI flipped and in loss — book loss
+                        status = "wrong"
+                        logger.info(f"Checkpoint {symbol}: AI flipped, booking loss {outcome_pct:.2f}%")
                 elif trade["expires_at"] and now > trade["expires_at"]:
                     outcome_pct = round((ltp - entry) / entry * 100, 2) if entry else 0
                     status = "correct" if outcome_pct > 0 else "wrong"
@@ -168,9 +217,45 @@ class TradeTracker:
                 elif trade["stop_loss"] and ltp >= trade["stop_loss"]:
                     status = "sl_hit"
                     outcome_pct = round((trade["entry"] - ltp) / trade["entry"] * 100, 2) if trade["entry"] else 0
+                elif trade.get("check_at") and now > trade["check_at"]:
+                    bear_entry = trade["entry"] or 0
+                    bear_target = trade["target"] or 0
+                    outcome_pct = round((bear_entry - ltp) / bear_entry * 100, 2) if bear_entry else 0
+                    target_move = (bear_entry - bear_target) if bear_entry and bear_target else 0
+                    achieved = (bear_entry - ltp) if bear_entry else 0
+                    hit_half_target = target_move > 0 and achieved >= target_move * 0.5
+                    still_valid = self._check_signal_still_valid(symbol, "BEARISH")
+                    if still_valid and hit_half_target:
+                        status = "target_hit"
+                        logger.info(f"Checkpoint {symbol}: AI BEARISH + {outcome_pct:+.2f}% (>=50% target) — booking profit")
+                    elif still_valid:
+                        trade["check_at"] = None
+                        trade["_check_at_cleared"] = True
+                        logger.info(f"Checkpoint {symbol}: AI still BEARISH ({outcome_pct:+.2f}%) — continuing")
+                    elif outcome_pct > 0:
+                        status = "target_hit"
+                        logger.info(f"Checkpoint {symbol}: AI flipped, booking profit +{outcome_pct:.2f}%")
+                    else:
+                        status = "wrong"
+                        logger.info(f"Checkpoint {symbol}: AI flipped, booking loss {outcome_pct:.2f}%")
                 elif trade["expires_at"] and now > trade["expires_at"]:
                     outcome_pct = round((trade["entry"] - ltp) / trade["entry"] * 100, 2) if trade["entry"] else 0
                     status = "correct" if outcome_pct > 0 else "wrong"
+
+            # Persist check_at cleared to DB (checkpoint passed, AI still valid)
+            if not status and trade.get("check_at") is None and trade.get("_check_at_cleared"):
+                try:
+                    db = SessionLocal()
+                    try:
+                        record = db.query(TradeSignalLog).filter(TradeSignalLog.id == trade["id"]).first()
+                        if record:
+                            record.check_at = None
+                            db.commit()
+                    finally:
+                        db.close()
+                except Exception:
+                    pass
+                trade.pop("_check_at_cleared", None)
 
             if status:
                 resolved_ids.append(trade["id"])
@@ -408,8 +493,11 @@ class TradeTracker:
             if open_for_symbol >= 2:
                 return  # Already have 2 open positions on this stock
 
+            now = now_ist().replace(tzinfo=None)
             window = TIMEFRAME_WINDOWS.get(timeframe, timedelta(days=1))
-            expires_at = now_ist().replace(tzinfo=None) + window
+            expires_at = now + window
+            check_interval = TIMEFRAME_CHECK_INTERVALS.get(timeframe)
+            check_at = (now + check_interval) if check_interval else None
 
             log = TradeSignalLog(
                 symbol=symbol,
@@ -433,6 +521,7 @@ class TradeTracker:
                 v2_confidence=signal_data.get("v2_confidence"),
                 v2_direction=signal_data.get("v2_direction"),
                 status="open",
+                check_at=check_at,
                 expires_at=expires_at,
             )
             db.add(log)
@@ -507,6 +596,35 @@ class TradeTracker:
                         sig.outcome_pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
                         sig.resolved_at = now
                         resolved += 1
+                    elif sig.check_at and now > sig.check_at:
+                        # Timeframe checkpoint: re-evaluate AI signal
+                        pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
+                        target_move = (sig.target - sig.entry) if sig.target and sig.entry else 0
+                        achieved = (ltp - sig.entry) if sig.entry else 0
+                        hit_half_target = target_move > 0 and achieved >= target_move * 0.5
+                        still_valid = self._check_signal_still_valid(sig.symbol, "BULLISH")
+                        if still_valid and hit_half_target:
+                            # AI agrees + already captured 50%+ of target — book profit
+                            sig.status = "target_hit"
+                            sig.outcome_price = ltp
+                            sig.outcome_pct = pct
+                            sig.resolved_at = now
+                            resolved += 1
+                            logger.info(f"Checkpoint {sig.symbol}: AI BULLISH + {pct:+.2f}% (>=50% target) — booking profit")
+                        elif still_valid:
+                            sig.check_at = None  # AI agrees, < 50% — continue
+                            logger.info(f"Checkpoint {sig.symbol}: AI still BULLISH ({pct:+.2f}%) — continuing")
+                        else:
+                            sig.outcome_price = ltp
+                            sig.outcome_pct = pct
+                            sig.resolved_at = now
+                            resolved += 1
+                            if pct > 0:
+                                sig.status = "target_hit"
+                                logger.info(f"Checkpoint {sig.symbol}: AI flipped, booking profit +{pct:.2f}%")
+                            else:
+                                sig.status = "wrong"
+                                logger.info(f"Checkpoint {sig.symbol}: AI flipped, booking loss {pct:.2f}%")
                     elif sig.expires_at and now > sig.expires_at:
                         sig.outcome_price = ltp
                         sig.outcome_pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
@@ -527,6 +645,33 @@ class TradeTracker:
                         sig.outcome_pct = round((sig.entry - ltp) / sig.entry * 100, 2) if sig.entry else 0
                         sig.resolved_at = now
                         resolved += 1
+                    elif sig.check_at and now > sig.check_at:
+                        pct = round((sig.entry - ltp) / sig.entry * 100, 2) if sig.entry else 0
+                        target_move = (sig.entry - sig.target) if sig.entry and sig.target else 0
+                        achieved = (sig.entry - ltp) if sig.entry else 0
+                        hit_half_target = target_move > 0 and achieved >= target_move * 0.5
+                        still_valid = self._check_signal_still_valid(sig.symbol, "BEARISH")
+                        if still_valid and hit_half_target:
+                            sig.status = "target_hit"
+                            sig.outcome_price = ltp
+                            sig.outcome_pct = pct
+                            sig.resolved_at = now
+                            resolved += 1
+                            logger.info(f"Checkpoint {sig.symbol}: AI BEARISH + {pct:+.2f}% (>=50% target) — booking profit")
+                        elif still_valid:
+                            sig.check_at = None
+                            logger.info(f"Checkpoint {sig.symbol}: AI still BEARISH ({pct:+.2f}%) — continuing")
+                        else:
+                            sig.outcome_price = ltp
+                            sig.outcome_pct = pct
+                            sig.resolved_at = now
+                            resolved += 1
+                            if pct > 0:
+                                sig.status = "target_hit"
+                                logger.info(f"Checkpoint {sig.symbol}: AI flipped, booking profit +{pct:.2f}%")
+                            else:
+                                sig.status = "wrong"
+                                logger.info(f"Checkpoint {sig.symbol}: AI flipped, booking loss {pct:.2f}%")
                     elif sig.expires_at and now > sig.expires_at:
                         sig.outcome_price = ltp
                         sig.outcome_pct = round((sig.entry - ltp) / sig.entry * 100, 2) if sig.entry else 0
@@ -566,7 +711,8 @@ class TradeTracker:
             correct = sum(1 for s in resolved if s.status == "correct")
             wrong = sum(1 for s in resolved if s.status == "wrong")
 
-            total_wins = target_hits + correct
+            # Win = any trade with positive P&L (consistent with stock_learner)
+            total_wins = sum(1 for s in resolved if (s.outcome_pct or 0) > 0)
             win_rate = round(total_wins / total * 100, 1) if total > 0 else 0
             avg_win = 0
             avg_loss = 0
@@ -586,7 +732,7 @@ class TradeTracker:
                     tf_target = sum(1 for s in tf_signals if s.status == "target_hit")
                     tf_correct = sum(1 for s in tf_signals if s.status == "correct")
                     tf_wrong = sum(1 for s in tf_signals if s.status == "wrong")
-                    tf_wins = tf_target + tf_correct
+                    tf_wins = sum(1 for s in tf_signals if (s.outcome_pct or 0) > 0)
                     by_timeframe[tf_group] = {
                         "total": len(tf_signals),
                         "target_hit": tf_target,
@@ -602,7 +748,7 @@ class TradeTracker:
                 if s.symbol not in by_symbol:
                     by_symbol[s.symbol] = {"total": 0, "wins": 0, "pnl_sum": 0}
                 by_symbol[s.symbol]["total"] += 1
-                if s.status in ("target_hit", "correct"):
+                if (s.outcome_pct or 0) > 0:
                     by_symbol[s.symbol]["wins"] += 1
                 by_symbol[s.symbol]["pnl_sum"] += s.outcome_pct or 0
 

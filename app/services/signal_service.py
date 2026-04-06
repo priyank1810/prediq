@@ -765,10 +765,21 @@ class SignalService:
         }
 
         # Log trade predictions for tracking (best signal per group)
+        # Use live LTP as entry price (candle close can lag behind actual market price)
         try:
             from app.services.trade_tracker import trade_tracker
+            from app.services.data_fetcher import data_fetcher
+            live_price = current_price
+            try:
+                quotes = data_fetcher.get_bulk_quotes([symbol])
+                if quotes:
+                    q = quotes[0] if isinstance(quotes, list) else quotes.get(symbol, {})
+                    if q.get("ltp"):
+                        live_price = round(float(q["ltp"]), 2)
+            except Exception:
+                pass  # Fall back to candle close
             for tf_key, tf_signal in all_signals.items():
-                trade_tracker.log_signal(symbol, tf_key, tf_signal, current_price)
+                trade_tracker.log_signal(symbol, tf_key, tf_signal, live_price)
         except Exception as e:
             logger.debug(f"Trade logging failed: {e}")
 
