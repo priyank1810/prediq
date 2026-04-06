@@ -706,19 +706,20 @@ window.Signals = {
                     <span class="text-xs text-gray-400 font-medium">${sig.label}${modelBadge}</span>
                     <span class="text-xs font-bold ${c.text}">${icon} ${sig.direction}</span>
                 </div>
-                <div class="text-center mb-2">
-                    <div class="text-lg font-bold ${c.text}">${sig.confidence}%</div>
-                    <div class="text-[10px] text-gray-500">confidence</div>
-                    ${predPrice}
-                </div>
-                <div class="border-t border-gray-700/50 pt-2 space-y-1">
-                    ${sig.direction === 'BEARISH'
-                        ? `${levelRow('Exit Now', sig.entry, 'text-red-400 font-bold text-sm')}
-                           ${levelRow('Re-enter At', sig.target, 'text-green-400 font-bold text-sm')}`
-                        : `${levelRow('Entry', sig.entry, 'text-white font-bold text-sm')}
-                           ${levelRow('Target', sig.target, 'text-green-400 font-bold text-sm')}
-                           ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}`
-                    }
+                <div class="flex items-center gap-3">
+                    <div class="text-center shrink-0">
+                        <div class="text-lg font-bold ${c.text}">${sig.confidence}%</div>
+                        <div class="text-[10px] text-gray-500">confidence</div>
+                    </div>
+                    <div class="border-l border-gray-700/50 pl-3 flex-1 space-y-0.5">
+                        ${sig.direction === 'BEARISH'
+                            ? `${levelRow('Exit Now', sig.entry, 'text-red-400 font-bold text-sm')}
+                               ${levelRow('Re-enter At', sig.target, 'text-green-400 font-bold text-sm')}`
+                            : `${levelRow('Entry', sig.entry, 'text-white font-bold text-sm')}
+                               ${levelRow('Target', sig.target, 'text-green-400 font-bold text-sm')}
+                               ${levelRow('Stop Loss', sig.stop_loss, 'text-red-400')}`
+                        }
+                    </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-1 mt-2">
                     ${modelVerBadge}

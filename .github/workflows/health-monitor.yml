@@ -1,0 +1,66 @@
+name: Health Monitor
+
+on:
+  schedule:
+    # Every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check site health
+        id: health
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 15 https://prediq.duckdns.org/health 2>/dev/null || echo "000")
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Site is healthy (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Site is DOWN (HTTP $HTTP_CODE)"
+          fi
+
+      - name: Update DuckDNS (if site is down)
+        if: steps.health.outputs.http_code != '200'
+        env:
+          DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
+        run: |
+          if [ -z "$DUCKDNS_TOKEN" ]; then
+            echo "⚠️ DUCKDNS_TOKEN secret not set — skipping DNS update"
+          else
+            # Get current Lightsail instance IP
+            RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=prediq&token=${DUCKDNS_TOKEN}&ip=")
+            echo "DuckDNS update response: $RESPONSE"
+          fi
+
+      - name: Try SSH restart (if site is down)
+        if: steps.health.outputs.http_code != '200'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Restart services
+        if: steps.health.outputs.http_code != '200'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'sudo systemctl restart stocktracker stocktracker-worker && echo "✅ Services restarted"' 2>&1 || echo "⚠️ SSH failed — server may be stopped. Check AWS Lightsail console."
+
+      - name: Verify recovery
+        if: steps.health.outputs.http_code != '200'
+        run: |
+          echo "Waiting 30s for services to start..."
+          sleep 30
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 15 https://prediq.duckdns.org/health 2>/dev/null || echo "000")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Site recovered (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Site still down after restart (HTTP $HTTP_CODE) — needs manual intervention"
+            exit 1
+          fi
