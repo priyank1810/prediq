@@ -14,15 +14,21 @@ jobs:
       - name: Check site health
         id: health
         run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 15 https://prediq.duckdns.org/health 2>/dev/null || echo "000")
+          # Try 3 times with 10s gap to avoid false positives
+          for i in 1 2 3; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 15 https://prediq.duckdns.org/health 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Site is healthy (HTTP $HTTP_CODE, attempt $i)"
+              echo "http_code=200" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $HTTP_CODE — retrying in 10s..."
+            sleep 10
+          done
+          echo "❌ Site is DOWN after 3 attempts (HTTP $HTTP_CODE)"
           echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ Site is healthy (HTTP $HTTP_CODE)"
-          else
-            echo "❌ Site is DOWN (HTTP $HTTP_CODE)"
-          fi
 
-      - name: Update DuckDNS (if site is down)
+      - name: Update DuckDNS
         if: steps.health.outputs.http_code != '200'
         env:
           DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
@@ -30,18 +36,19 @@ jobs:
           if [ -z "$DUCKDNS_TOKEN" ]; then
             echo "⚠️ DUCKDNS_TOKEN secret not set — skipping DNS update"
           else
-            # Get current Lightsail instance IP
             RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=prediq&token=${DUCKDNS_TOKEN}&ip=")
             echo "DuckDNS update response: $RESPONSE"
           fi
 
-      - name: Try SSH restart (if site is down)
+      # Step 1: Try SSH restart first (works if network is fine but app crashed)
+      - name: Setup SSH
         if: steps.health.outputs.http_code != '200'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
-      - name: Restart services
+      - name: Try SSH restart
+        id: ssh_restart
         if: steps.health.outputs.http_code != '200'
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -49,18 +56,47 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            'sudo systemctl restart stocktracker stocktracker-worker && echo "✅ Services restarted"' 2>&1 || echo "⚠️ SSH failed — server may be stopped. Check AWS Lightsail console."
+          if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'sudo systemctl restart stocktracker stocktracker-worker' 2>&1; then
+            echo "ssh_ok=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Services restarted via SSH"
+          else
+            echo "ssh_ok=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ SSH failed — network likely frozen"
+          fi
+
+      # Step 2: If SSH failed, reboot instance via AWS CLI (frozen network)
+      - name: Reboot instance via AWS CLI
+        if: steps.health.outputs.http_code != '200' && steps.ssh_restart.outputs.ssh_ok == 'false'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-south-1
+        run: |
+          INSTANCE_NAME="${{ secrets.LIGHTSAIL_INSTANCE_NAME }}"
+          if [ -z "$INSTANCE_NAME" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "❌ AWS secrets not configured — cannot reboot. Manual intervention needed."
+            echo "Set these GitHub secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, LIGHTSAIL_INSTANCE_NAME"
+            exit 1
+          fi
+          echo "🔄 Rebooting Lightsail instance: $INSTANCE_NAME"
+          aws lightsail reboot-instance --instance-name "$INSTANCE_NAME"
+          echo "✅ Reboot command sent — waiting 60s for instance to come back..."
+          sleep 60
 
       - name: Verify recovery
         if: steps.health.outputs.http_code != '200'
         run: |
-          echo "Waiting 30s for services to start..."
-          sleep 30
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 15 https://prediq.duckdns.org/health 2>/dev/null || echo "000")
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ Site recovered (HTTP $HTTP_CODE)"
-          else
-            echo "❌ Site still down after restart (HTTP $HTTP_CODE) — needs manual intervention"
-            exit 1
-          fi
+          # Wait for services to start after reboot
+          echo "Checking site recovery..."
+          for i in 1 2 3 4 5 6; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 15 https://prediq.duckdns.org/health 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Site recovered (HTTP $HTTP_CODE, check $i)"
+              exit 0
+            fi
+            echo "Check $i: HTTP $HTTP_CODE — waiting 15s..."
+            sleep 15
+          done
+          echo "❌ Site still down after recovery attempts — needs manual intervention"
+          exit 1
