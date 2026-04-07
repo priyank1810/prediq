@@ -768,7 +768,6 @@ class SignalService:
         # Use live LTP as entry price (candle close can lag behind actual market price)
         try:
             from app.services.trade_tracker import trade_tracker
-            from app.services.data_fetcher import data_fetcher
             live_price = current_price
             try:
                 quotes = data_fetcher.get_bulk_quotes([symbol])
