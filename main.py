@@ -470,6 +470,52 @@ async def daily_stock_learner():
             await asyncio.sleep(600)
 
 
+async def eod_cleanup_unresolved_trades():
+    """End-of-day cleanup: delete any open trades that didn't resolve before market close.
+    Runs at 3:35 PM IST (5 min after market close at 3:30 PM).
+    Trades shouldn't carry across days because intraday/short-term setups become stale."""
+    await asyncio.sleep(120)
+
+    while True:
+        try:
+            from app.utils.helpers import now_ist
+            current = now_ist()
+            # Run at 3:35 PM IST (after market close at 3:30 PM)
+            if current.hour == 15 and 35 <= current.minute <= 40:
+                from app.database import SessionLocal
+                from app.models import TradeSignalLog
+
+                def _cleanup():
+                    db = SessionLocal()
+                    try:
+                        deleted = db.query(TradeSignalLog).filter(
+                            TradeSignalLog.status == "open"
+                        ).delete(synchronize_session=False)
+                        db.commit()
+                        return deleted
+                    finally:
+                        db.close()
+
+                deleted = await asyncio.to_thread(_cleanup)
+                if deleted > 0:
+                    logging.getLogger(__name__).info(
+                        f"EOD cleanup: deleted {deleted} unresolved open trades"
+                    )
+                    # Refresh trade tracker cache
+                    try:
+                        from app.services.trade_tracker import trade_tracker
+                        trade_tracker._cache_loaded = False
+                    except Exception:
+                        pass
+                # Sleep until next day to avoid duplicate runs
+                await asyncio.sleep(3600)
+            else:
+                await asyncio.sleep(300)  # Check every 5 min
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"EOD cleanup error: {e}")
+            await asyncio.sleep(600)
+
+
 async def weekly_analysis_report():
     """Friday 5 PM IST: automated weekly analysis with recommendations."""
     await asyncio.sleep(900)
@@ -818,6 +864,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(news_alert_scanner()),
         asyncio.create_task(live_scanner()),
         asyncio.create_task(daily_stock_learner()),
+        asyncio.create_task(eod_cleanup_unresolved_trades()),
         asyncio.create_task(daily_telegram_report()),
         asyncio.create_task(weekly_analysis_report()),
         asyncio.create_task(trade_job_enqueuer()),
