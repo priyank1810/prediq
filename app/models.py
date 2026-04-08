@@ -135,6 +135,7 @@ class TradeSignalLog(Base):
     model_used = Column(String, nullable=True)  # "v1" or "v2" — which model was active
     regime = Column(String, nullable=True)
     volume_conviction = Column(String, nullable=True)
+    confidence_trend = Column(String, nullable=True)  # "rising", "falling", "stable"
 
     # Shadow tracking: store both V1 and V2 predictions for accuracy comparison
     v1_predicted_price = Column(Float, nullable=True)

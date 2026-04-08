@@ -136,6 +136,8 @@ def _migrate_db_sqlite(database_url: str):
         ("trade_signal_logs", "v2_direction", "TEXT"),
         # Timeframe checkpoint
         ("trade_signal_logs", "check_at", "TIMESTAMP"),
+        # Confidence trend tracking
+        ("trade_signal_logs", "confidence_trend", "TEXT"),
     ]
 
     for table, column, col_type in migrations:
@@ -205,6 +207,8 @@ def _migrate_db_postgres():
         ("trade_signal_logs", "v2_direction", "TEXT"),
         # Timeframe checkpoint
         ("trade_signal_logs", "check_at", "TIMESTAMP"),
+        # Confidence trend tracking
+        ("trade_signal_logs", "confidence_trend", "TEXT"),
     ]
 
     with engine.begin() as conn:
