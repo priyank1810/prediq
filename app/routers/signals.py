@@ -704,23 +704,54 @@ def ai_analysis():
             "created_at": r.created_at.isoformat() if r.created_at else None,
         } for r in sorted_by_pnl[-5:]]
 
-        # Daily P&L trend
-        daily_pnl = defaultdict(lambda: {"pnl": 0, "trades": 0, "wins": 0})
+        # Daily P&L trend with by-timeframe breakdown
+        def _day_stats():
+            return {
+                "pnl_sum": 0, "trades": 0, "wins": 0, "losses": 0,
+                "by_timeframe": defaultdict(lambda: {"total": 0, "wins": 0, "pnl_sum": 0}),
+            }
+        daily_pnl = defaultdict(_day_stats)
         for r in resolved:
             if r.created_at:
                 day = r.created_at.strftime("%Y-%m-%d")
-                daily_pnl[day]["trades"] += 1
-                if r.outcome_pct:
-                    daily_pnl[day]["pnl"] += r.outcome_pct
-                if r.status in ("target_hit", "correct"):
-                    daily_pnl[day]["wins"] += 1
+                d = daily_pnl[day]
+                d["trades"] += 1
+                pct = r.outcome_pct or 0
+                d["pnl_sum"] += pct
+                is_win = pct > 0
+                if is_win:
+                    d["wins"] += 1
+                elif pct < 0:
+                    d["losses"] += 1
+                tf = r.timeframe or "unknown"
+                d["by_timeframe"][tf]["total"] += 1
+                d["by_timeframe"][tf]["pnl_sum"] += pct
+                if is_win:
+                    d["by_timeframe"][tf]["wins"] += 1
 
-        daily_trend = [
-            {"date": d, "pnl": round(v["pnl"] / v["trades"], 2) if v["trades"] > 0 else 0,
-             "trades": v["trades"],
-             "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] > 0 else 0}
-            for d, v in sorted(daily_pnl.items())
-        ]
+        daily_trend = []
+        for day, v in sorted(daily_pnl.items()):
+            tf_stats = {
+                tf: {
+                    "total": s["total"],
+                    "wins": s["wins"],
+                    "win_rate": round(s["wins"] / s["total"] * 100, 1) if s["total"] > 0 else 0,
+                    "total_pnl": round(s["pnl_sum"], 2),
+                    "avg_pnl": round(s["pnl_sum"] / s["total"], 2) if s["total"] > 0 else 0,
+                }
+                for tf, s in v["by_timeframe"].items()
+            }
+            daily_trend.append({
+                "date": day,
+                "trades": v["trades"],
+                "wins": v["wins"],
+                "losses": v["losses"],
+                "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] > 0 else 0,
+                "total_pnl": round(v["pnl_sum"], 2),
+                "avg_pnl": round(v["pnl_sum"] / v["trades"], 2) if v["trades"] > 0 else 0,
+                "pnl": round(v["pnl_sum"] / v["trades"], 2) if v["trades"] > 0 else 0,  # backwards compat
+                "by_timeframe": tf_stats,
+            })
 
         return {
             "total": total,

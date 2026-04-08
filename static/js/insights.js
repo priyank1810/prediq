@@ -184,18 +184,45 @@ window.Insights = {
                 </div>
             </div>
 
-            <!-- Daily Trend -->
+            <!-- Daily Breakdown Table -->
             <div class="bg-dark-800 rounded-lg p-3 sm:p-4 mb-4">
-                <h3 class="text-sm font-semibold text-white mb-3">Daily P&L Trend</h3>
-                <div class="flex flex-wrap gap-1">
-                    ${(d.daily_trend || []).map(day => {
-                        const c = day.pnl >= 0 ? 'bg-green-900/50 text-green-400 border-green-800/50' : 'bg-red-900/50 text-red-400 border-red-800/50';
-                        return `<div class="rounded px-2 py-1 text-[10px] border ${c}">
-                            <div class="font-medium">${day.date.slice(5)}</div>
-                            <div>${pnlSign(day.pnl)}${day.pnl}%</div>
-                            <div class="text-[8px] opacity-70">${day.trades}t ${day.win_rate}%</div>
-                        </div>`;
-                    }).join('')}
+                <h3 class="text-sm font-semibold text-white mb-3">Day-by-Day Breakdown</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="text-gray-400 border-b border-gray-700">
+                                <th class="text-left py-2 px-2">Date</th>
+                                <th class="text-right py-2 px-2">Trades</th>
+                                <th class="text-right py-2 px-2">W / L</th>
+                                <th class="text-right py-2 px-2">Win Rate</th>
+                                <th class="text-right py-2 px-2">Total P&L</th>
+                                <th class="text-right py-2 px-2">Avg P&L</th>
+                                <th class="text-left py-2 px-2">By Timeframe</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(d.daily_trend || []).slice().reverse().map(day => {
+                                const totalPnl = day.total_pnl != null ? day.total_pnl : (day.pnl * day.trades);
+                                const avgPnl = day.avg_pnl != null ? day.avg_pnl : day.pnl;
+                                const pnlColor = totalPnl >= 0 ? 'text-green-400' : 'text-red-400';
+                                const wrColor = day.win_rate >= 60 ? 'text-green-400' : day.win_rate >= 40 ? 'text-yellow-400' : 'text-red-400';
+                                const tfBadges = Object.entries(day.by_timeframe || {}).map(([tf, s]) => {
+                                    const tfWr = s.win_rate;
+                                    const cls = tfWr >= 60 ? 'bg-green-900/40 text-green-400' : tfWr >= 40 ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400';
+                                    return `<span class="inline-block px-1.5 py-0.5 rounded ${cls} text-[10px] mr-1 mb-1" title="${tf}: ${s.wins}/${s.total} wins, ${s.total_pnl >= 0 ? '+' : ''}${s.total_pnl}%">${tfShort[tf] || tf}: ${s.wins}/${s.total} (${tfWr}%)</span>`;
+                                }).join('');
+                                return `<tr class="border-b border-gray-800/50 hover:bg-dark-700/30">
+                                    <td class="py-2 px-2 text-white font-medium">${day.date}</td>
+                                    <td class="py-2 px-2 text-right text-gray-300">${day.trades}</td>
+                                    <td class="py-2 px-2 text-right"><span class="text-green-400">${day.wins || 0}</span> / <span class="text-red-400">${day.losses || 0}</span></td>
+                                    <td class="py-2 px-2 text-right ${wrColor} font-bold">${day.win_rate}%</td>
+                                    <td class="py-2 px-2 text-right ${pnlColor} font-bold">${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}%</td>
+                                    <td class="py-2 px-2 text-right ${pnlColor}">${avgPnl >= 0 ? '+' : ''}${avgPnl}%</td>
+                                    <td class="py-2 px-2">${tfBadges}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
                 </div>
             </div>`;
 
