@@ -833,6 +833,14 @@
                         <option value="week">This Week</option>
                         <option value="month">This Month</option>
                     </select>
+                    <select id="vpFilterTimeframe" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._filterPortfolioTrades()">
+                        <option value="">All TFs</option>
+                        <option value="15m">15m</option>
+                        <option value="30m">30m</option>
+                        <option value="1h">1h</option>
+                        <option value="4h">4h</option>
+                        <option value="1d">1d</option>
+                    </select>
                     <select id="vpFilterResult" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._filterPortfolioTrades()">
                         <option value="">All Results</option>
                         <option value="win">Wins</option>

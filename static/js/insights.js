@@ -111,16 +111,61 @@ window.Insights = {
                 <div class="bg-dark-800 rounded-lg p-3 sm:p-4">
                     <h3 class="text-sm font-semibold text-white mb-3">By Confidence Level</h3>
                     ${(d.by_confidence || []).map(b => {
-                        const barWidth = Math.min(100, b.win_rate);
-                        const barColor = b.win_rate >= 60 ? 'bg-green-500' : b.win_rate >= 45 ? 'bg-yellow-500' : 'bg-red-500';
+                        const winW = Math.min(100, b.win_rate);
+                        const lossW = Math.min(100 - winW, b.loss_rate || 0);
                         return `<div class="mb-2">
                             <div class="flex justify-between text-xs mb-0.5">
                                 <span class="text-gray-400">${b.range} <span class="text-gray-600">(${b.total})</span></span>
-                                <span class="${wrColor(b.win_rate)} font-bold">${b.win_rate}%</span>
+                                <span>
+                                    <span class="text-green-400 font-bold">W ${b.win_rate}%</span>
+                                    <span class="text-gray-600 mx-1">/</span>
+                                    <span class="text-red-400 font-bold">L ${b.loss_rate ?? 0}%</span>
+                                </span>
                             </div>
-                            <div class="h-2 bg-dark-600 rounded-full"><div class="h-2 rounded-full ${barColor}" style="width:${barWidth}%"></div></div>
+                            <div class="h-2 bg-dark-600 rounded-full flex overflow-hidden">
+                                <div class="h-2 bg-green-500" style="width:${winW}%"></div>
+                                <div class="h-2 bg-red-500" style="width:${lossW}%"></div>
+                            </div>
                         </div>`;
                     }).join('')}
+                </div>
+
+                <!-- By Confidence × Timeframe -->
+                <div class="bg-dark-800 rounded-lg p-3 sm:p-4 sm:col-span-2">
+                    <h3 class="text-sm font-semibold text-white mb-3">By Confidence × Timeframe</h3>
+                    ${(() => {
+                        const tfMap = d.by_confidence_tf || {};
+                        const tfOrder = ['15m','30m','1h','4h','1d'];
+                        const tfs = tfOrder.filter(t => tfMap[t]);
+                        Object.keys(tfMap).forEach(t => { if (!tfs.includes(t)) tfs.push(t); });
+                        if (!tfs.length) return '<div class="text-xs text-gray-500">No data</div>';
+                        // Collect all ranges seen
+                        const rangeSet = new Set();
+                        tfs.forEach(t => tfMap[t].forEach(b => rangeSet.add(b.range)));
+                        const ranges = [...rangeSet].sort((a,b) => parseInt(a) - parseInt(b));
+                        const cell = (b) => b
+                            ? `<div class="text-[10px] leading-tight">
+                                   <div class="text-green-400 font-bold">W ${b.win_rate}%</div>
+                                   <div class="text-red-400 font-bold">L ${b.loss_rate ?? 0}%</div>
+                                   <div class="text-gray-600">n=${b.total}</div>
+                               </div>`
+                            : `<div class="text-[10px] text-gray-700">—</div>`;
+                        return `<div class="overflow-x-auto"><table class="w-full text-xs">
+                            <thead><tr class="text-gray-500 border-b border-dark-600">
+                                <th class="text-left py-1 pr-2">Confidence</th>
+                                ${tfs.map(t => `<th class="text-center py-1 px-2">${t}</th>`).join('')}
+                            </tr></thead>
+                            <tbody>
+                                ${ranges.map(rg => `<tr class="border-b border-dark-700">
+                                    <td class="py-1 pr-2 text-gray-400">${rg}</td>
+                                    ${tfs.map(t => {
+                                        const b = (tfMap[t] || []).find(x => x.range === rg);
+                                        return `<td class="text-center py-1 px-2">${cell(b)}</td>`;
+                                    }).join('')}
+                                </tr>`).join('')}
+                            </tbody>
+                        </table></div>`;
+                    })()}
                 </div>
 
                 <!-- By Time of Day -->
@@ -575,6 +620,7 @@ window.Insights = {
         const sortBy = document.getElementById('vpSortBy')?.value || 'date_desc';
         const symbolFilter = (document.getElementById('vpFilterSymbol')?.value || '').toUpperCase();
         const dateFilter = document.getElementById('vpFilterDate')?.value || '';
+        const tfFilter = document.getElementById('vpFilterTimeframe')?.value || '';
 
         const now = new Date();
         const istOffset = 5.5 * 60 * 60000;
@@ -589,6 +635,7 @@ window.Insights = {
         const monthStr = todayStr.slice(0, 7);
 
         let filtered = trades.filter(t => {
+            if (tfFilter && t.timeframe !== tfFilter) return false;
             if (resultFilter === 'win' && !(t.pnl > 0)) return false;
             if (resultFilter === 'loss' && !(t.pnl < 0)) return false;
             if (symbolFilter && !t.symbol.includes(symbolFilter)) return false;

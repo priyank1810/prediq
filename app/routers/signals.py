@@ -633,19 +633,36 @@ def ai_analysis():
                 "sl_hits": sum(1 for r in tf_trades if r.status == "sl_hit"),
             }
 
-        # By confidence bucket
-        by_confidence = []
-        for lo, hi in [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100)]:
-            bucket = [r for r in resolved if r.confidence and lo <= r.confidence < hi]
-            if bucket:
-                b_wins = sum(1 for r in bucket if r.status in ("target_hit", "correct"))
-                b_pnls = [r.outcome_pct for r in bucket if r.outcome_pct]
-                by_confidence.append({
-                    "range": f"{lo}-{hi}%",
-                    "total": len(bucket),
-                    "win_rate": round(b_wins / len(bucket) * 100, 1),
-                    "avg_pnl": round(sum(b_pnls) / len(b_pnls), 2) if b_pnls else 0,
-                })
+        # By confidence bucket (5% increments)
+        def _conf_buckets(rows):
+            out = []
+            for lo in range(0, 100, 5):
+                hi = lo + 5
+                bucket = [r for r in rows if r.confidence and lo <= r.confidence < hi]
+                if bucket:
+                    b_wins = sum(1 for r in bucket if r.status in ("target_hit", "correct"))
+                    b_losses = sum(1 for r in bucket if r.status in ("sl_hit", "wrong"))
+                    b_pnls = [r.outcome_pct for r in bucket if r.outcome_pct]
+                    out.append({
+                        "range": f"{lo}-{hi}%",
+                        "total": len(bucket),
+                        "wins": b_wins,
+                        "losses": b_losses,
+                        "win_rate": round(b_wins / len(bucket) * 100, 1),
+                        "loss_rate": round(b_losses / len(bucket) * 100, 1),
+                        "avg_pnl": round(sum(b_pnls) / len(b_pnls), 2) if b_pnls else 0,
+                    })
+            return out
+
+        by_confidence = _conf_buckets(resolved)
+
+        # By confidence × timeframe
+        by_confidence_tf = {}
+        for tf in set(r.timeframe for r in resolved if r.timeframe):
+            tf_rows = [r for r in resolved if r.timeframe == tf]
+            buckets = _conf_buckets(tf_rows)
+            if buckets:
+                by_confidence_tf[tf] = buckets
 
         # By time of day
         by_hour = []
@@ -763,6 +780,7 @@ def ai_analysis():
             "by_direction": by_direction,
             "by_timeframe": by_timeframe,
             "by_confidence": by_confidence,
+            "by_confidence_tf": by_confidence_tf,
             "by_hour": by_hour,
             "by_stock": by_stock,
             "prediction_error": {
