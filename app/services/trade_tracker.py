@@ -48,6 +48,11 @@ SL_COOLDOWN_MINUTES = 120
 # Market regime: suppress bullish signals if NIFTY is down more than this %
 MARKET_DOWN_THRESHOLD_PCT = -1.0
 
+# Auto-blacklist: stocks with <50% win rate over 30+ resolved trades
+BLACKLIST_MIN_TRADES = 30
+BLACKLIST_WIN_RATE_PCT = 50.0
+BLACKLIST_REFRESH_SECONDS = 1800  # rebuild cache every 30 min
+
 
 class TradeTracker:
     """Tracks trade signal predictions and validates outcomes."""
@@ -74,6 +79,39 @@ class TradeTracker:
         self._daily_loss_breaker = False  # circuit breaker for the day
         self._breaker_date = None  # date when breaker was last set
         self._market_regime_cache = None  # (timestamp, nifty_change_pct)
+        self._blacklist_cache = None  # (timestamp, set of blacklisted symbols)
+
+    def _get_blacklisted_symbols(self, db) -> set:
+        """Return set of symbols with <50% win rate over 30+ resolved trades.
+        Cached for 30 min to avoid running this query on every signal log."""
+        import time
+        if self._blacklist_cache:
+            ts, symbols = self._blacklist_cache
+            if time.time() - ts < BLACKLIST_REFRESH_SECONDS:
+                return symbols
+        try:
+            from collections import defaultdict
+            stats = defaultdict(lambda: {"total": 0, "wins": 0})
+            resolved = db.query(
+                TradeSignalLog.symbol, TradeSignalLog.outcome_pct
+            ).filter(TradeSignalLog.status != "open").all()
+            for sym, pct in resolved:
+                stats[sym]["total"] += 1
+                if (pct or 0) > 0:
+                    stats[sym]["wins"] += 1
+            blacklist = set()
+            for sym, s in stats.items():
+                if s["total"] >= BLACKLIST_MIN_TRADES:
+                    wr = s["wins"] / s["total"] * 100
+                    if wr < BLACKLIST_WIN_RATE_PCT:
+                        blacklist.add(sym)
+            self._blacklist_cache = (time.time(), blacklist)
+            if blacklist:
+                logger.info(f"Auto-blacklist refreshed: {len(blacklist)} stocks excluded ({sorted(blacklist)[:5]}...)")
+            return blacklist
+        except Exception as e:
+            logger.debug(f"Blacklist computation failed: {e}")
+            return self._blacklist_cache[1] if self._blacklist_cache else set()
 
 
     def _load_open_trades_cache(self):
@@ -458,6 +496,12 @@ class TradeTracker:
 
         db = SessionLocal()
         try:
+            # Auto-blacklist: skip stocks with poor historical win rate
+            blacklist = self._get_blacklisted_symbols(db)
+            if symbol in blacklist:
+                logger.debug(f"Skipped {symbol}: auto-blacklisted (<{BLACKLIST_WIN_RATE_PCT}% win rate over {BLACKLIST_MIN_TRADES}+ trades)")
+                return
+
             # Daily loss circuit breaker
             if self._check_daily_loss_limit(db):
                 return
