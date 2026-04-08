@@ -464,6 +464,11 @@ class TradeTracker:
         if (signal_data.get("confidence") or 0) < 45:
             return
 
+        # Skip signals where AI confidence is falling — model is losing conviction
+        if signal_data.get("confidence_trend") == "falling":
+            logger.debug(f"Skipped {symbol} {timeframe}: confidence trend falling")
+            return
+
         # Don't log signals near market close — not enough time to play out
         current = now_ist().replace(tzinfo=None)
         market_close_hour, market_close_min = 15, 10
