@@ -764,23 +764,32 @@ class SignalService:
             "short_4h": short_4h,
         }
 
+        # Multi-timeframe agreement: require 2+ bullish timeframes before logging.
+        # Single-timeframe signals are noisy; agreement across timeframes is the
+        # single biggest accuracy filter.
+        bullish_count = sum(
+            1 for s in all_signals.values()
+            if s and s.get("direction") == "BULLISH"
+        )
+
         # Log trade predictions for tracking (best signal per group)
         # Use live LTP as entry price (candle close can lag behind actual market price)
-        try:
-            from app.services.trade_tracker import trade_tracker
-            live_price = current_price
+        if bullish_count >= 2:
             try:
-                quotes = data_fetcher.get_bulk_quotes([symbol])
-                if quotes:
-                    q = quotes[0] if isinstance(quotes, list) else quotes.get(symbol, {})
-                    if q.get("ltp"):
-                        live_price = round(float(q["ltp"]), 2)
-            except Exception:
-                pass  # Fall back to candle close
-            for tf_key, tf_signal in all_signals.items():
-                trade_tracker.log_signal(symbol, tf_key, tf_signal, live_price)
-        except Exception as e:
-            logger.debug(f"Trade logging failed: {e}")
+                from app.services.trade_tracker import trade_tracker
+                live_price = current_price
+                try:
+                    quotes = data_fetcher.get_bulk_quotes([symbol])
+                    if quotes:
+                        q = quotes[0] if isinstance(quotes, list) else quotes.get(symbol, {})
+                        if q.get("ltp"):
+                            live_price = round(float(q["ltp"]), 2)
+                except Exception:
+                    pass  # Fall back to candle close
+                for tf_key, tf_signal in all_signals.items():
+                    trade_tracker.log_signal(symbol, tf_key, tf_signal, live_price)
+            except Exception as e:
+                logger.debug(f"Trade logging failed: {e}")
 
         return {
             "symbol": symbol,

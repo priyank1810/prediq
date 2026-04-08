@@ -136,19 +136,19 @@ class Worker:
                     pass
 
                 all_sigs = list(intraday.values()) + list(short_term.values())
-                for sig in all_sigs:
-                    if sig and sig.get("direction") == "BULLISH":
-                        watchlist_bullish += 1
+                bullish_count = sum(1 for sig in all_sigs if sig and sig.get("direction") == "BULLISH")
+                watchlist_bullish += bullish_count
 
-                # Log all non-neutral watchlist signals
-                if scan_type in ("intraday", "full"):
-                    for tf_key, sig in intraday.items():
-                        if sig and sig.get("direction") != "NEUTRAL":
-                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
-                if scan_type in ("short", "full"):
-                    for tf_key, sig in short_term.items():
-                        if sig and sig.get("direction") != "NEUTRAL":
-                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
+                # Multi-timeframe agreement: require 2+ bullish timeframes
+                if bullish_count >= 2:
+                    if scan_type in ("intraday", "full"):
+                        for tf_key, sig in intraday.items():
+                            if sig and sig.get("direction") == "BULLISH":
+                                trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
+                    if scan_type in ("short", "full"):
+                        for tf_key, sig in short_term.items():
+                            if sig and sig.get("direction") == "BULLISH":
+                                trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
 
                 logged += 1
             except Exception as e:
@@ -193,17 +193,19 @@ class Worker:
                             "label": sig.get("label", ""),
                         })
 
-                # Popular stocks: only log BULLISH signals (long-only portfolio)
-                if scan_type in ("intraday", "full"):
-                    for tf_key, sig in intraday.items():
-                        if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
-                            trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
-                            popular_logged += 1
-                if scan_type in ("short", "full"):
-                    for tf_key, sig in short_term.items():
-                        if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
-                            trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
-                            popular_logged += 1
+                # Multi-timeframe agreement: require 2+ bullish timeframes (long-only)
+                bullish_count = sum(1 for sig in all_sigs if sig and sig.get("direction") == "BULLISH")
+                if bullish_count >= 2:
+                    if scan_type in ("intraday", "full"):
+                        for tf_key, sig in intraday.items():
+                            if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
+                                trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
+                                popular_logged += 1
+                    if scan_type in ("short", "full"):
+                        for tf_key, sig in short_term.items():
+                            if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
+                                trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
+                                popular_logged += 1
 
                 logged += 1
             except Exception as e:
