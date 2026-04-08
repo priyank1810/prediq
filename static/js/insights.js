@@ -809,8 +809,8 @@ window.Insights = {
 
     _renderEquityCurve(curve) {
         const container = document.getElementById('vpEquityChart');
-        if (!container || !curve || curve.length < 2) {
-            container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs">Not enough data for equity curve</div>';
+        if (!container || !curve || curve.length < 1) {
+            if (container) container.innerHTML = '<div class="text-center py-8 text-gray-500 text-xs">Not enough data for equity curve</div>';
             return;
         }
 
@@ -833,11 +833,26 @@ window.Insights = {
                 priceFormat: { type: 'custom', formatter: (p) => '₹' + p.toFixed(0) },
             });
 
-            // Convert dates to timestamps
-            const data = curve.filter(p => p.date && p.date !== 'start').map(p => ({
-                time: p.date,
-                value: p.value,
-            }));
+            // Dedupe by date, keeping last value (end-of-day equity).
+            // LightweightCharts requires unique ascending time values.
+            const startPoint = curve.find(p => p.date === 'start');
+            const startValue = startPoint ? startPoint.value : (curve[0]?.value || 100000);
+            const byDate = new Map();
+            for (const p of curve) {
+                if (!p.date || p.date === 'start') continue;
+                byDate.set(p.date, p.value);
+            }
+            const data = Array.from(byDate.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([date, value]) => ({ time: date, value }));
+
+            // If only one day of data, prepend a "yesterday" baseline so the line is visible
+            if (data.length === 1) {
+                const d = new Date(data[0].time);
+                d.setDate(d.getDate() - 1);
+                const prevDate = d.toISOString().slice(0, 10);
+                data.unshift({ time: prevDate, value: startValue });
+            }
 
             if (data.length > 0) {
                 lineSeries.setData(data);
