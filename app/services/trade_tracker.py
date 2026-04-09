@@ -57,14 +57,41 @@ BLACKLIST_REFRESH_SECONDS = 1800  # rebuild cache every 30 min
 class TradeTracker:
     """Tracks trade signal predictions and validates outcomes."""
 
-    def _check_signal_still_valid(self, symbol: str, direction: str) -> bool:
+    def _check_signal_still_valid(self, symbol: str, direction: str, timeframe: str = None) -> bool:
         """Re-evaluate AI signal at checkpoint time.
-        Returns True if AI still agrees with the trade direction."""
+        Returns True if AI still agrees with the trade direction.
+
+        If `timeframe` is provided, checks ONLY that specific timeframe (e.g.
+        "intraday_15m"). Each trade's checkpoint must evaluate its own
+        timeframe — otherwise a still-bullish 30m signal would wrongly keep a
+        15m trade open (and vice versa).
+
+        If `timeframe` is not provided, falls back to "any bullish" mode for
+        backwards compatibility with the old trailing-SL smart exit path.
+        """
         try:
             from app.services.signal_service import signal_service
             mtf = signal_service.get_multi_timeframe_signals(symbol)
             if not mtf:
                 return False
+
+            # Map TradeSignalLog timeframe (e.g. "intraday_15m") to MTF structure key
+            # MTF returns: {"intraday": {"15m": {...}, "30m": {...}}, "short_term": {"1h": {...}, "4h": {...}}}
+            if timeframe:
+                tf_map = {
+                    "intraday_15m": ("intraday", "15m"),
+                    "intraday_30m": ("intraday", "30m"),
+                    "short_1h": ("short_term", "1h"),
+                    "short_4h": ("short_term", "4h"),
+                }
+                if timeframe in tf_map:
+                    group_key, sub_key = tf_map[timeframe]
+                    tf_sig = mtf.get(group_key, {}).get(sub_key)
+                    if tf_sig and tf_sig.get("direction") == direction:
+                        return True
+                    return False
+
+            # Fallback: any timeframe still bullish (for non-checkpoint callers)
             for group in (mtf.get("intraday", {}), mtf.get("short_term", {})):
                 for tf_sig in group.values():
                     if tf_sig and tf_sig.get("direction") == direction:
@@ -226,11 +253,11 @@ class TradeTracker:
                     target_move = (target - entry) if target and entry else 0
                     achieved = (ltp - entry) if entry else 0
                     hit_half_target = target_move > 0 and achieved >= target_move * 0.5
-                    still_valid = self._check_signal_still_valid(symbol, "BULLISH")
+                    still_valid = self._check_signal_still_valid(symbol, "BULLISH", trade.get("timeframe"))
                     if still_valid and hit_half_target:
                         # AI agrees but already captured 50%+ of target — book profit
                         status = "target_hit"
-                        logger.info(f"Checkpoint {symbol}: AI BULLISH + {outcome_pct:+.2f}% (>=50% target) — booking profit")
+                        logger.info(f"Checkpoint {symbol} {trade.get('timeframe')}: AI BULLISH + {outcome_pct:+.2f}% (>=50% target) — booking profit")
                     elif still_valid:
                         # AI agrees, not yet at 50% — continue to target/SL/expiry
                         trade["check_at"] = None
@@ -262,10 +289,10 @@ class TradeTracker:
                     target_move = (bear_entry - bear_target) if bear_entry and bear_target else 0
                     achieved = (bear_entry - ltp) if bear_entry else 0
                     hit_half_target = target_move > 0 and achieved >= target_move * 0.5
-                    still_valid = self._check_signal_still_valid(symbol, "BEARISH")
+                    still_valid = self._check_signal_still_valid(symbol, "BEARISH", trade.get("timeframe"))
                     if still_valid and hit_half_target:
                         status = "target_hit"
-                        logger.info(f"Checkpoint {symbol}: AI BEARISH + {outcome_pct:+.2f}% (>=50% target) — booking profit")
+                        logger.info(f"Checkpoint {symbol} {trade.get('timeframe')}: AI BEARISH + {outcome_pct:+.2f}% (>=50% target) — booking profit")
                     elif still_valid:
                         trade["check_at"] = None
                         trade["_check_at_cleared"] = True
@@ -652,7 +679,7 @@ class TradeTracker:
                         target_move = (sig.target - sig.entry) if sig.target and sig.entry else 0
                         achieved = (ltp - sig.entry) if sig.entry else 0
                         hit_half_target = target_move > 0 and achieved >= target_move * 0.5
-                        still_valid = self._check_signal_still_valid(sig.symbol, "BULLISH")
+                        still_valid = self._check_signal_still_valid(sig.symbol, "BULLISH", sig.timeframe)
                         if still_valid and hit_half_target:
                             # AI agrees + already captured 50%+ of target — book profit
                             sig.status = "target_hit"
@@ -660,7 +687,7 @@ class TradeTracker:
                             sig.outcome_pct = pct
                             sig.resolved_at = now
                             resolved += 1
-                            logger.info(f"Checkpoint {sig.symbol}: AI BULLISH + {pct:+.2f}% (>=50% target) — booking profit")
+                            logger.info(f"Checkpoint {sig.symbol} {sig.timeframe}: AI BULLISH + {pct:+.2f}% (>=50% target) — booking profit")
                         elif still_valid:
                             sig.check_at = None  # AI agrees, < 50% — continue
                             logger.info(f"Checkpoint {sig.symbol}: AI still BULLISH ({pct:+.2f}%) — continuing")
@@ -700,14 +727,14 @@ class TradeTracker:
                         target_move = (sig.entry - sig.target) if sig.entry and sig.target else 0
                         achieved = (sig.entry - ltp) if sig.entry else 0
                         hit_half_target = target_move > 0 and achieved >= target_move * 0.5
-                        still_valid = self._check_signal_still_valid(sig.symbol, "BEARISH")
+                        still_valid = self._check_signal_still_valid(sig.symbol, "BEARISH", sig.timeframe)
                         if still_valid and hit_half_target:
                             sig.status = "target_hit"
                             sig.outcome_price = ltp
                             sig.outcome_pct = pct
                             sig.resolved_at = now
                             resolved += 1
-                            logger.info(f"Checkpoint {sig.symbol}: AI BEARISH + {pct:+.2f}% (>=50% target) — booking profit")
+                            logger.info(f"Checkpoint {sig.symbol} {sig.timeframe}: AI BEARISH + {pct:+.2f}% (>=50% target) — booking profit")
                         elif still_valid:
                             sig.check_at = None
                             logger.info(f"Checkpoint {sig.symbol}: AI still BEARISH ({pct:+.2f}%) — continuing")
