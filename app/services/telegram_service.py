@@ -68,26 +68,51 @@ async def send_message(chat_id: str, text: str, parse_mode: str = "HTML") -> boo
 
 
 async def send_signal_alert(chat_id: str, signal_data: dict) -> bool:
-    """Send a formatted signal alert."""
+    """Send a formatted signal alert with full signal details."""
     symbol = signal_data.get("symbol", "?")
     direction = signal_data.get("direction", "?")
     confidence = signal_data.get("confidence", 0)
-    price = signal_data.get("price_at_signal") or signal_data.get("ltp", "N/A")
-    entry = signal_data.get("entry", price)
-    stop_loss = signal_data.get("stop_loss", "N/A")
-    target = signal_data.get("target", "N/A")
+    entry = signal_data.get("entry") or signal_data.get("price_at_signal") or signal_data.get("ltp", "N/A")
+    stop_loss = signal_data.get("stop_loss")
+    target = signal_data.get("target")
+    timeframe = signal_data.get("timeframe")
+    regime = signal_data.get("regime")
+    volume_conviction = signal_data.get("volume_conviction")
+    confidence_trend = signal_data.get("confidence_trend")
+    model_confidence = signal_data.get("model_confidence")
+    risk_reward = signal_data.get("risk_reward")
 
     arrow = "\u2b06\ufe0f" if direction.upper() == "BULLISH" else "\u2b07\ufe0f" if direction.upper() == "BEARISH" else "\u27a1\ufe0f"
 
-    text = (
-        f"{arrow} <b>Signal Alert: {symbol}</b>\n\n"
-        f"Direction: <b>{direction}</b>\n"
-        f"Confidence: <b>{confidence:.0f}%</b>\n"
-        f"Price: {entry}\n"
-        f"Stop Loss: {stop_loss}\n"
-        f"Target: {target}"
-    )
-    return await send_message(chat_id, text)
+    lines = [
+        f"{arrow} <b>Signal: {symbol}</b>",
+        "",
+        f"Direction: <b>{direction}</b>",
+        f"Confidence: <b>{confidence:.0f}%</b>",
+        f"Entry: \u20b9{entry}",
+    ]
+    if stop_loss is not None:
+        lines.append(f"Stop Loss: \u20b9{stop_loss}")
+    if target is not None:
+        lines.append(f"Target: \u20b9{target}")
+    if risk_reward is not None:
+        lines.append(f"Risk/Reward: {risk_reward:.2f}")
+
+    extras = []
+    if timeframe:
+        extras.append(f"TF: {timeframe}")
+    if regime:
+        extras.append(f"Regime: {regime}")
+    if volume_conviction:
+        extras.append(f"Volume: {volume_conviction}")
+    if confidence_trend:
+        extras.append(f"Trend: {confidence_trend}")
+    if model_confidence is not None:
+        extras.append(f"Model: {model_confidence:.0f}%")
+    if extras:
+        lines.append(" | ".join(extras))
+
+    return await send_message(chat_id, "\n".join(lines))
 
 
 async def send_price_alert(chat_id: str, alert_data: dict) -> bool:
