@@ -46,6 +46,23 @@ Base.metadata.create_all(bind=engine)
 from app.services.job_service import job_service
 from app.database import SessionLocal
 
+
+def _fire_telegram_signal(signal_data: dict) -> None:
+    """Fire-and-forget: broadcast a signal alert to Telegram subscribers.
+
+    Runs in a daemon thread because the worker is synchronous — there is no
+    running event loop to schedule coroutines onto.
+    """
+    import asyncio as _asyncio
+    import threading as _threading
+    from app.services.telegram_service import broadcast_to_subscribers, send_signal_alert
+
+    def _run():
+        _asyncio.run(broadcast_to_subscribers("signals", send_signal_alert, signal_data))
+
+    _threading.Thread(target=_run, daemon=True).start()
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -145,10 +162,14 @@ class Worker:
                         for tf_key, sig in intraday.items():
                             if sig and sig.get("direction") == "BULLISH":
                                 trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
+                                if (sig.get("confidence") or 0) >= 50:
+                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"intraday_{tf_key}"})
                     if scan_type in ("short", "full"):
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH":
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
+                                if (sig.get("confidence") or 0) >= 50:
+                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"short_{tf_key}"})
 
                 logged += 1
             except Exception as e:
@@ -201,11 +222,15 @@ class Worker:
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
                                 trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
                                 popular_logged += 1
+                                if (sig.get("confidence") or 0) >= 50:
+                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"intraday_{tf_key}"})
                     if scan_type in ("short", "full"):
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
                                 popular_logged += 1
+                                if (sig.get("confidence") or 0) >= 50:
+                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"short_{tf_key}"})
 
                 logged += 1
             except Exception as e:
