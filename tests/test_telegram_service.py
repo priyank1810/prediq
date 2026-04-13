@@ -43,6 +43,7 @@ async def test_send_signal_alert_full_fields():
         assert "high" in text.lower()
         assert "rising" in text.lower()
         assert "1.83" in text
+        assert "68" in text  # model_confidence
 
 
 @pytest.mark.asyncio
