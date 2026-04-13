@@ -17,6 +17,7 @@ import time
 import signal
 import logging
 import argparse
+import asyncio
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -53,14 +54,12 @@ def _fire_telegram_signal(signal_data: dict) -> None:
     Runs in a daemon thread because the worker is synchronous — there is no
     running event loop to schedule coroutines onto.
     """
-    import asyncio as _asyncio
-    import threading as _threading
     from app.services.telegram_service import broadcast_to_subscribers, send_signal_alert
 
     def _run():
-        _asyncio.run(broadcast_to_subscribers("signals", send_signal_alert, signal_data))
+        asyncio.run(broadcast_to_subscribers("signals", send_signal_alert, signal_data))
 
-    _threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -162,12 +161,14 @@ class Worker:
                         for tf_key, sig in intraday.items():
                             if sig and sig.get("direction") == "BULLISH":
                                 trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
+                                # DB bar is adaptive (45 in all-bearish markets); Telegram bar is always 50
                                 if (sig.get("confidence") or 0) >= 50:
                                     _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"intraday_{tf_key}"})
                     if scan_type in ("short", "full"):
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH":
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
+                                # DB bar is adaptive (45 in all-bearish markets); Telegram bar is always 50
                                 if (sig.get("confidence") or 0) >= 50:
                                     _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"short_{tf_key}"})
 
@@ -222,6 +223,7 @@ class Worker:
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
                                 trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
                                 popular_logged += 1
+                                # DB bar is adaptive (45 in all-bearish markets); Telegram bar is always 50
                                 if (sig.get("confidence") or 0) >= 50:
                                     _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"intraday_{tf_key}"})
                     if scan_type in ("short", "full"):
@@ -229,6 +231,7 @@ class Worker:
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
                                 popular_logged += 1
+                                # DB bar is adaptive (45 in all-bearish markets); Telegram bar is always 50
                                 if (sig.get("confidence") or 0) >= 50:
                                     _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"short_{tf_key}"})
 
