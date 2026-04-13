@@ -76,3 +76,13 @@ async def test_send_signal_alert_bearish_arrow():
         await send_signal_alert("12345", _make_signal(direction="BEARISH"))
         text = mock_send.call_args[0][1]
         assert "⬇" in text
+
+
+@pytest.mark.asyncio
+async def test_send_signal_alert_none_direction_no_crash():
+    """direction=None should not crash."""
+    with patch("app.services.telegram_service.send_message", new_callable=AsyncMock) as mock_send:
+        mock_send.return_value = True
+        from app.services.telegram_service import send_signal_alert
+        await send_signal_alert("12345", {"symbol": "TCS", "direction": None, "confidence": None})
+        mock_send.assert_called_once()

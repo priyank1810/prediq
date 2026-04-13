@@ -70,8 +70,8 @@ async def send_message(chat_id: str, text: str, parse_mode: str = "HTML") -> boo
 async def send_signal_alert(chat_id: str, signal_data: dict) -> bool:
     """Send a formatted signal alert with full signal details."""
     symbol = signal_data.get("symbol", "?")
-    direction = signal_data.get("direction", "?")
-    confidence = signal_data.get("confidence", 0)
+    direction = signal_data.get("direction") or "?"
+    confidence = signal_data.get("confidence") or 0
     entry = signal_data.get("entry") or signal_data.get("price_at_signal") or signal_data.get("ltp", "N/A")
     stop_loss = signal_data.get("stop_loss")
     target = signal_data.get("target")
