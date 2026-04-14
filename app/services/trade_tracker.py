@@ -526,6 +526,16 @@ class TradeTracker:
         # Use actual market price as entry (what you'd really pay)
         entry = round(current_price, 2)
 
+        # Rebase target/SL relative to live entry price.
+        # signal_service computes target/SL from candle close; if live LTP has
+        # drifted, the levels would be misaligned. Shift by the same delta.
+        candle_price = signal_data.get("entry")  # support level used as candle reference
+        if candle_price and candle_price > 0 and abs(entry - candle_price) > 0.01:
+            shift = entry - candle_price
+            target = round(target + shift, 2)
+            if stop_loss is not None:
+                stop_loss = round(stop_loss + shift, 2)
+
         db = SessionLocal()
         try:
             # Auto-blacklist: skip stocks with poor historical win rate
