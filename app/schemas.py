@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import date, datetime
 from typing import Optional
 
@@ -54,6 +54,8 @@ class PortfolioHoldingCreate(BaseModel):
 
 
 class PortfolioHoldingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     symbol: str
     exchange: str
@@ -64,9 +66,6 @@ class PortfolioHoldingResponse(BaseModel):
     current_price: Optional[float] = None
     pnl: Optional[float] = None
     pnl_pct: Optional[float] = None
-
-    class Config:
-        from_attributes = True
 
 
 class PortfolioSummary(BaseModel):
@@ -113,6 +112,8 @@ class PriceAlertCreate(BaseModel):
 
 
 class PriceAlertResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     symbol: str
     target_price: float
@@ -120,9 +121,6 @@ class PriceAlertResponse(BaseModel):
     is_triggered: bool
     triggered_at: Optional[datetime]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # --- Prediction Schemas ---
@@ -210,13 +208,12 @@ class WatchlistItemCreate(BaseModel):
 
 
 class WatchlistItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     symbol: str
     item_type: str
     added_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # --- Auth Schemas ---
@@ -227,15 +224,14 @@ class UserCreate(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: str
     role: str
     is_active: bool
     api_key: Optional[str] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class Token(BaseModel):
@@ -267,6 +263,8 @@ class SmartAlertCreate(BaseModel):
 
 
 class SmartAlertResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     symbol: Optional[str]
     alert_type: str
@@ -275,9 +273,6 @@ class SmartAlertResponse(BaseModel):
     triggered_at: Optional[datetime]
     trigger_data: Optional[str]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # --- Chart Pattern Schemas ---
@@ -360,6 +355,8 @@ class StrategyCreate(BaseModel):
 
 
 class OrderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     symbol: str
@@ -377,6 +374,3 @@ class OrderResponse(BaseModel):
     executed_at: Optional[datetime]
     notes: Optional[str]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
