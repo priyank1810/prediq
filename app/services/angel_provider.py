@@ -141,6 +141,10 @@ class AngelOneProvider:
     _MAX_RETRIES = 2
     _BACKOFF_DURATION = 15.0  # global cooldown (seconds) after a 429
 
+    # Exponential backoff caps for failed logins (seconds)
+    _LOGIN_BACKOFF_INIT = 30.0
+    _LOGIN_BACKOFF_MAX = 600.0  # 10 min max
+
     def __init__(self):
         self._client = None
         self._session_data = None
@@ -150,6 +154,8 @@ class AngelOneProvider:
         self._last_api_call = 0.0
         self._rate_lock = Lock()
         self._backoff_until = 0.0  # global backoff timestamp
+        self._login_fail_until = 0.0  # don't retry login before this
+        self._login_fail_backoff = self._LOGIN_BACKOFF_INIT
 
         # Read credentials from env
         self.api_key = os.getenv("ANGEL_API_KEY", "").strip()
@@ -201,6 +207,10 @@ class AngelOneProvider:
                     and (time.time() - self._login_time) < 18000):
                 return True
 
+            # Don't hammer Angel One after a failed login — wait out backoff
+            if time.time() < self._login_fail_until:
+                return False
+
             try:
                 from SmartApi import SmartConnect
 
@@ -216,16 +226,22 @@ class AngelOneProvider:
                 if not session_data or session_data.get("status") is False:
                     error_msg = session_data.get("message", "Unknown error") if session_data else "No response"
                     logger.error(f"Angel One login failed: {error_msg}")
+                    self._login_fail_until = time.time() + self._login_fail_backoff
+                    self._login_fail_backoff = min(self._login_fail_backoff * 2, self._LOGIN_BACKOFF_MAX)
                     return False
 
                 self._client = client
                 self._session_data = session_data
                 self._login_time = time.time()
+                self._login_fail_backoff = self._LOGIN_BACKOFF_INIT  # reset on success
+                self._login_fail_until = 0.0
                 logger.info(f"Angel One session established for {self.client_id}")
                 return True
 
             except Exception as e:
                 logger.error(f"Angel One login error: {e}")
+                self._login_fail_until = time.time() + self._login_fail_backoff
+                self._login_fail_backoff = min(self._login_fail_backoff * 2, self._LOGIN_BACKOFF_MAX)
                 return False
 
     def _lookup_token(self, symbol: str) -> dict | None:
