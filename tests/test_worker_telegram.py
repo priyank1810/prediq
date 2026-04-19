@@ -74,12 +74,12 @@ def test_scan_fires_telegram_for_bullish_above_threshold():
     worker._signal_service = None
 
     mock_signal = _make_sig(confidence=65, direction="BULLISH")
-    # Telegram fires only for short_4h with confidence >= 45.
+    # Telegram fires only when BOTH 1h and 4h are BULLISH >= 45%.
     # bullish_count >= 2 requires signals across intraday + short_term combined.
     mtf_result = {
         "current_price": 100.0,
         "intraday": {"30m": mock_signal},
-        "short_term": {"4h": mock_signal},
+        "short_term": {"1h": mock_signal, "4h": mock_signal},
     }
 
     fired = []

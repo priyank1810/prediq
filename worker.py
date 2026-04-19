@@ -48,7 +48,7 @@ from app.services.job_service import job_service
 from app.database import SessionLocal
 
 
-def _mins_to_candle_close(timeframe: str) -> int | None:
+def _mins_to_candle_close(timeframe: str) -> "int | None":
     """Return minutes remaining until the current candle closes (IST).
 
     NSE market: 9:15–15:30 IST.
@@ -147,6 +147,25 @@ class Worker:
 
         # Combine: watchlist + popular stocks not already in watchlist
         popular_extra = [s for s in POPULAR_STOCKS if s not in watchlist]
+
+        # Filter popular stocks by liquidity — skip stocks with avg daily volume < 500k
+        # (watchlist stocks are always scanned regardless of volume)
+        MIN_AVG_VOLUME = 500_000
+        if popular_extra:
+            try:
+                vol_quotes = data_fetcher.get_bulk_quotes(popular_extra)
+                vol_map = {}
+                for q in (vol_quotes if isinstance(vol_quotes, list) else []):
+                    if q.get("symbol") and q.get("avg_volume"):
+                        vol_map[q["symbol"]] = q["avg_volume"]
+                liquid = [s for s in popular_extra if vol_map.get(s, MIN_AVG_VOLUME) >= MIN_AVG_VOLUME]
+                skipped = len(popular_extra) - len(liquid)
+                if skipped:
+                    log.info("Volume filter: skipped %d illiquid stocks (avg_vol < %d)", skipped, MIN_AVG_VOLUME)
+                popular_extra = liquid
+            except Exception as e:
+                log.warning("Volume filter failed, scanning all popular stocks: %s", e)
+
         all_symbols = list(watchlist) + popular_extra
 
         if not all_symbols:
