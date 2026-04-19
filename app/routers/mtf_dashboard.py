@@ -1,6 +1,6 @@
 """Multi-Timeframe Signal Dashboard API.
 
-Returns technical signals across 15m, 1h, 4h, and 1D timeframes
+Returns technical signals across 1h, 4h, and 1D timeframes
 for a given symbol, with per-timeframe indicators and an overall consensus.
 """
 
@@ -24,7 +24,6 @@ router = APIRouter()
 
 # Cache TTLs per timeframe (seconds)
 _CACHE_TTL = {
-    "15m": 120,
     "1h": CACHE_TTL_MTF_1H,
     "4h": 300,
     "1D": CACHE_TTL_MTF_DAILY,
@@ -206,7 +205,7 @@ def _compute_consensus(timeframes: list[dict]) -> dict:
 
 @router.get("/{symbol}")
 async def get_mtf_dashboard(symbol: str):
-    """Return signals across 15m, 1h, 4h, and 1D timeframes for a symbol."""
+    """Return signals across 1h, 4h, and 1D timeframes for a symbol."""
     sym = symbol.upper()
 
     # Check top-level cache first
@@ -223,9 +222,6 @@ async def get_mtf_dashboard(symbol: str):
         )
 
         # Prepare dataframes for each timeframe
-        # 15m: raw intraday data
-        df_15m = intraday_df
-
         # 1h: resample 15m -> 1h
         df_1h = await asyncio.to_thread(_resample_intraday, intraday_df, "1h")
 
@@ -240,12 +236,11 @@ async def get_mtf_dashboard(symbol: str):
                 df_1d["datetime_str"] = df_1d["date"].astype(str)
 
         # Compute each timeframe (can be parallelised but they're fast individually)
-        tf_15m = await asyncio.to_thread(_compute_tf, sym, "15m", df_15m)
         tf_1h = await asyncio.to_thread(_compute_tf, sym, "1h", df_1h)
         tf_4h = await asyncio.to_thread(_compute_tf, sym, "4h", df_4h)
         tf_1d = await asyncio.to_thread(_compute_tf, sym, "1D", df_1d)
 
-        timeframes = [tf_15m, tf_1h, tf_4h, tf_1d]
+        timeframes = [tf_1h, tf_4h, tf_1d]
         consensus = _compute_consensus(timeframes)
 
         # Current price
