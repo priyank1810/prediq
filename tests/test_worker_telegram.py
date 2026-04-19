@@ -57,16 +57,16 @@ def test_fire_telegram_signal_includes_symbol_and_timeframe():
         captured.append(data)
 
     with patch("app.services.telegram_service.broadcast_to_subscribers", fake_broadcast):
-        _fire_telegram_signal({"symbol": "HDFC", "timeframe": "intraday_15m", **_make_sig()})
+        _fire_telegram_signal({"symbol": "HDFC", "timeframe": "intraday_30m", **_make_sig()})
         import time; time.sleep(0.1)
 
     assert captured
     assert captured[0]["symbol"] == "HDFC"
-    assert captured[0]["timeframe"] == "intraday_15m"
+    assert captured[0]["timeframe"] == "intraday_30m"
 
 
 def test_scan_fires_telegram_for_bullish_above_threshold():
-    """handle_watchlist_trade_scan calls _fire_telegram_signal for BULLISH signals >= 50."""
+    """handle_watchlist_trade_scan calls _fire_telegram_signal for 4h BULLISH signals >= 45."""
     from worker import Worker
     import app.config as config_mod
 
@@ -74,11 +74,12 @@ def test_scan_fires_telegram_for_bullish_above_threshold():
     worker._signal_service = None
 
     mock_signal = _make_sig(confidence=65, direction="BULLISH")
-    # Need 2+ bullish TFs to satisfy bullish_count >= 2
+    # Telegram fires only for short_4h with confidence >= 45.
+    # bullish_count >= 2 requires signals across intraday + short_term combined.
     mtf_result = {
         "current_price": 100.0,
-        "intraday": {"15m": mock_signal, "1h": mock_signal},
-        "short_term": {},
+        "intraday": {"30m": mock_signal},
+        "short_term": {"4h": mock_signal},
     }
 
     fired = []
@@ -99,7 +100,7 @@ def test_scan_fires_telegram_for_bullish_above_threshold():
             patch("time.sleep"),
         ):
             mock_tracker.log_signal = MagicMock()
-            worker.handle_watchlist_trade_scan({"scan_type": "intraday"})
+            worker.handle_watchlist_trade_scan({"scan_type": "short"})
     finally:
         config_mod.POPULAR_STOCKS = orig_popular
 
@@ -117,7 +118,7 @@ def test_scan_does_not_fire_telegram_for_bearish():
     bearish_signal = _make_sig(confidence=80, direction="BEARISH")
     mtf_result = {
         "current_price": 100.0,
-        "intraday": {"15m": bearish_signal, "1h": bearish_signal},
+        "intraday": {"30m": bearish_signal},
         "short_term": {},
     }
 
@@ -160,7 +161,7 @@ def test_scan_does_not_fire_telegram_below_50():
     low_conf_signal = _make_sig(confidence=45, direction="BULLISH")
     mtf_result = {
         "current_price": 100.0,
-        "intraday": {"15m": low_conf_signal, "1h": low_conf_signal},
+        "intraday": {"30m": low_conf_signal},
         "short_term": {},
     }
 

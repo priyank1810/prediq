@@ -12,7 +12,7 @@ def _make_signal(**overrides):
         "entry": 2450.0,
         "stop_loss": 2390.0,
         "target": 2560.0,
-        "timeframe": "intraday_15m",
+        "timeframe": "intraday_30m",
         "regime": "trending",
         "volume_conviction": "high",
         "confidence_trend": "rising",

@@ -131,7 +131,7 @@ class TestCrossTimeframeDedup:
         for p in _patch_for_logging(tracker, db): p.start()
         tracker.log_signal("SBIN", "short_1h", _make_signal(), 100.0)
         tracker.log_signal("SBIN", "short_4h", _make_signal(), 100.0)
-        tracker.log_signal("SBIN", "intraday_15m", _make_signal(), 100.0)
+        tracker.log_signal("SBIN", "intraday_30m", _make_signal(), 100.0)
         assert db.query(TradeSignalLog).count() == 2
         patch.stopall()
 
@@ -277,7 +277,7 @@ class TestMarketCloseCutoff:
              patch("app.services.trade_tracker.now_ist", return_value=late), \
              patch.object(tracker, "_check_market_regime", return_value=False), \
              patch.object(tracker, "_is_near_earnings", return_value=False):
-            tracker.log_signal("RELIANCE", "intraday_15m", _make_signal(), 100.0)
+            tracker.log_signal("RELIANCE", "intraday_30m", _make_signal(), 100.0)
             assert db.query(TradeSignalLog).count() == 0
 
     def test_intraday_allowed_before_1510(self, tracker, db):
@@ -287,7 +287,7 @@ class TestMarketCloseCutoff:
              patch("app.services.trade_tracker.now_ist", return_value=early), \
              patch.object(tracker, "_check_market_regime", return_value=False), \
              patch.object(tracker, "_is_near_earnings", return_value=False):
-            tracker.log_signal("RELIANCE", "intraday_15m", _make_signal(), 100.0)
+            tracker.log_signal("RELIANCE", "intraday_30m", _make_signal(), 100.0)
             assert db.query(TradeSignalLog).count() == 1
 
     def test_shortterm_blocked_after_1525(self, tracker, db):
