@@ -485,7 +485,6 @@ class SignalService:
     # Intraday: 15m (triggers), 30m (trend direction)
     # Short-term: 1h (entry/exit), 4h (trend direction + confirmation)
     _TIMEFRAME_HORIZON_MAP = {
-        "intraday_15m": "15m",
         "intraday_30m": "30m",
         "short_1h": "1h",
         "short_4h": "4h",
@@ -727,16 +726,6 @@ class SignalService:
             prediction=pred_results.get("intraday_30m", {}),
         )
 
-        # 15 min — triggers (15m candles)
-        intraday_15m = self._compute_timeframe_signal(
-            label="15 Min (Triggers)", df=df_15m,
-            current_price=current_price,
-            sentiment_score=sentiment_score, global_score=global_score,
-            fundamental_score=fundamental_score, news_magnitude=news_magnitude,
-            timeframe="intraday", symbol=symbol,
-            prediction=pred_results.get("intraday_15m", {}),
-        )
-
         # ── SHORT-TERM SIGNALS ──
         # 1 hour — entry/exit (1-hour resampled)
         short_1h = self._compute_timeframe_signal(
@@ -758,7 +747,6 @@ class SignalService:
         )
 
         all_signals = {
-            "intraday_15m": intraday_15m,
             "intraday_30m": intraday_30m,
             "short_1h": short_1h,
             "short_4h": short_4h,
@@ -797,7 +785,6 @@ class SignalService:
             "timestamp": now_ist().isoformat(),
             "market_open": is_market_open(),
             "intraday": {
-                "15m": intraday_15m,
                 "30m": intraday_30m,
             },
             "short_term": {
