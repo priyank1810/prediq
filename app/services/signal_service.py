@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 class SignalService:
-    def _compute_mtf_confluence(self, symbol, intraday_df, tech_score_15m):
-        """Multi-timeframe confluence: 15m, 1h, Daily."""
+    def _compute_mtf_confluence(self, symbol, intraday_df, tech_score_30m):
+        """Multi-timeframe confluence: 30m, 1h, Daily."""
         timeframes = []
 
-        # 15m — already computed
-        dir_15m = "BULLISH" if tech_score_15m > SIGNAL_DIRECTION_THRESHOLD else ("BEARISH" if tech_score_15m < -SIGNAL_DIRECTION_THRESHOLD else "NEUTRAL")
-        timeframes.append({"label": "15m", "direction": dir_15m, "score": round(tech_score_15m, 1)})
+        # 30m — already computed
+        dir_30m = "BULLISH" if tech_score_30m > SIGNAL_DIRECTION_THRESHOLD else ("BEARISH" if tech_score_30m < -SIGNAL_DIRECTION_THRESHOLD else "NEUTRAL")
+        timeframes.append({"label": "30m", "direction": dir_30m, "score": round(tech_score_30m, 1)})
 
         # 1h — resample 15m data to 1h (cached)
         score_1h = 0
@@ -482,7 +482,7 @@ class SignalService:
 
     # ── Multi-Timeframe Signals with Entry/Exit Levels ──
 
-    # Intraday: 15m (triggers), 30m (trend direction)
+    # Intraday: 30m (trend direction)
     # Short-term: 1h (entry/exit), 4h (trend direction + confirmation)
     _TIMEFRAME_HORIZON_MAP = {
         "intraday_30m": "30m",
@@ -654,13 +654,9 @@ class SignalService:
 
         # Resample 15m data to create different timeframe views
         df_15m = intraday_df
-        df_short = None  # last ~10 candles (short-term view for 2m signal)
         df_1h = None     # 1-hour resampled
 
         if df_15m is not None and not df_15m.empty:
-            # Short view: last 10 candles only (most recent price action)
-            df_short = df_15m.tail(10).reset_index(drop=True) if len(df_15m) > 10 else df_15m
-
             # Resample 15m → 1h for broader perspective
             try:
                 tmp = df_15m.copy()
