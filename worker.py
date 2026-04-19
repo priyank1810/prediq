@@ -48,6 +48,31 @@ from app.services.job_service import job_service
 from app.database import SessionLocal
 
 
+def _mins_to_candle_close(timeframe: str) -> int | None:
+    """Return minutes remaining until the current candle closes (IST).
+
+    NSE market: 9:15–15:30 IST.
+    1h candles anchor to 9:15 → close at 10:15, 11:15, 12:15, 13:15, 14:15, 15:15.
+    4h candles: 9:15–13:15 and 13:15–15:30 (partial).
+    """
+    from app.utils.helpers import now_ist
+    now = now_ist()
+    minute_of_day = (now.hour * 60 + now.minute) - (9 * 60 + 15)  # mins since market open
+    if minute_of_day < 0:
+        return None
+
+    if "1h" in timeframe:
+        mins_into_candle = minute_of_day % 60
+        return 60 - mins_into_candle
+    if "4h" in timeframe:
+        # First 4h candle: 0–240 min (9:15–13:15), second: 240–375 min (13:15–15:30)
+        if minute_of_day < 240:
+            return 240 - minute_of_day
+        elif minute_of_day < 375:
+            return 375 - minute_of_day
+    return None
+
+
 def _fire_telegram_signal(signal_data: dict) -> None:
     """Fire-and-forget: broadcast a signal alert to Telegram subscribers.
 
@@ -170,8 +195,12 @@ class Worker:
                         sig_4h = short_term.get("4h") or {}
                         if (sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
                                 and sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= 45):
-                            _fire_telegram_signal({**sig_4h, "symbol": sym, "timeframe": "short_4h"})
-                            _fire_telegram_signal({**sig_1h, "symbol": sym, "timeframe": "short_1h"})
+                            m4h = _mins_to_candle_close("4h")
+                            m1h = _mins_to_candle_close("1h")
+                            _fire_telegram_signal({**sig_4h, "symbol": sym, "timeframe": "short_4h",
+                                                   "mins_to_close": m4h})
+                            _fire_telegram_signal({**sig_1h, "symbol": sym, "timeframe": "short_1h",
+                                                   "mins_to_close": m1h})
 
                 logged += 1
             except Exception as e:
@@ -234,8 +263,12 @@ class Worker:
                         sig_4h = short_term.get("4h") or {}
                         if (sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
                                 and sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= 45):
-                            _fire_telegram_signal({**sig_4h, "symbol": sym, "timeframe": "short_4h"})
-                            _fire_telegram_signal({**sig_1h, "symbol": sym, "timeframe": "short_1h"})
+                            m4h = _mins_to_candle_close("4h")
+                            m1h = _mins_to_candle_close("1h")
+                            _fire_telegram_signal({**sig_4h, "symbol": sym, "timeframe": "short_4h",
+                                                   "mins_to_close": m4h})
+                            _fire_telegram_signal({**sig_1h, "symbol": sym, "timeframe": "short_1h",
+                                                   "mins_to_close": m1h})
 
                 logged += 1
             except Exception as e:
