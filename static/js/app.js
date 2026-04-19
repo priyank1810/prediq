@@ -1249,7 +1249,7 @@ const App = {
                 return;
             }
 
-            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
             const _fmtDt = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
             tbody.innerHTML = trades.map(t => {
                 const pColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
@@ -1303,7 +1303,7 @@ const App = {
                 rows += open.map(p => {
                     const pnlC = (p.live_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400';
                     const sign = (p.live_pnl || 0) >= 0 ? '+' : '';
-                    const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+                    const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
                     return `<tr class="bg-blue-900/10 border-l-2 border-l-blue-500 hover:bg-dark-700/50">
                         <td class="px-2 py-1.5 text-gray-400 text-[10px]">${_fmtDt(p.created_at)}</td>
                         <td class="px-2 py-1.5 text-gray-400 text-[10px]">-</td>
@@ -1321,7 +1321,7 @@ const App = {
 
             // Closed trades
             if (trades.length) {
-                const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+                const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
                 rows += trades.map(t => {
                     const pColor = t.pnl >= 0 ? 'text-green-400' : 'text-red-400';
                     const sign = t.pnl >= 0 ? '+' : '';
