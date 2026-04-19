@@ -624,12 +624,6 @@ class TradeTracker:
                 regime=signal_data.get("regime"),
                 volume_conviction=signal_data.get("volume_conviction"),
                 confidence_trend=signal_data.get("confidence_trend"),
-                # Shadow tracking: both V1 and V2 predictions
-                v1_predicted_price=signal_data.get("v1_predicted_price"),
-                v1_confidence=signal_data.get("v1_confidence"),
-                v2_predicted_price=signal_data.get("v2_predicted_price"),
-                v2_confidence=signal_data.get("v2_confidence"),
-                v2_direction=signal_data.get("v2_direction"),
                 status="open",
                 check_at=check_at,
                 expires_at=expires_at,
