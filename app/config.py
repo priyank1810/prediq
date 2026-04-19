@@ -194,6 +194,106 @@ POPULAR_STOCKS = [
     "PGHH", "KAJARIACER", "KANSAINER", "LINDEINDIA", "CONCOR",
 ]
 
+# Sector map: symbol → sector name (for sector momentum filter)
+# Only stocks likely to appear in scans are listed; unmapped stocks skip the filter.
+SECTOR_MAP: dict[str, str] = {
+    # Banking & Finance
+    "HDFCBANK": "banking", "ICICIBANK": "banking", "KOTAKBANK": "banking",
+    "AXISBANK": "banking", "SBIN": "banking", "INDUSINDBK": "banking",
+    "BANKBARODA": "banking", "PNB": "banking", "CANBK": "banking",
+    "IDFCFIRSTB": "banking", "FEDERALBNK": "banking", "RBLBANK": "banking",
+    "AUBANK": "banking", "BANDHANBNK": "banking", "YESBANK": "banking",
+    "BAJFINANCE": "nbfc", "BAJAJFINSV": "nbfc", "CHOLAFIN": "nbfc",
+    "MUTHOOTFIN": "nbfc", "MANAPPURAM": "nbfc", "LICHSGFIN": "nbfc",
+    "SBICARD": "nbfc", "ANGELONE": "nbfc", "JIOFIN": "nbfc",
+    "SUNDARMFIN": "nbfc", "POLICYBZR": "nbfc", "SHRIRAMFIN": "nbfc",
+    "HDFCLIFE": "insurance", "SBILIFE": "insurance", "LICI": "insurance",
+    # IT & Technology
+    "TCS": "it", "INFY": "it", "WIPRO": "it", "HCLTECH": "it",
+    "TECHM": "it", "LTIM": "it", "OFSS": "it", "MPHASIS": "it",
+    "COFORGE": "it", "PERSISTENT": "it", "TATAELXSI": "it",
+    "LTTS": "it", "KPITTECH": "it", "HAPPSTMNDS": "it",
+    "ZENSAR": "it", "BIRLASOFT": "it", "MASTEK": "it",
+    "NEWGEN": "it", "INTELLECT": "it", "SONATA": "it",
+    "ROUTE": "it", "DIXON": "it", "NAUKRI": "it",
+    # Auto & Auto Ancillary
+    "MARUTI": "auto", "TATAMOTORS": "auto", "M&M": "auto",
+    "BAJAJ-AUTO": "auto", "EICHERMOT": "auto", "HEROMOTOCO": "auto",
+    "TVSMOTOR": "auto", "ASHOKLEY": "auto", "ESCORTS": "auto",
+    "MOTHERSON": "auto_anc", "BALKRISIND": "auto_anc", "MRF": "auto_anc",
+    "EXIDEIND": "auto_anc", "SONACOMS": "auto_anc", "TIINDIA": "auto_anc",
+    # Pharma & Healthcare
+    "SUNPHARMA": "pharma", "DRREDDY": "pharma", "CIPLA": "pharma",
+    "DIVISLAB": "pharma", "TORNTPHARM": "pharma", "LUPIN": "pharma",
+    "GLENMARK": "pharma", "IPCALAB": "pharma", "BIOCON": "pharma",
+    "AUROPHARMA": "pharma", "ALKEM": "pharma", "LAURUSLABS": "pharma",
+    "WOCKPHARMA": "pharma", "GLAXO": "pharma", "ZYDUSLIFE": "pharma",
+    "APOLLOHOSP": "healthcare", "MAXHEALTH": "healthcare", "FORTIS": "healthcare",
+    "METROPOLIS": "healthcare", "LALPATHLAB": "healthcare", "SYNGENE": "healthcare",
+    # Energy & Power
+    "RELIANCE": "energy", "ONGC": "energy", "BPCL": "energy",
+    "IOC": "energy", "GAIL": "energy", "PETRONET": "energy",
+    "IGL": "energy", "MGL": "energy", "ATGL": "energy",
+    "NTPC": "power", "POWERGRID": "power", "TATAPOWER": "power",
+    "NHPC": "power", "SJVN": "power", "IREDA": "power",
+    "HUDCO": "power", "TORNTPOWER": "power", "CGPOWER": "power",
+    # Metals & Mining
+    "TATASTEEL": "metals", "JSWSTEEL": "metals", "SAIL": "metals",
+    "HINDALCO": "metals", "VEDL": "metals", "NATIONALUM": "metals",
+    "NMDC": "metals", "COALINDIA": "metals", "JINDALSTEL": "metals",
+    "APLAPOLLO": "metals", "HEG": "metals", "GRAPHITE": "metals",
+    # FMCG & Consumer
+    "HINDUNILVR": "fmcg", "ITC": "fmcg", "NESTLEIND": "fmcg",
+    "BRITANNIA": "fmcg", "TATACONSUM": "fmcg", "DABUR": "fmcg",
+    "MARICO": "fmcg", "COLPAL": "fmcg", "GODREJCP": "fmcg",
+    "EMAMILTD": "fmcg", "JYOTHYLAB": "fmcg", "BIKAJI": "fmcg",
+    "GILLETTE": "fmcg", "PGHH": "fmcg", "RADICO": "fmcg",
+    "VBL": "fmcg", "UBL": "fmcg", "MCDOWELL-N": "fmcg",
+    "JUBLFOOD": "fmcg", "PAGEIND": "fmcg",
+    # Infrastructure & Capital Goods
+    "LT": "infra", "SIEMENS": "infra", "ABB": "infra",
+    "HAVELLS": "infra", "POLYCAB": "infra", "CUMMINSIND": "infra",
+    "THERMAX": "infra", "KEC": "infra", "IRCON": "infra",
+    "RVNL": "infra", "NCC": "infra", "RITES": "infra",
+    "CONCOR": "infra", "ADANIPORTS": "infra",
+    # Real Estate
+    "DLF": "realty", "GODREJPROP": "realty", "SOBHA": "realty",
+    "OBEROIRLTY": "realty", "PRESTIGE": "realty", "PHOENIXLTD": "realty",
+    "KAJARIACER": "realty",
+    # Defence & PSU
+    "HAL": "defence", "BEL": "defence", "MAZDOCK": "defence",
+    "COCHINSHIP": "defence", "GRSE": "defence", "BDL": "defence",
+    "DATAPATTNS": "defence",
+    # Chemicals
+    "PIDILITIND": "chemicals", "DEEPAKNTR": "chemicals", "ATUL": "chemicals",
+    "NAVINFLUOR": "chemicals", "SRF": "chemicals", "LINDEINDIA": "chemicals",
+    # Telecom & Media
+    "BHARTIARTL": "telecom", "IDEA": "telecom", "TATACOMM": "telecom",
+    "HFCL": "telecom", "RAILTEL": "telecom",
+    # Hospitality & Travel
+    "IRCTC": "consumer", "INDHOTEL": "consumer", "SWIGGY": "consumer",
+    "DELHIVERY": "consumer", "PVRINOX": "consumer", "SUNTV": "consumer",
+    # Misc Financial/Exchange
+    "CDSL": "exchange", "BSE": "exchange", "MCX": "exchange", "CAMS": "exchange",
+    "ANGELONE": "exchange",
+    # Cement
+    "ULTRACEMCO": "cement", "GRASIM": "cement", "KANSAINER": "cement",
+}
+
+# Reverse map: sector → list of symbols
+_sector_to_symbols: dict[str, list] = {}
+for _sym, _sec in SECTOR_MAP.items():
+    _sector_to_symbols.setdefault(_sec, []).append(_sym)
+
+
+def get_sector_peers(symbol: str) -> list[str]:
+    """Return all sector peers for a symbol (excluding itself). Empty if unmapped."""
+    sector = SECTOR_MAP.get(symbol)
+    if not sector:
+        return []
+    return [s for s in _sector_to_symbols.get(sector, []) if s != symbol]
+
+
 # Indian Market Indices (symbol -> yfinance ticker)
 INDICES = {
     "NIFTY 50": "^NSEI",

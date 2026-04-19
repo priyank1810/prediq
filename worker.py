@@ -175,6 +175,8 @@ class Worker:
         popular_logged = 0
         watchlist_bullish = 0
         near_bullish = []  # Popular stocks close to turning bullish
+        scan_4h_bullish: set[str] = set()  # symbols with bullish 4h signal this scan
+        pending_alerts: list[dict] = []    # candidates for Telegram (sector filter applied after scan)
 
         # Phase 1: Scan watchlist first to detect if all bearish
         for sym in watchlist:
@@ -199,6 +201,10 @@ class Worker:
                 bullish_count = sum(1 for sig in all_sigs if sig and sig.get("direction") == "BULLISH")
                 watchlist_bullish += bullish_count
 
+                sig_4h = short_term.get("4h") or {}
+                if sig_4h.get("direction") == "BULLISH":
+                    scan_4h_bullish.add(sym)
+
                 # Multi-timeframe agreement: require 2+ bullish timeframes
                 if bullish_count >= 2:
                     if scan_type in ("intraday", "full"):
@@ -209,17 +215,11 @@ class Worker:
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH":
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
-                        # Telegram only when BOTH 1h and 4h are bullish ≥45%
+                        # Queue Telegram candidate — sector filter applied after full scan
                         sig_1h = short_term.get("1h") or {}
-                        sig_4h = short_term.get("4h") or {}
                         if (sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
                                 and sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= 45):
-                            m4h = _mins_to_candle_close("4h")
-                            m1h = _mins_to_candle_close("1h")
-                            _fire_telegram_signal({**sig_4h, "symbol": sym, "timeframe": "short_4h",
-                                                   "mins_to_close": m4h})
-                            _fire_telegram_signal({**sig_1h, "symbol": sym, "timeframe": "short_1h",
-                                                   "mins_to_close": m1h})
+                            pending_alerts.append({"symbol": sym, "sig_1h": sig_1h, "sig_4h": sig_4h})
 
                 logged += 1
             except Exception as e:
@@ -266,6 +266,11 @@ class Worker:
 
                 # Multi-timeframe agreement: require 2+ bullish timeframes (long-only)
                 bullish_count = sum(1 for sig in all_sigs if sig and sig.get("direction") == "BULLISH")
+
+                sig_4h = short_term.get("4h") or {}
+                if sig_4h.get("direction") == "BULLISH":
+                    scan_4h_bullish.add(sym)
+
                 if bullish_count >= 2:
                     if scan_type in ("intraday", "full"):
                         for tf_key, sig in intraday.items():
@@ -277,17 +282,11 @@ class Worker:
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
                                 popular_logged += 1
-                        # Telegram only when BOTH 1h and 4h are bullish ≥45%
+                        # Queue Telegram candidate — sector filter applied after full scan
                         sig_1h = short_term.get("1h") or {}
-                        sig_4h = short_term.get("4h") or {}
                         if (sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
                                 and sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= 45):
-                            m4h = _mins_to_candle_close("4h")
-                            m1h = _mins_to_candle_close("1h")
-                            _fire_telegram_signal({**sig_4h, "symbol": sym, "timeframe": "short_4h",
-                                                   "mins_to_close": m4h})
-                            _fire_telegram_signal({**sig_1h, "symbol": sym, "timeframe": "short_1h",
-                                                   "mins_to_close": m1h})
+                            pending_alerts.append({"symbol": sym, "sig_1h": sig_1h, "sig_4h": sig_4h})
 
                 logged += 1
             except Exception as e:
@@ -302,6 +301,30 @@ class Worker:
 
         if popular_logged:
             log.info(f"Popular stocks: {popular_logged} signals logged (threshold: {popular_threshold}%)")
+
+        # ── Sector momentum filter + fire Telegram ──
+        # Only alert if ≥30% of scanned sector peers are also bullish on 4h.
+        # Unmapped stocks (no sector) are always allowed through.
+        if pending_alerts and scan_type in ("short", "full"):
+            from app.config import get_sector_peers
+            alerts_fired = 0
+            for alert in pending_alerts:
+                sym = alert["symbol"]
+                peers = get_sector_peers(sym)
+                if peers:
+                    bullish_peers = sum(1 for p in peers if p in scan_4h_bullish)
+                    sector_ok = bullish_peers / len(peers) >= 0.30
+                    if not sector_ok:
+                        log.info("Sector filter blocked %s: %d/%d peers bullish", sym, bullish_peers, len(peers))
+                        continue
+                m4h = _mins_to_candle_close("4h")
+                m1h = _mins_to_candle_close("1h")
+                _fire_telegram_signal({**alert["sig_4h"], "symbol": sym, "timeframe": "short_4h",
+                                       "mins_to_close": m4h})
+                _fire_telegram_signal({**alert["sig_1h"], "symbol": sym, "timeframe": "short_1h",
+                                       "mins_to_close": m1h})
+                alerts_fired += 1
+            log.info("Telegram: %d/%d candidates passed sector filter", alerts_fired, len(pending_alerts))
 
         result = {
             "symbols_processed": logged,
