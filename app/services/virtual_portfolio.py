@@ -39,8 +39,8 @@ class VirtualPortfolio:
 
         # 2. Timeframe multiplier: longer timeframes get slightly more
         tf_mults = {
-            "intraday_10m": 0.7, "intraday_30m": 0.85,
-            "short_15m": 0.9, "short_1h": 1.1, "short_4h": 1.3,
+            "intraday_30m": 0.85,
+            "short_1h": 1.1, "short_4h": 1.3,
         }
         tf_mult = tf_mults.get(trade.timeframe, 1.0)
 
@@ -234,7 +234,7 @@ class VirtualPortfolio:
 
                 # Why picked (allocation breakdown)
                 conf_mult = max(0.5, min(2.0, ((trade.confidence or 50) - 20) / 40))
-                tf_mults = {"intraday_10m": 0.7, "intraday_15m": 0.9, "intraday_30m": 0.85, "short_1h": 1.1, "short_4h": 1.3}
+                tf_mults = {"intraday_30m": 0.85, "short_1h": 1.1, "short_4h": 1.3}
                 tf_mult = tf_mults.get(trade.timeframe, 1.0)
 
                 open_positions.append({

@@ -496,7 +496,10 @@ def trade_history(
 
     db = SessionLocal()
     try:
-        query = db.query(TradeSignalLog).filter(TradeSignalLog.status != "open")
+        query = db.query(TradeSignalLog).filter(
+            TradeSignalLog.status != "open",
+            ~TradeSignalLog.timeframe.in_(["intraday_10m", "intraday_15m"]),
+        )
 
         # Filters
         if direction:
@@ -589,6 +592,7 @@ def ai_analysis():
         resolved = db.query(TradeSignalLog).filter(
             TradeSignalLog.status != "open",
             ~TradeSignalLog.symbol.in_(index_symbols),
+            ~TradeSignalLog.timeframe.in_(["intraday_10m", "intraday_15m"]),
         ).all()
         open_count = db.query(TradeSignalLog).filter(TradeSignalLog.status == "open").count()
 

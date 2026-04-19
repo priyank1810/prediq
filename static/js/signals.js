@@ -631,7 +631,7 @@ window.Signals = {
             if (data.long_term && data.long_term.direction) allSignals.push(data.long_term);
         } else {
             // New format: grouped
-            for (const key of ['2m', '10m', '30m']) {
+            for (const key of ['30m']) {
                 if (intraday[key]) allSignals.push({ ...intraday[key], _group: 'Intraday' });
             }
             for (const key of ['1h', '4h']) {
