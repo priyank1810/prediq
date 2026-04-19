@@ -16,6 +16,62 @@ from app.config import (
 logger = logging.getLogger(__name__)
 
 
+def _candle_pattern_score(df: "pd.DataFrame") -> float:
+    """Return a composite candlestick pattern score in [-15, +15].
+
+    Positive = bullish pattern on last candle, negative = bearish.
+    Uses last 3 candles for multi-bar patterns.
+    """
+    if df is None or len(df) < 3:
+        return 0.0
+    try:
+        o, h, l, c = (df["open"].iloc[-1], df["high"].iloc[-1],
+                      df["low"].iloc[-1], df["close"].iloc[-1])
+        o2, h2, l2, c2 = (df["open"].iloc[-2], df["high"].iloc[-2],
+                          df["low"].iloc[-2], df["close"].iloc[-2])
+        body = abs(c - o)
+        body2 = abs(c2 - o2)
+        candle_range = h - l or 1e-9
+        upper_wick = h - max(o, c)
+        lower_wick = min(o, c) - l
+        score = 0.0
+
+        # ── Bullish patterns ──
+        # Hammer: small body at top, long lower wick (≥2× body), tiny upper wick
+        if lower_wick >= 2 * body and upper_wick <= body * 0.3 and body / candle_range < 0.35:
+            score += 10.0
+
+        # Bullish engulfing: prev red, current green, current body engulfs prev
+        if c2 < o2 and c > o and c > o2 and o < c2:
+            score += 12.0
+
+        # Piercing line: prev red, current opens below prev low, closes above prev midpoint
+        prev_mid = (o2 + c2) / 2
+        if c2 < o2 and o < l2 and c > prev_mid and c < o2:
+            score += 8.0
+
+        # Doji near support: body < 10% of range — indecision, slight bullish in context
+        if body / candle_range < 0.10:
+            score += 3.0
+
+        # ── Bearish patterns ──
+        # Shooting star: small body at bottom, long upper wick, tiny lower wick
+        if upper_wick >= 2 * body and lower_wick <= body * 0.3 and body / candle_range < 0.35:
+            score -= 10.0
+
+        # Bearish engulfing: prev green, current red, current body engulfs prev
+        if c2 > o2 and c < o and o > c2 and c < o2:
+            score -= 12.0
+
+        # Evening star (simplified): prev green, doji/small, current red close below prev mid
+        if c2 > o2 and body / candle_range < 0.15 and c < (o2 + c2) / 2:
+            score -= 8.0
+
+        return max(-15.0, min(15.0, score))
+    except Exception:
+        return 0.0
+
+
 class SignalService:
     def _compute_mtf_confluence(self, symbol, intraday_df, tech_score_30m):
         """Multi-timeframe confluence: 30m, 1h, Daily."""
@@ -330,6 +386,14 @@ class SignalService:
             else:
                 composite += rel_strength * 0.10
 
+        # Candlestick pattern modifier (±15 pts max, only on 4h — more meaningful on longer TF)
+        if timeframe == "short_4h" and intraday_df is not None:
+            try:
+                candle_score = _candle_pattern_score(intraday_df)
+                composite += candle_score
+            except Exception:
+                pass
+
         composite = max(-100, min(100, round(composite, 2)))
 
         # 6. Direction and confidence — per-stock learned threshold, then volatility-adaptive
@@ -353,6 +417,14 @@ class SignalService:
         else:
             direction = "NEUTRAL"
         confidence = min(100, round(abs(composite), 2))
+
+        # VWAP gate: demote BULLISH to NEUTRAL if price is below VWAP (4h only)
+        # Price must be above VWAP to confirm bullish momentum
+        if direction == "BULLISH" and timeframe == "short_4h":
+            vwap = tech_details.get("vwap")
+            if vwap and current_price < vwap * 0.999:
+                direction = "NEUTRAL"
+                logger.debug(f"VWAP gate: {symbol} demoted BULLISH→NEUTRAL (price {current_price} < VWAP {vwap})")
 
         # Calibrate confidence with historical accuracy (if adaptive weights available)
         if adaptive_info["adapted"] and adaptive_info.get("component_accuracies"):
