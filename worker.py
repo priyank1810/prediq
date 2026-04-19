@@ -165,8 +165,8 @@ class Worker:
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH":
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
-                                if tf_key == "4h" and (sig.get("confidence") or 0) >= 45:
-                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": "short_4h"})
+                                if tf_key in ("1h", "4h") and (sig.get("confidence") or 0) >= 45:
+                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"short_{tf_key}"})
 
                 logged += 1
             except Exception as e:
@@ -224,8 +224,8 @@ class Worker:
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
                                 trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
                                 popular_logged += 1
-                                if tf_key == "4h" and (sig.get("confidence") or 0) >= 45:
-                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": "short_4h"})
+                                if tf_key in ("1h", "4h") and (sig.get("confidence") or 0) >= 45:
+                                    _fire_telegram_signal({**sig, "symbol": sym, "timeframe": f"short_{tf_key}"})
 
                 logged += 1
             except Exception as e:
