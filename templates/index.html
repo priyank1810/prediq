@@ -359,7 +359,6 @@
                     <div id="predictionPanel" class="bg-dark-800 rounded-lg p-3 sm:p-4">
                         <h3 class="text-base sm:text-lg font-semibold text-white mb-3">AI Price Predictions</h3>
                         <div class="flex flex-wrap gap-2 mb-2">
-                            <button class="horizon-btn" data-horizon="15m">15 Min</button>
                             <button class="horizon-btn" data-horizon="1h">1 Hour</button>
                             <button class="horizon-btn active" data-horizon="1d">1 Day</button>
                             <button class="horizon-btn" data-horizon="1w">1 Week</button>
@@ -836,7 +835,6 @@
                     <select id="vpFilterTimeframe" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._filterPortfolioTrades()">
                         <option value="">All TFs</option>
                         <option value="intraday_10m">10m</option>
-                        <option value="intraday_15m">15m</option>
                         <option value="intraday_30m">30m</option>
                         <option value="short_1h">1h</option>
                         <option value="short_4h">4h</option>
@@ -953,7 +951,6 @@
                     </select>
                     <select id="thFilterTF" class="bg-dark-700 border border-gray-600 text-gray-300 text-[10px] rounded px-1.5 py-1" onchange="Insights._loadTradeHistory()">
                         <option value="">All Timeframes</option>
-                        <option value="intraday_15m">15m</option>
                         <option value="intraday_30m">30m</option>
                         <option value="short_1h">1h</option>
                         <option value="short_4h">4h</option>

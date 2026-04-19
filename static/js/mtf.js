@@ -1,7 +1,7 @@
 /**
  * Multi-Timeframe Signal Dashboard
  *
- * Displays a grid of 4 timeframes (15m, 1h, 4h, 1D) with signal direction,
+ * Displays a grid of 3 timeframes (1h, 4h, 1D) with signal direction,
  * strength bar, RSI, MACD status, and SMA trend. Includes a consensus row.
  */
 const Mtf = {

@@ -28,7 +28,7 @@ window.Insights = {
             const d = await resp.json();
             if (!d || d.total === 0) { container.innerHTML = '<div class="text-center py-8 text-gray-500">No trade data yet</div>'; return; }
 
-            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
             const wrColor = (wr) => wr >= 65 ? 'text-green-400' : wr >= 50 ? 'text-yellow-400' : 'text-red-400';
             const pnlColor = (p) => p >= 0 ? 'text-green-400' : 'text-red-400';
             const pnlSign = (p) => p >= 0 ? '+' : '';
@@ -135,7 +135,7 @@ window.Insights = {
                     <h3 class="text-sm font-semibold text-white mb-3">By Confidence × Timeframe</h3>
                     ${(() => {
                         const tfMap = d.by_confidence_tf || {};
-                        const tfOrder = ['15m','30m','1h','4h','1d'];
+                        const tfOrder = ['30m','1h','4h','1d'];
                         const tfs = tfOrder.filter(t => tfMap[t]);
                         Object.keys(tfMap).forEach(t => { if (!tfs.includes(t)) tfs.push(t); });
                         if (!tfs.length) return '<div class="text-xs text-gray-500">No data</div>';
@@ -303,7 +303,7 @@ window.Insights = {
 
             const s = d.summary;
             const v1Better = s.better_model === 'v1';
-            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
             const errColor = (e) => e <= 1 ? 'text-green-400' : e <= 2 ? 'text-yellow-400' : 'text-red-400';
             const wrColor = (wr) => wr >= 65 ? 'text-green-400' : wr >= 50 ? 'text-yellow-400' : 'text-red-400';
 
@@ -692,7 +692,7 @@ window.Insights = {
             return;
         }
 
-        const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+        const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
         const _fmtDt = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
         tbody.innerHTML = page.map(t => {
@@ -739,7 +739,7 @@ window.Insights = {
             }
 
             const time = s.timestamp ? new Date(s.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '-';
-            const scanLabel = { intraday: 'Intraday (15m/30m)', short: 'Short-term (1h/4h)', full: 'Full scan' };
+            const scanLabel = { intraday: 'Intraday (30m)', short: 'Short-term (1h/4h)', full: 'Full scan' };
 
             el.innerHTML = `
                 <div class="bg-dark-700 rounded-lg p-3">
@@ -783,7 +783,7 @@ window.Insights = {
         const el = document.getElementById('vpScanOverview');
         if (!el || !stocks || stocks.length === 0) { if (el) el.innerHTML = ''; return; }
 
-        const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+        const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
 
         el.innerHTML = `
             <h4 class="text-xs font-medium text-white mb-2">Scanned Stocks</h4>
@@ -1054,7 +1054,7 @@ window.Insights = {
             return;
         }
 
-        const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+        const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
         const _fmtDt = (d) => d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
 
         tbody.innerHTML = data.trades.map(t => {
@@ -1170,7 +1170,7 @@ window.Insights = {
             const pnlColor = (t.outcome_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400';
             const pnlSign = (t.outcome_pct || 0) >= 0 ? '+' : '';
 
-            const tfShort = { intraday_10m: '10m', intraday_15m: '15m', intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
+            const tfShort = { intraday_30m: '30m', short_1h: '1h', short_4h: '4h' };
 
             // Target label: "Re-entry" for bearish
             const targetLabel = t.direction === 'BEARISH' ? 'Re-entry' : 'Target';

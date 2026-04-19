@@ -434,12 +434,12 @@ window.Signals = {
         el.classList.remove('hidden');
 
         const acc = learning.overall_accuracy || 0;
-        const best = learning.best_timeframe || '15min';
+        const best = learning.best_timeframe || '30min';
         const trend = learning.trend || 'stable';
         const twa = learning.time_window_accuracy || {};
 
         // Best timeframe label
-        const tfLabel = best === '15min' ? '15 Min' : best === '30min' ? '30 Min' : '1 Hour';
+        const tfLabel = best === '30min' ? '30 Min' : '1 Hour';
         const bestAcc = twa[best] || acc;
 
         // Trend icon
@@ -634,7 +634,7 @@ window.Signals = {
             for (const key of ['2m', '10m', '30m']) {
                 if (intraday[key]) allSignals.push({ ...intraday[key], _group: 'Intraday' });
             }
-            for (const key of ['15m', '1h', '4h']) {
+            for (const key of ['1h', '4h']) {
                 if (shortTerm[key]) allSignals.push({ ...shortTerm[key], _group: 'Short-term' });
             }
         }
