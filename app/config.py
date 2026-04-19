@@ -185,6 +185,13 @@ POPULAR_STOCKS = [
     "HEG", "GRAPHITE", "RAIN", "JYOTICNC", "POONAWALLA",
     # ── Misc high volume ──
     "SILVERBEES", "GOLDBEES", "NIFTYBEES",
+    # ── Additional Nifty Midcap 100 ──
+    "IRCTC", "CGPOWER", "JIOFIN", "ANGELONE", "AUBANK",
+    "BANDHANBNK", "ESCORTS", "LICI", "NAUKRI", "SUNDARMFIN",
+    "TORNTPOWER", "TIINDIA", "ZYDUSLIFE", "INDHOTEL", "POLICYBZR",
+    "SWIGGY", "DELHIVERY", "YESBANK", "TRIDENT", "RITES",
+    "SOBHA", "RADICO", "WOCKPHARMA", "GILLETTE", "GLAXO",
+    "PGHH", "KAJARIACER", "KANSAINER", "LINDEINDIA", "CONCOR",
 ]
 
 # Indian Market Indices (symbol -> yfinance ticker)
