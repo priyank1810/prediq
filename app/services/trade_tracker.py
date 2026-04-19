@@ -57,6 +57,29 @@ BLACKLIST_REFRESH_SECONDS = 1800  # rebuild cache every 30 min
 class TradeTracker:
     """Tracks trade signal predictions and validates outcomes."""
 
+    def _effective_sl(self, sig) -> "float | None":
+        """Return trailing SL for 4h signals; original SL for others.
+
+        Uses persisted highest_price to reconstruct the trailing SL level
+        from the same milestone thresholds used in check_symbol_tick.
+        """
+        if sig.timeframe != "short_4h" or not sig.entry or not sig.target or not sig.stop_loss:
+            return sig.stop_loss
+        highest = sig.highest_price or sig.entry
+        target_dist = sig.target - sig.entry
+        if target_dist <= 0:
+            return sig.stop_loss
+        profit = highest - sig.entry
+        if profit >= target_dist:
+            trailing = round(sig.entry + profit * 0.70, 2)
+        elif profit >= target_dist * 0.75:
+            trailing = round(sig.entry + profit * 0.50, 2)
+        elif profit >= target_dist * 0.50:
+            trailing = round(sig.entry, 2)
+        else:
+            return sig.stop_loss
+        return max(trailing, sig.stop_loss)
+
     def _check_signal_still_valid(self, symbol: str, direction: str, timeframe: str = None) -> bool:
         """Re-evaluate AI signal at checkpoint time.
         Returns True if AI still agrees with the trade direction.
@@ -677,12 +700,16 @@ class TradeTracker:
                         sig.outcome_pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
                         sig.resolved_at = now
                         resolved += 1
-                    elif sig.stop_loss and ltp <= sig.stop_loss:
-                        sig.status = "sl_hit"
+                    elif (effective_sl := self._effective_sl(sig)) and ltp <= effective_sl:
+                        outcome_pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
+                        # Trailing SL triggered above entry = profitable exit
+                        sig.status = "target_hit" if (sig.entry and ltp > sig.entry) else "sl_hit"
                         sig.outcome_price = ltp
-                        sig.outcome_pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
+                        sig.outcome_pct = outcome_pct
                         sig.resolved_at = now
                         resolved += 1
+                        if sig.timeframe == "short_4h" and effective_sl != sig.stop_loss:
+                            logger.info(f"Trailing SL exit {sig.symbol}: ltp={ltp} trailing_sl={effective_sl} outcome={outcome_pct:+.2f}%")
                     elif sig.check_at and now > sig.check_at:
                         # Timeframe checkpoint: re-evaluate AI signal
                         pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
