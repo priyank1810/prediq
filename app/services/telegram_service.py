@@ -81,8 +81,6 @@ async def send_signal_alert(chat_id: str, signal_data: dict) -> bool:
     confidence_trend = signal_data.get("confidence_trend")
     model_confidence = signal_data.get("model_confidence")
     risk_reward = signal_data.get("risk_reward")
-    mins_to_close = signal_data.get("mins_to_close")
-
     arrow = "\u2b06\ufe0f" if direction.upper() == "BULLISH" else "\u2b07\ufe0f" if direction.upper() == "BEARISH" else "\u27a1\ufe0f"
 
     lines = [
@@ -92,8 +90,6 @@ async def send_signal_alert(chat_id: str, signal_data: dict) -> bool:
         f"Confidence: <b>{confidence:.0f}%</b>",
         f"Entry: \u20b9{entry}",
     ]
-    if mins_to_close is not None:
-        lines.append(f"\u23f0 Candle closes in <b>{mins_to_close} min</b> — watch for pullback to support")
     if stop_loss is not None:
         lines.append(f"Stop Loss: \u20b9{stop_loss}")
     if target is not None:

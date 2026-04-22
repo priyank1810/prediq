@@ -206,11 +206,8 @@ class Worker:
                     scan_4h_bullish.add(sym)
 
                 # Multi-timeframe agreement: require 2+ bullish timeframes
+                # Only log short_term (1h/4h) — 30m has 33% WR and pollutes the tracker
                 if bullish_count >= 2:
-                    if scan_type in ("intraday", "full"):
-                        for tf_key, sig in intraday.items():
-                            if sig and sig.get("direction") == "BULLISH":
-                                trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
                     if scan_type in ("short", "full"):
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH":
@@ -272,11 +269,6 @@ class Worker:
                     scan_4h_bullish.add(sym)
 
                 if bullish_count >= 2:
-                    if scan_type in ("intraday", "full"):
-                        for tf_key, sig in intraday.items():
-                            if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
-                                trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
-                                popular_logged += 1
                     if scan_type in ("short", "full"):
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
