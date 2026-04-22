@@ -663,7 +663,7 @@ class TradeTracker:
 
             # Group by symbol to batch quote fetches
             symbols = list({s.symbol for s in open_signals})
-            quotes = data_fetcher.get_bulk_quotes(symbols)
+            quotes = data_fetcher.get_bulk_quotes(symbols, skip_cache=True)
             quote_map = {q["symbol"]: q for q in quotes if q.get("symbol")}
 
             resolved = 0
@@ -686,12 +686,13 @@ class TradeTracker:
                 if low and (sig.lowest_price is None or low < sig.lowest_price):
                     sig.lowest_price = low
 
-                # Check outcomes
+                # Check outcomes — use candle high for target (catches intracandle touch)
+                hit_price = max(ltp, high or 0)
                 if sig.direction == "BULLISH":
-                    if sig.target and ltp >= sig.target:
+                    if sig.target and hit_price >= sig.target:
                         sig.status = "target_hit"
-                        sig.outcome_price = ltp
-                        sig.outcome_pct = round((ltp - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
+                        sig.outcome_price = min(sig.target, hit_price)
+                        sig.outcome_pct = round((sig.outcome_price - sig.entry) / sig.entry * 100, 2) if sig.entry else 0
                         sig.resolved_at = now
                         resolved += 1
                     elif (effective_sl := self._effective_sl(sig)) and ltp <= effective_sl:
@@ -741,13 +742,14 @@ class TradeTracker:
                         resolved += 1
 
                 elif sig.direction == "BEARISH":
-                    if sig.target and ltp <= sig.target:
+                    low_price = min(ltp, low) if low else ltp
+                    if sig.target and low_price <= sig.target:
                         sig.status = "target_hit"
-                        sig.outcome_price = ltp
-                        sig.outcome_pct = round((sig.entry - ltp) / sig.entry * 100, 2) if sig.entry else 0
+                        sig.outcome_price = max(sig.target, low_price)
+                        sig.outcome_pct = round((sig.entry - sig.outcome_price) / sig.entry * 100, 2) if sig.entry else 0
                         sig.resolved_at = now
                         resolved += 1
-                    elif sig.stop_loss and ltp >= sig.stop_loss:
+                    elif sig.stop_loss and hit_price >= sig.stop_loss:
                         sig.status = "sl_hit"
                         sig.outcome_price = ltp
                         sig.outcome_pct = round((sig.entry - ltp) / sig.entry * 100, 2) if sig.entry else 0

@@ -89,8 +89,11 @@ class DataFetcher:
             cache.set(cache_key, quote, CACHE_TTL_QUOTE)
         return quote
 
-    def get_bulk_quotes(self, symbols: list[str]) -> list[dict]:
-        """Fetch quotes for multiple symbols, using Angel One batch API when available."""
+    def get_bulk_quotes(self, symbols: list[str], skip_cache: bool = False) -> list[dict]:
+        """Fetch quotes for multiple symbols, using Angel One batch API when available.
+
+        skip_cache=True forces live fetch for all symbols (used by trade validation).
+        """
         results = {}
 
         # Try Angel One batch first (single API call for all symbols)
@@ -105,13 +108,14 @@ class DataFetcher:
                 angel_breaker.record_failure()
                 logger.debug(f"Angel One batch failed: {e}")
 
-        # Check cache for missing symbols before fetching
+        # Check cache for missing symbols before fetching (skip when fresh data required)
         missing = [s for s in symbols if s not in results]
-        for sym in list(missing):
-            cached = cache.get(f"quote:{sym}")
-            if cached:
-                results[sym] = cached
-                missing.remove(sym)
+        if not skip_cache:
+            for sym in list(missing):
+                cached = cache.get(f"quote:{sym}")
+                if cached:
+                    results[sym] = cached
+                    missing.remove(sym)
 
         # Fetch remaining concurrently with 8s timeout per stock
         if missing:
