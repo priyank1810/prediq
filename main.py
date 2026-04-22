@@ -59,9 +59,7 @@ async def smart_alert_checker():
                 if triggered:
                     for alert_data in triggered:
                         await manager.broadcast_to_all("smart_alert_triggered", alert_data)
-                        # Fire-and-forget Telegram broadcast for price alerts
-                        from app.services.telegram_service import broadcast_to_subscribers, send_price_alert as _tg_price
-                        asyncio.create_task(broadcast_to_subscribers("price_alerts", _tg_price, alert_data))
+                        # Telegram price alerts disabled — signals only
                         # Fire-and-forget SMS broadcast for price alerts
                         from app.services.sms_service import broadcast_to_subscribers as sms_broadcast, send_price_alert as _sms_price
                         asyncio.create_task(sms_broadcast("price_alerts", _sms_price, alert_data))
@@ -359,9 +357,7 @@ async def news_alert_scanner():
                                     "top_headline": sentiment["headlines"][0]["title"] if sentiment.get("headlines") else None,
                                 }
                                 await manager.broadcast_to_all("news_alert", alert_data)
-                                # Fire-and-forget Telegram broadcast
-                                from app.services.telegram_service import broadcast_to_subscribers, send_news_alert as _tg_news
-                                asyncio.create_task(broadcast_to_subscribers("news", _tg_news, alert_data))
+                                # Telegram news alerts disabled — signals only
                                 # Fire-and-forget SMS broadcast
                                 from app.services.sms_service import broadcast_to_subscribers as sms_broadcast, send_news_alert as _sms_news
                                 asyncio.create_task(sms_broadcast("news", _sms_news, alert_data))
@@ -375,8 +371,7 @@ async def news_alert_scanner():
                                     "top_headline": sentiment["headlines"][0]["title"] if sentiment.get("headlines") else None,
                                 }
                                 await manager.broadcast_to_all("news_alert", alert_data)
-                                from app.services.telegram_service import broadcast_to_subscribers, send_news_alert as _tg_news2
-                                asyncio.create_task(broadcast_to_subscribers("news", _tg_news2, alert_data))
+                                # Telegram news alerts disabled — signals only
                                 from app.services.sms_service import broadcast_to_subscribers as sms_broadcast2, send_news_alert as _sms_news2
                                 asyncio.create_task(sms_broadcast2("news", _sms_news2, alert_data))
                         except Exception:
@@ -808,9 +803,7 @@ async def live_scanner():
                             "matched_filters": result.get("matched_filters", []),
                         }
                         await manager.broadcast_to_all("scanner_alert", alert_data)
-                        # Fire-and-forget Telegram broadcast
-                        from app.services.telegram_service import broadcast_to_subscribers, send_scanner_alert as _tg_scanner
-                        asyncio.create_task(broadcast_to_subscribers("scanner", _tg_scanner, alert_data))
+                        # Telegram scanner alerts disabled — signals only
                         # Fire-and-forget SMS broadcast
                         from app.services.sms_service import broadcast_to_subscribers as sms_broadcast, send_scanner_alert as _sms_scanner
                         asyncio.create_task(sms_broadcast("scanner", _sms_scanner, alert_data))
