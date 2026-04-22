@@ -515,6 +515,28 @@ async def eod_cleanup_unresolved_trades():
             await asyncio.sleep(600)
 
 
+async def eod_signal_scan():
+    """Post-market scan: all stocks, 4h confidence ≥60%, fire Telegram setups.
+    Runs once at 3:45 PM IST (15 min after market close)."""
+    await asyncio.sleep(120)
+
+    while True:
+        try:
+            from app.utils.helpers import now_ist
+            from app.services.job_service import job_service
+            current = now_ist()
+            if current.hour == 15 and 45 <= current.minute <= 50:
+                if not job_service.has_pending("eod_scan"):
+                    job_service.enqueue("eod_scan", {}, priority=1)
+                    logging.getLogger(__name__).info("EOD signal scan enqueued")
+                await asyncio.sleep(3600)  # avoid duplicate enqueue same day
+            else:
+                await asyncio.sleep(300)
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"EOD scan enqueuer error: {e}")
+            await asyncio.sleep(300)
+
+
 async def weekly_analysis_report():
     """Friday 5 PM IST: automated weekly analysis with recommendations."""
     await asyncio.sleep(900)
@@ -862,6 +884,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(live_scanner()),
         asyncio.create_task(daily_stock_learner()),
         asyncio.create_task(eod_cleanup_unresolved_trades()),
+        asyncio.create_task(eod_signal_scan()),
         asyncio.create_task(daily_telegram_report()),
         asyncio.create_task(weekly_analysis_report()),
         asyncio.create_task(trade_job_enqueuer()),

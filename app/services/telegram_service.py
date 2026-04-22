@@ -81,10 +81,12 @@ async def send_signal_alert(chat_id: str, signal_data: dict) -> bool:
     confidence_trend = signal_data.get("confidence_trend")
     model_confidence = signal_data.get("model_confidence")
     risk_reward = signal_data.get("risk_reward")
+    eod_setup = signal_data.get("eod_setup", False)
     arrow = "\u2b06\ufe0f" if direction.upper() == "BULLISH" else "\u2b07\ufe0f" if direction.upper() == "BEARISH" else "\u27a1\ufe0f"
+    label = "EOD Setup" if eod_setup else "Signal"
 
     lines = [
-        f"{arrow} <b>Signal: {symbol}</b>",
+        f"{arrow} <b>{label}: {symbol}</b>",
         "",
         f"Direction: <b>{direction}</b>",
         f"Confidence: <b>{confidence:.0f}%</b>",

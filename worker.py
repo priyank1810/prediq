@@ -357,6 +357,51 @@ class Worker:
             trade_tracker.learn_from_trades()
         return result
 
+    def handle_eod_scan(self, params: dict) -> dict:
+        """Post-market scan: all POPULAR_STOCKS for 4h BULLISH signals ≥60% confidence.
+
+        Fires Telegram alerts for next-day setups. Does NOT log to TradeSignalLog
+        (market is closed — no live position can be opened).
+        """
+        from app.config import POPULAR_STOCKS
+        from app.services.signal_service import get_multi_timeframe_signals
+        from app.services.data_fetcher import data_fetcher
+
+        EOD_CONFIDENCE = 60
+        MIN_VOL = 500_000
+
+        symbols = list(set(POPULAR_STOCKS))
+
+        # Volume filter
+        try:
+            bulk = data_fetcher.get_bulk_quotes(symbols, skip_cache=True)
+            vol_map = {q["symbol"]: q.get("avg_volume", 0) for q in bulk if q.get("symbol")}
+            symbols = [s for s in symbols if vol_map.get(s, MIN_VOL) >= MIN_VOL]
+        except Exception as e:
+            log.warning("EOD scan: volume filter failed, scanning all — %s", e)
+
+        alerts_sent = 0
+        scanned = 0
+        for sym in symbols:
+            try:
+                result = get_multi_timeframe_signals(sym)
+                sig_4h = (result.get("short_term") or {}).get("4h") or {}
+                if sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= EOD_CONFIDENCE:
+                    _fire_telegram_signal({
+                        **sig_4h,
+                        "symbol": sym,
+                        "timeframe": "short_4h",
+                        "eod_setup": True,
+                    })
+                    alerts_sent += 1
+                scanned += 1
+            except Exception as e:
+                log.debug("EOD scan error for %s: %s", sym, e)
+
+        log.info("EOD scan complete: %d scanned, %d alerts sent (≥%d%% confidence)",
+                 scanned, alerts_sent, EOD_CONFIDENCE)
+        return {"scanned": scanned, "alerts_sent": alerts_sent}
+
     # --- Health logging ---
 
     def _log_health(self):
@@ -410,6 +455,7 @@ class Worker:
     DISPATCH = {
         "watchlist_trade_scan": "handle_watchlist_trade_scan",
         "trade_validate": "handle_trade_validate",
+        "eod_scan": "handle_eod_scan",
     }
 
     def run(self, once: bool = False):
