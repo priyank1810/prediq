@@ -212,12 +212,16 @@ class Worker:
                             if sig and sig.get("direction") == "BULLISH":
                                 trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
                     if scan_type in ("short", "full"):
+                        sig_1h = short_term.get("1h") or {}
+                        logged_4h = False
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH":
-                                trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
-                        # Queue Telegram candidate — sector filter applied after full scan
-                        sig_1h = short_term.get("1h") or {}
-                        if (sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
+                                did_log = trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
+                                if tf_key == "4h" and did_log:
+                                    logged_4h = True
+                        # Only queue Telegram if 4h signal was actually written to DB
+                        if (logged_4h
+                                and sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
                                 and sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= 45):
                             pending_alerts.append({"symbol": sym, "sig_1h": sig_1h, "sig_4h": sig_4h})
 
@@ -275,16 +279,21 @@ class Worker:
                     if scan_type in ("intraday", "full"):
                         for tf_key, sig in intraday.items():
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
-                                trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price)
-                                popular_logged += 1
+                                if trade_tracker.log_signal(sym, f"intraday_{tf_key}", sig, live_price):
+                                    popular_logged += 1
                     if scan_type in ("short", "full"):
+                        sig_1h = short_term.get("1h") or {}
+                        logged_4h = False
                         for tf_key, sig in short_term.items():
                             if sig and sig.get("direction") == "BULLISH" and (sig.get("confidence") or 0) >= popular_threshold:
-                                trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
-                                popular_logged += 1
-                        # Queue Telegram candidate — sector filter applied after full scan
-                        sig_1h = short_term.get("1h") or {}
-                        if (sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
+                                did_log = trade_tracker.log_signal(sym, f"short_{tf_key}", sig, live_price)
+                                if did_log:
+                                    popular_logged += 1
+                                if tf_key == "4h" and did_log:
+                                    logged_4h = True
+                        # Only queue Telegram if 4h signal was actually written to DB
+                        if (logged_4h
+                                and sig_1h.get("direction") == "BULLISH" and (sig_1h.get("confidence") or 0) >= 45
                                 and sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= 45):
                             pending_alerts.append({"symbol": sym, "sig_1h": sig_1h, "sig_4h": sig_4h})
 
