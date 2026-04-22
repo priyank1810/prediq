@@ -505,45 +505,46 @@ class TradeTracker:
         return False
 
     def log_signal(self, symbol: str, timeframe: str, signal_data: dict,
-                   current_price: float) -> bool:
-        """Log a trade prediction from an MTF signal computation.
-        Returns True if the signal was actually written to DB, False if blocked."""
+                   current_price: float):
+        """Log a trade prediction from an MTF signal computation."""
         if not signal_data or signal_data.get("direction") != "BULLISH":
-            return False  # Only track bullish signals (portfolio is long-only)
+            return  # Only track bullish signals (portfolio is long-only)
 
         # Only track signals with 45%+ confidence
         if (signal_data.get("confidence") or 0) < 45:
-            return False
+            return
 
         # Skip signals where AI confidence is falling — model is losing conviction
         if signal_data.get("confidence_trend") == "falling":
             logger.debug(f"Skipped {symbol} {timeframe}: confidence trend falling")
-            return False
+            return
 
         # Don't log signals near market close — not enough time to play out
         current = now_ist().replace(tzinfo=None)
         market_close_hour, market_close_min = 15, 10
         if timeframe.startswith("intraday"):
+            # Intraday signals: stop 20 min before close (15:10)
             market_close_min = 10
         else:
+            # Short-term: stop 5 min before close (15:25)
             market_close_min = 25
         if current.hour > market_close_hour or (current.hour == market_close_hour and current.minute >= market_close_min):
-            return False
+            return
 
         # Market regime filter: skip bullish signals when NIFTY is tanking
         if self._check_market_regime():
-            return False
+            return
 
         # Skip stocks near earnings announcements (too risky)
         if self._is_near_earnings(symbol):
             logger.debug(f"Skipped {symbol}: near earnings announcement")
-            return False
+            return
 
         target = signal_data.get("target")
         stop_loss = signal_data.get("stop_loss")
 
         if not current_price or not target:
-            return False
+            return
 
         # Use actual market price as entry (what you'd really pay)
         entry = round(current_price, 2)
@@ -564,15 +565,15 @@ class TradeTracker:
             blacklist = self._get_blacklisted_symbols(db)
             if symbol in blacklist:
                 logger.debug(f"Skipped {symbol}: auto-blacklisted (<{BLACKLIST_WIN_RATE_PCT}% win rate over {BLACKLIST_MIN_TRADES}+ trades)")
-                return False
+                return
 
             # Daily loss circuit breaker
             if self._check_daily_loss_limit(db):
-                return False
+                return
 
             # SL cooldown: don't re-enter a stock that just hit stop-loss
             if self._check_sl_cooldown(symbol, db):
-                return False
+                return
 
             # Check for recent duplicate (same symbol + timeframe)
             min_interval = MIN_LOG_INTERVAL_MINUTES.get(timeframe, 30)
@@ -587,7 +588,7 @@ class TradeTracker:
                 .first()
             )
             if recent:
-                return False  # Already logged recently
+                return  # Already logged recently
 
             # Cross-timeframe dedup: max 2 open trades per symbol
             open_for_symbol = (
@@ -599,7 +600,7 @@ class TradeTracker:
                 .count()
             )
             if open_for_symbol >= 2:
-                return False  # Already have 2 open positions on this stock
+                return  # Already have 2 open positions on this stock
 
             now = now_ist().replace(tzinfo=None)
             window = TIMEFRAME_WINDOWS.get(timeframe, timedelta(days=1))
@@ -630,15 +631,13 @@ class TradeTracker:
             db.add(log)
             db.commit()
             logger.debug(f"Logged trade signal: {symbol} {timeframe} {signal_data['direction']}")
+            # Refresh cache so tick checker picks up new trade
             self._cache_loaded = False
-            return True
         except Exception as e:
             db.rollback()
             logger.debug(f"Trade signal logging failed: {e}")
-            return False
         finally:
             db.close()
-        return False
 
     def validate_open_signals(self):
         """Check all open signals against current prices.
