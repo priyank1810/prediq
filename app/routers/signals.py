@@ -900,48 +900,6 @@ def open_trade_predictions():
         db.close()
 
 
-@router.get("/stats/trades/confidence-analysis")
-def confidence_bucket_analysis():
-    """Temporary: WR and avg P&L by confidence bucket per timeframe group."""
-    db = SessionLocal()
-    try:
-        from app.models import TradeSignalLog
-        from collections import defaultdict
-        trades = (
-            db.query(TradeSignalLog)
-            .filter(
-                TradeSignalLog.status.in_(["target_hit","sl_hit","correct","wrong","expired"]),
-                TradeSignalLog.confidence != None,
-                TradeSignalLog.timeframe != None,
-                ~TradeSignalLog.timeframe.in_(["intraday_10m","intraday_15m"]),
-            )
-            .all()
-        )
-        buckets = defaultdict(list)
-        for t in trades:
-            tf = "intraday" if (t.timeframe or "").startswith("intraday") else "short_term"
-            c = t.confidence or 0
-            if c < 45: b = "<45"
-            elif c < 50: b = "45-49"
-            elif c < 55: b = "50-54"
-            elif c < 60: b = "55-59"
-            elif c < 65: b = "60-64"
-            else: b = "65+"
-            buckets[(tf, b)].append({"pnl": t.outcome_pct or 0, "status": t.status})
-        result = {}
-        for (tf, b), ts in buckets.items():
-            wins = sum(1 for t in ts if t["pnl"] > 0)
-            avg = sum(t["pnl"] for t in ts) / len(ts)
-            result[f"{tf}/{b}"] = {
-                "total": len(ts), "win_rate": round(wins/len(ts)*100,1),
-                "avg_pnl": round(avg, 3),
-                "target_hit": sum(1 for t in ts if t["status"]=="target_hit"),
-                "sl_hit": sum(1 for t in ts if t["status"]=="sl_hit"),
-            }
-        return {"total_trades": len(trades), "buckets": result}
-    finally:
-        db.close()
-
 
 @router.post("/stats/trades/validate")
 def manually_validate_trades():
