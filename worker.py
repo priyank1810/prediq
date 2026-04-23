@@ -363,14 +363,15 @@ class Worker:
         Fires Telegram alerts for next-day setups. Does NOT log to TradeSignalLog
         (market is closed — no live position can be opened).
         """
-        from app.config import POPULAR_STOCKS
         from app.services.signal_service import get_multi_timeframe_signals
         from app.services.data_fetcher import data_fetcher
 
         EOD_CONFIDENCE = 60
         MIN_VOL = 500_000
 
-        symbols = list(set(POPULAR_STOCKS))
+        # Full NSE universe (2200+ stocks via NSE CSV, falls back to POPULAR_STOCKS)
+        stock_list = data_fetcher.get_stock_list()
+        symbols = list({s["symbol"] for s in stock_list if s.get("symbol")})
 
         # Volume filter
         try:
