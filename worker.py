@@ -370,7 +370,7 @@ class Worker:
         MIN_VOL = 500_000
 
         # Full NSE universe (2200+ stocks via NSE CSV, falls back to POPULAR_STOCKS)
-        stock_list = data_fetcher.get_stock_list()
+        stock_list = data_fetcher._get_nse_stock_list()
         symbols = list({s["symbol"] for s in stock_list if s.get("symbol")})
 
         # Volume filter
