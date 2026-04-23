@@ -525,7 +525,7 @@ async def eod_signal_scan():
             from app.utils.helpers import now_ist
             from app.services.job_service import job_service
             current = now_ist()
-            if current.hour == 20 and 0 <= current.minute <= 5:
+            if current.hour == 22 and 0 <= current.minute <= 5:
                 if not job_service.has_pending("eod_scan"):
                     job_service.enqueue("eod_scan", {}, priority=1)
                     logging.getLogger(__name__).info("EOD signal scan enqueued")
