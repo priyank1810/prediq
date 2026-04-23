@@ -43,10 +43,10 @@ MIN_LOG_INTERVAL_MINUTES = {
 DAILY_LOSS_LIMIT_PCT = -2.0
 
 # Cooldown after SL hit: don't re-enter same stock for this many minutes
-SL_COOLDOWN_MINUTES = 120
+SL_COOLDOWN_MINUTES = 60
 
 # Market regime: suppress bullish signals if NIFTY is down more than this %
-MARKET_DOWN_THRESHOLD_PCT = -1.0
+MARKET_DOWN_THRESHOLD_PCT = -1.5
 
 # Auto-blacklist: stocks with <50% win rate over 30+ resolved trades
 BLACKLIST_MIN_TRADES = 30
@@ -514,9 +514,9 @@ class TradeTracker:
         if (signal_data.get("confidence") or 0) < 45:
             return
 
-        # Skip signals where AI confidence is falling — model is losing conviction
-        if signal_data.get("confidence_trend") == "falling":
-            logger.debug(f"Skipped {symbol} {timeframe}: confidence trend falling")
+        # Skip only if confidence is falling AND below 50% — still log rising or stable signals
+        if signal_data.get("confidence_trend") == "falling" and (signal_data.get("confidence") or 0) < 50:
+            logger.debug(f"Skipped {symbol} {timeframe}: confidence falling below 50%")
             return
 
         # Don't log signals near market close — not enough time to play out

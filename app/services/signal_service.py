@@ -422,7 +422,7 @@ class SignalService:
         # Price must be above VWAP to confirm bullish momentum
         if direction == "BULLISH" and timeframe == "short_4h":
             vwap = tech_details.get("vwap")
-            if vwap and current_price < vwap * 0.999:
+            if vwap and current_price < vwap * 0.995:
                 direction = "NEUTRAL"
                 logger.debug(f"VWAP gate: {symbol} demoted BULLISH→NEUTRAL (price {current_price} < VWAP {vwap})")
 
