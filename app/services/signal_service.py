@@ -813,6 +813,13 @@ class SignalService:
             except Exception as e:
                 logger.debug(f"Trade logging failed: {e}")
 
+        # Log rule-based signals to SignalLog (AI predictions table)
+        # Validators in websocket.py auto-populate was_correct fields 15/30/60 min later
+        try:
+            self._log_rule_based_prediction(symbol, current_price, all_signals)
+        except Exception as e:
+            logger.debug(f"SignalLog write failed for {symbol}: {e}")
+
         return {
             "symbol": symbol,
             "current_price": round(current_price, 2),
@@ -826,6 +833,53 @@ class SignalService:
                 "4h": short_4h,
             },
         }
+
+    def _log_rule_based_prediction(self, symbol: str, current_price: float, all_signals: dict):
+        """Write rule-based composite signals to SignalLog for accuracy tracking.
+        Deduplicates within 30 min per symbol+timeframe. Market hours only."""
+        from app.utils.helpers import is_market_open
+        if not is_market_open():
+            return
+
+        from app.database import SessionLocal
+        from app.models import SignalLog
+        from app.config import SECTOR_MAP
+        from datetime import timedelta
+
+        db = SessionLocal()
+        try:
+            cutoff = now_ist().replace(tzinfo=None) - timedelta(minutes=30)
+            for tf_key, sig in all_signals.items():
+                if not sig or sig.get("direction") == "NEUTRAL":
+                    continue
+                recent = db.query(SignalLog).filter(
+                    SignalLog.symbol == symbol,
+                    SignalLog.timeframe == tf_key,
+                    SignalLog.created_at > cutoff,
+                ).first()
+                if recent:
+                    continue
+                components = sig.get("components") or {}
+                db.add(SignalLog(
+                    symbol=symbol,
+                    timeframe=tf_key,
+                    direction=sig["direction"],
+                    confidence=sig.get("confidence", 0),
+                    composite_score=sig.get("score", 0),
+                    technical_score=components.get("technical", 0),
+                    sentiment_score=components.get("sentiment", 0),
+                    global_score=components.get("global", 0),
+                    oi_score=None,
+                    price_at_signal=round(current_price, 2),
+                    regime=sig.get("regime"),
+                    sector=SECTOR_MAP.get(symbol),
+                ))
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def _compute_timeframe_signal(self, label, df, current_price, sentiment_score,
                                    global_score, fundamental_score, news_magnitude,

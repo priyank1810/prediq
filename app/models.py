@@ -95,6 +95,7 @@ class SignalLog(Base):
     sentiment_score = Column(Float, nullable=False)
     global_score = Column(Float, nullable=False)
     oi_score = Column(Float, nullable=True)
+    timeframe = Column(String, nullable=True)  # intraday_30m, short_1h, short_4h
     price_at_signal = Column(Float, nullable=True)
     price_after_15min = Column(Float, nullable=True)
     price_after_30min = Column(Float, nullable=True)

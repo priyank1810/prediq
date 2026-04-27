@@ -364,7 +364,8 @@ class Worker:
         (market is closed — no live position can be opened).
         Runs in parallel (10 workers) to finish within job timeout.
         """
-        from app.services.signal_service import get_multi_timeframe_signals
+        from app.services.signal_service import signal_service as _svc
+        get_multi_timeframe_signals = _svc.get_multi_timeframe_signals
         from app.services.data_fetcher import data_fetcher
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
