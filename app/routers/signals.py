@@ -902,6 +902,47 @@ def open_trade_predictions():
 
 
 
+@router.get("/stats/trades/4h-confidence")
+def fourh_confidence_analysis():
+    """Temporary: 4h signal WR by confidence bucket."""
+    db = SessionLocal()
+    try:
+        from app.models import TradeSignalLog
+        from collections import defaultdict
+        trades = (
+            db.query(TradeSignalLog)
+            .filter(
+                TradeSignalLog.status.in_(["target_hit","sl_hit","correct","wrong","expired"]),
+                TradeSignalLog.timeframe == "short_4h",
+                TradeSignalLog.confidence != None,
+            )
+            .all()
+        )
+        buckets = defaultdict(list)
+        for t in trades:
+            c = t.confidence or 0
+            if c < 45: b = "<45"
+            elif c < 50: b = "45-49"
+            elif c < 55: b = "50-54"
+            elif c < 60: b = "55-59"
+            elif c < 65: b = "60-64"
+            else: b = "65+"
+            buckets[b].append({"pnl": t.outcome_pct or 0, "status": t.status})
+        result = {}
+        for b, ts in buckets.items():
+            wins = sum(1 for t in ts if t["pnl"] > 0)
+            result[b] = {
+                "total": len(ts), "win_rate": round(wins/len(ts)*100, 1),
+                "avg_pnl": round(sum(t["pnl"] for t in ts)/len(ts), 3),
+                "avg_win": round(sum(t["pnl"] for t in ts if t["pnl"]>0)/max(1,wins), 3),
+                "target_hit": sum(1 for t in ts if t["status"]=="target_hit"),
+                "sl_hit": sum(1 for t in ts if t["status"]=="sl_hit"),
+            }
+        return {"total": len(trades), "buckets": result}
+    finally:
+        db.close()
+
+
 @router.post("/stats/trades/validate")
 def manually_validate_trades():
     """Manually trigger validation of open trade predictions."""
