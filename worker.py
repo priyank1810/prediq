@@ -358,46 +358,63 @@ class Worker:
         return result
 
     def handle_eod_scan(self, params: dict) -> dict:
-        """Post-market scan: all POPULAR_STOCKS for 4h BULLISH signals ≥60% confidence.
+        """Post-market scan: all NSE stocks for 4h BULLISH signals ≥60% confidence.
 
         Fires Telegram alerts for next-day setups. Does NOT log to TradeSignalLog
         (market is closed — no live position can be opened).
+        Runs in parallel (10 workers) to finish within job timeout.
         """
         from app.services.signal_service import get_multi_timeframe_signals
         from app.services.data_fetcher import data_fetcher
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         EOD_CONFIDENCE = 60
         MIN_VOL = 500_000
+        WORKERS = 10
 
         # Full NSE universe (2200+ stocks via NSE CSV, falls back to POPULAR_STOCKS)
         stock_list = data_fetcher._get_nse_stock_list()
         symbols = list({s["symbol"] for s in stock_list if s.get("symbol")})
 
-        # Volume filter
+        # Volume filter — use cache (avg_volume is historical, doesn't change at night)
         try:
-            bulk = data_fetcher.get_bulk_quotes(symbols, skip_cache=True)
+            bulk = data_fetcher.get_bulk_quotes(symbols)
             vol_map = {q["symbol"]: q.get("avg_volume", 0) for q in bulk if q.get("symbol")}
             symbols = [s for s in symbols if vol_map.get(s, MIN_VOL) >= MIN_VOL]
+            log.info("EOD scan: %d liquid symbols after volume filter", len(symbols))
         except Exception as e:
             log.warning("EOD scan: volume filter failed, scanning all — %s", e)
 
         alerts_sent = 0
         scanned = 0
-        for sym in symbols:
+
+        def _scan_one(sym):
             try:
                 result = get_multi_timeframe_signals(sym)
                 sig_4h = (result.get("short_term") or {}).get("4h") or {}
                 if sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= EOD_CONFIDENCE:
-                    _fire_telegram_signal({
-                        **sig_4h,
-                        "symbol": sym,
-                        "timeframe": "short_4h",
-                        "eod_setup": True,
-                    })
-                    alerts_sent += 1
-                scanned += 1
+                    return sym, sig_4h
+                return sym, None
             except Exception as e:
                 log.debug("EOD scan error for %s: %s", sym, e)
+                return sym, None
+
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            futures = {pool.submit(_scan_one, sym): sym for sym in symbols}
+            for fut in as_completed(futures, timeout=540):  # 9-min cap
+                try:
+                    sym, sig_4h = fut.result(timeout=5)
+                    scanned += 1
+                    if sig_4h:
+                        _fire_telegram_signal({
+                            **sig_4h,
+                            "symbol": sym,
+                            "timeframe": "short_4h",
+                            "eod_setup": True,
+                        })
+                        alerts_sent += 1
+                except Exception:
+                    pass
 
         log.info("EOD scan complete: %d scanned, %d alerts sent (≥%d%% confidence)",
                  scanned, alerts_sent, EOD_CONFIDENCE)
