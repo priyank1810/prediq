@@ -19,11 +19,11 @@ def _make_signal(overrides=None):
         "direction": "BULLISH",
         "confidence": 55,
         "entry": 100.0,
-        "target": 105.0,
+        "target": 110.0,  # R:R = 10/3 = 3.3 — passes minimum 1.5 gate
         "stop_loss": 97.0,
-        "predicted_price": 104.0,
+        "predicted_price": 108.0,
         "model_used": "v1",
-        "risk_reward": 1.5,
+        "risk_reward": 3.3,
     }
     if overrides:
         sig.update(overrides)
@@ -92,7 +92,7 @@ class TestEntryUsesCurrentPrice:
         """Entry should always be the actual market price, not signal's computed entry."""
         for p in _patch_for_logging(tracker, db): p.start()
         tracker.log_signal("RELIANCE", "short_1h",
-                           _make_signal({"entry": 110.0, "target": 115.0}), 100.0)
+                           _make_signal({"entry": 110.0, "target": 125.0, "stop_loss": 108.0}), 100.0)
         logged = db.query(TradeSignalLog).first()
         assert logged is not None
         assert logged.entry == 100.0  # current_price, not signal entry
@@ -102,7 +102,7 @@ class TestEntryUsesCurrentPrice:
         """Even with wildly different signal entry, trade uses current_price."""
         for p in _patch_for_logging(tracker, db): p.start()
         tracker.log_signal("NIFTY IT", "short_4h",
-                           _make_signal({"entry": 29249.0, "target": 30000.0}), 20550.0)
+                           _make_signal({"entry": 29249.0, "target": 30000.0, "stop_loss": None}), 20550.0)
         logged = db.query(TradeSignalLog).first()
         assert logged is not None
         assert logged.entry == 20550.0  # current_price

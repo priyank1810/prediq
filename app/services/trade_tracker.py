@@ -559,6 +559,14 @@ class TradeTracker:
             if stop_loss is not None:
                 stop_loss = round(stop_loss + shift, 2)
 
+        # Minimum R:R gate (after rebase) — skip if reward doesn't justify risk
+        if stop_loss and target:
+            reward = abs(target - entry)
+            risk = abs(entry - stop_loss)
+            if risk > 0 and reward / risk < 1.5:
+                logger.debug(f"Skipped {symbol} {timeframe}: R:R {reward/risk:.2f} < 1.5")
+                return
+
         db = SessionLocal()
         try:
             # Auto-blacklist: skip stocks with poor historical win rate

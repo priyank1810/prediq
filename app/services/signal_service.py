@@ -1112,8 +1112,8 @@ class SignalService:
         # Swing high/low for the timeframe
         if timeframe == "intraday":
             lookback = min(26, len(df))
-            atr_multiplier_sl = 0.7
-            atr_multiplier_target = 0.8  # tight — realistic for 30 min
+            atr_multiplier_sl = 1.0
+            atr_multiplier_target = 2.0  # R:R 2:1
         elif timeframe == "short_4h":
             lookback = min(20, len(df))
             atr_multiplier_sl = 1.5   # wider — midcaps need breathing room
@@ -1121,7 +1121,7 @@ class SignalService:
         elif timeframe in ("short_1h", "short_term"):
             lookback = min(10, len(df))
             atr_multiplier_sl = 1.0
-            atr_multiplier_target = 1.5
+            atr_multiplier_target = 2.0  # R:R 2:1
         else:
             lookback = min(60, len(df))
             atr_multiplier_sl = 1.5
