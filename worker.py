@@ -368,7 +368,7 @@ class Worker:
         from app.services.data_fetcher import data_fetcher
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        EOD_CONFIDENCE = 50
+        EOD_CONFIDENCE = 45
         MIN_VOL = 500_000
         WORKERS = 10
 
