@@ -901,6 +901,54 @@ def open_trade_predictions():
 
 
 
+@router.get("/stats/trades/daily-pnl")
+def daily_pnl_analysis(days: int = Query(14, ge=1, le=60)):
+    """Temporary: per-day P&L, WR, avg target size for last N days."""
+    db = SessionLocal()
+    try:
+        from app.models import TradeSignalLog
+        from app.utils.helpers import now_ist
+        from datetime import datetime, timedelta
+        from collections import defaultdict
+        cutoff = now_ist().replace(tzinfo=None) - timedelta(days=days)
+        trades = (
+            db.query(TradeSignalLog)
+            .filter(
+                TradeSignalLog.status.in_(["target_hit","sl_hit","correct","wrong","expired"]),
+                TradeSignalLog.created_at >= cutoff,
+                ~TradeSignalLog.timeframe.in_(["intraday_10m","intraday_15m"]),
+            )
+            .all()
+        )
+        by_day = defaultdict(list)
+        for t in trades:
+            day = t.created_at.date().isoformat() if t.created_at else "unknown"
+            by_day[day].append(t)
+        result = []
+        for day in sorted(by_day.keys(), reverse=True):
+            ts = by_day[day]
+            wins = sum(1 for t in ts if (t.outcome_pct or 0) > 0)
+            avg_pnl = sum(t.outcome_pct or 0 for t in ts) / len(ts)
+            avg_win = sum(t.outcome_pct for t in ts if (t.outcome_pct or 0) > 0) / max(1, wins)
+            losses = [t for t in ts if (t.outcome_pct or 0) <= 0]
+            avg_loss = sum(t.outcome_pct or 0 for t in losses) / max(1, len(losses))
+            tgt_sizes = [abs((t.target or 0) - (t.entry or 0)) / (t.entry or 1) * 100 for t in ts if t.target and t.entry]
+            result.append({
+                "date": day, "trades": len(ts),
+                "win_rate": round(wins/len(ts)*100, 1),
+                "avg_pnl": round(avg_pnl, 3),
+                "avg_win": round(avg_win, 3),
+                "avg_loss": round(avg_loss, 3),
+                "avg_target_pct": round(sum(tgt_sizes)/len(tgt_sizes), 3) if tgt_sizes else 0,
+                "target_hit": sum(1 for t in ts if t.status=="target_hit"),
+                "sl_hit": sum(1 for t in ts if t.status=="sl_hit"),
+                "wrong": sum(1 for t in ts if t.status=="wrong"),
+            })
+        return result
+    finally:
+        db.close()
+
+
 @router.post("/stats/trades/validate")
 def manually_validate_trades():
     """Manually trigger validation of open trade predictions."""
