@@ -786,17 +786,12 @@ class SignalService:
             "short_4h": short_4h,
         }
 
-        # Multi-timeframe agreement: require 2+ bullish timeframes before logging.
-        # Single-timeframe signals are noisy; agreement across timeframes is the
-        # single biggest accuracy filter.
         bullish_count = sum(
             1 for s in all_signals.values()
             if s and s.get("direction") == "BULLISH"
         )
 
-        # Log trade predictions for tracking (best signal per group)
-        # Use live LTP as entry price (candle close can lag behind actual market price)
-        if bullish_count >= 2:
+        if bullish_count >= 1:
             try:
                 from app.services.trade_tracker import trade_tracker
                 live_price = current_price
