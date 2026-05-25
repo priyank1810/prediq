@@ -358,7 +358,8 @@ class Worker:
         return result
 
     def handle_eod_scan(self, params: dict) -> dict:
-        """Post-market scan: POPULAR_STOCKS for 4h BULLISH signals ≥45% confidence.
+        """Post-market scan: POPULAR_STOCKS for 4h BULLISH signals ≥55% confidence,
+        with 1h agreement and sector momentum filter.
 
         Fires Telegram alerts for next-day setups. Does NOT log to TradeSignalLog
         (market is closed — no live position can be opened).
@@ -367,26 +368,35 @@ class Worker:
         """
         from app.services.signal_service import signal_service as _svc
         get_multi_timeframe_signals = _svc.get_multi_timeframe_signals
-        from app.config import POPULAR_STOCKS
+        from app.config import POPULAR_STOCKS, get_sector_peers
         from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 
-        EOD_CONFIDENCE = 45
+        EOD_CONFIDENCE = 55
         WORKERS = 10
         symbols = list(dict.fromkeys(POPULAR_STOCKS))  # deduplicated, order preserved
 
-        alerts_sent = 0
+        candidates = []           # (sym, sig_1h, sig_4h) — passed confidence + 1h agreement
+        scan_4h_bullish = set()   # all 4h-bullish syms (for sector-peer count)
         scanned = 0
 
         def _scan_one(sym):
             try:
                 result = get_multi_timeframe_signals(sym)
-                sig_4h = (result.get("short_term") or {}).get("4h") or {}
-                if sig_4h.get("direction") == "BULLISH" and (sig_4h.get("confidence") or 0) >= EOD_CONFIDENCE:
-                    return sym, sig_4h
-                return sym, None
+                short_term = result.get("short_term") or {}
+                sig_1h = short_term.get("1h") or {}
+                sig_4h = short_term.get("4h") or {}
+                if (sig_4h.get("direction") == "BULLISH"
+                        and (sig_4h.get("confidence") or 0) >= EOD_CONFIDENCE
+                        and sig_1h.get("direction") == "BULLISH"
+                        and (sig_1h.get("confidence") or 0) >= EOD_CONFIDENCE):
+                    return sym, sig_1h, sig_4h
+                # Track 4h-bullish even if not a candidate — needed for sector ratio.
+                if sig_4h.get("direction") == "BULLISH":
+                    return sym, None, sig_4h
+                return sym, None, None
             except Exception as e:
                 log.debug("EOD scan error for %s: %s", sym, e)
-                return sym, None
+                return sym, None, None
 
         log.info("EOD scan: scanning %d symbols", len(symbols))
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
@@ -394,24 +404,39 @@ class Worker:
             try:
                 for fut in as_completed(futures, timeout=540):
                     try:
-                        sym, sig_4h = fut.result(timeout=5)
+                        sym, sig_1h, sig_4h = fut.result(timeout=5)
                         scanned += 1
-                        if sig_4h:
-                            _fire_telegram_signal({
-                                **sig_4h,
-                                "symbol": sym,
-                                "timeframe": "short_4h",
-                                "eod_setup": True,
-                            })
-                            alerts_sent += 1
+                        if sig_4h and sig_4h.get("direction") == "BULLISH":
+                            scan_4h_bullish.add(sym)
+                        if sig_1h is not None:
+                            candidates.append((sym, sig_1h, sig_4h))
                     except Exception:
                         pass
             except FuturesTimeout:
                 log.warning("EOD scan timed out after 9 min — %d/%d scanned", scanned, len(symbols))
 
-        log.info("EOD scan complete: %d scanned, %d alerts sent (≥%d%% confidence)",
-                 scanned, alerts_sent, EOD_CONFIDENCE)
-        return {"scanned": scanned, "alerts_sent": alerts_sent}
+        # Sector momentum filter: require ≥30% of sector peers also 4h-bullish.
+        # Unmapped stocks (no peers) pass through.
+        alerts_sent = 0
+        for sym, sig_1h, sig_4h in candidates:
+            peers = get_sector_peers(sym)
+            if peers:
+                bullish_peers = sum(1 for p in peers if p in scan_4h_bullish)
+                if bullish_peers / len(peers) < 0.30:
+                    log.info("EOD sector filter blocked %s: %d/%d peers bullish",
+                             sym, bullish_peers, len(peers))
+                    continue
+            _fire_telegram_signal({
+                **sig_4h,
+                "symbol": sym,
+                "timeframe": "short_4h",
+                "eod_setup": True,
+            })
+            alerts_sent += 1
+
+        log.info("EOD scan complete: %d scanned, %d/%d candidates passed sector filter (≥%d%% conf, 1h+4h agreement)",
+                 scanned, alerts_sent, len(candidates), EOD_CONFIDENCE)
+        return {"scanned": scanned, "alerts_sent": alerts_sent, "candidates": len(candidates)}
 
     # --- Health logging ---
 

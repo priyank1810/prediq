@@ -786,12 +786,15 @@ class SignalService:
             "short_4h": short_4h,
         }
 
+        # Multi-timeframe agreement: require 2+ bullish timeframes before logging.
+        # Single-timeframe signals are noisy; agreement across timeframes is the
+        # single biggest accuracy filter.
         bullish_count = sum(
             1 for s in all_signals.values()
             if s and s.get("direction") == "BULLISH"
         )
 
-        if bullish_count >= 1:
+        if bullish_count >= 2:
             try:
                 from app.services.trade_tracker import trade_tracker
                 live_price = current_price
@@ -1232,8 +1235,8 @@ class SignalService:
             else:
                 stop_loss = atr_stop
             stop_loss = max(stop_loss, swing_low - atr * 0.5)
-            # Floor: 6% for 4h (midcaps volatile), 4% for shorter timeframes
-            sl_floor = 0.94 if timeframe == "short_4h" else 0.96
+            # Floor: 5% for 4h (midcaps volatile, but keep R:R sane), 4% for shorter timeframes
+            sl_floor = 0.95 if timeframe == "short_4h" else 0.96
             stop_loss = max(stop_loss, entry * sl_floor)
 
             # Target: blend AI predicted price with technical target
