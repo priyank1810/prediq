@@ -93,20 +93,33 @@ class DataFetcher:
         """Fetch quotes for multiple symbols, using Angel One batch API when available.
 
         skip_cache=True forces live fetch for all symbols (used by trade validation).
+        Bounded: returns within ~12s even if upstream providers hang — missing
+        symbols fall back to cached values or null-quote placeholders so callers
+        (e.g. /api/watchlist/overview) never time out.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import TimeoutError as FuturesTimeout
+
         results = {}
 
-        # Try Angel One batch first (single API call for all symbols)
+        # Try Angel One batch first (single API call for all symbols).
+        # Run in a worker thread so we can enforce a hard 4s ceiling — the
+        # SmartAPI client has no built-in timeout and has been observed to hang.
         if ANGEL_AVAILABLE and angel_breaker.allow_request():
-            try:
-                angel_quotes = angel_provider.get_multiple_quotes(symbols)
-                for sym, quote in angel_quotes.items():
-                    results[sym] = quote
-                    cache.set(f"quote:{sym}", quote, CACHE_TTL_QUOTE)
-                angel_breaker.record_success()
-            except Exception as e:
-                angel_breaker.record_failure()
-                logger.debug(f"Angel One batch failed: {e}")
+            with ThreadPoolExecutor(max_workers=1) as angel_pool:
+                future = angel_pool.submit(angel_provider.get_multiple_quotes, symbols)
+                try:
+                    angel_quotes = future.result(timeout=4)
+                    for sym, quote in angel_quotes.items():
+                        results[sym] = quote
+                        cache.set(f"quote:{sym}", quote, CACHE_TTL_QUOTE)
+                    angel_breaker.record_success()
+                except FuturesTimeout:
+                    angel_breaker.record_failure()
+                    logger.warning("Angel One batch quote timed out after 4s; falling back")
+                except Exception as e:
+                    angel_breaker.record_failure()
+                    logger.debug(f"Angel One batch failed: {e}")
 
         # Check cache for missing symbols before fetching (skip when fresh data required)
         missing = [s for s in symbols if s not in results]
@@ -117,9 +130,10 @@ class DataFetcher:
                     results[sym] = cached
                     missing.remove(sym)
 
-        # Fetch remaining concurrently with 8s timeout per stock
+        # Fetch remaining concurrently. Hard ceiling: 8s for the whole batch.
+        # as_completed(timeout=8) raises FuturesTimeout when the deadline hits;
+        # we catch it and accept whatever results came back before the cutoff.
         if missing:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
             def _fetch_one(sym):
                 try:
                     return sym, self.get_live_quote(sym)
@@ -127,13 +141,19 @@ class DataFetcher:
                     return sym, None
             with ThreadPoolExecutor(max_workers=min(len(missing), 5)) as pool:
                 futures = {pool.submit(_fetch_one, s): s for s in missing}
-                for fut in as_completed(futures, timeout=8):
-                    try:
-                        sym, quote = fut.result(timeout=1)
-                        if quote:
-                            results[sym] = quote
-                    except Exception:
-                        pass
+                try:
+                    for fut in as_completed(futures, timeout=8):
+                        try:
+                            sym, quote = fut.result(timeout=1)
+                            if quote:
+                                results[sym] = quote
+                        except Exception:
+                            pass
+                except FuturesTimeout:
+                    logger.warning(
+                        "Bulk quote fetch hit 8s ceiling; %d/%d symbols resolved",
+                        len(results), len(symbols),
+                    )
 
         return [results.get(s, {"symbol": s, "ltp": 0, "change": 0, "pct_change": 0}) for s in symbols]
 

@@ -111,28 +111,41 @@ window.Watchlist = {
                     if (symbols.length > 0) API.subscribeTo(symbols);
                 }
             } catch (e) {
+                console.error('Watchlist symbol list failed:', e);
                 Shimmer.show('watchlistCards', 'grid', 8);
             }
         }
 
-        // Step 2: Load full overview with prices in background
+        // Step 2: Load full overview with prices in background. One retry on
+        // transient failures (upstream quote provider hiccup is common).
+        const _fetchOverview = async () => Promise.all([
+            API.getWatchlistOverview(),
+            API.getAlerts().catch(() => []),
+        ]);
+        let items = null, alerts = [];
         try {
-            const [items, alerts] = await Promise.all([
-                API.getWatchlistOverview(),
-                API.getAlerts().catch(() => []),
-            ]);
-            this._items = items || [];
-            this._alerts = (alerts || []).filter(a => !a.is_triggered);
-            this._lastLoadTime = Date.now();
-            this.renderCards();
-            this.renderAlerts();
-            this._startAutoRefresh();
-
-            const symbols = this._items.map(i => i.symbol).filter(Boolean);
-            if (symbols.length > 0) API.subscribeTo(symbols);
+            [items, alerts] = await _fetchOverview();
         } catch (e) {
-            console.error('Failed to load watchlist overview:', e);
+            console.error('Watchlist overview failed (will retry once):', e);
+            try {
+                await new Promise(r => setTimeout(r, 1500));
+                [items, alerts] = await _fetchOverview();
+            } catch (e2) {
+                console.error('Watchlist overview retry failed:', e2);
+                // Keep step-1 placeholder cards rendered; do not leave shimmer.
+                if (this._items.length > 0) this.renderCards();
+                return;
+            }
         }
+        this._items = items || [];
+        this._alerts = (alerts || []).filter(a => !a.is_triggered);
+        this._lastLoadTime = Date.now();
+        this.renderCards();
+        this.renderAlerts();
+        this._startAutoRefresh();
+
+        const symbols = this._items.map(i => i.symbol).filter(Boolean);
+        if (symbols.length > 0) API.subscribeTo(symbols);
     },
 
     _startAutoRefresh() {
