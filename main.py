@@ -30,6 +30,7 @@ from app.routers.broker import router as broker_router
 from app.routers.telegram import router as telegram_router
 from app.routers.sms import router as sms_router
 from app.routers.auth import router as auth_router
+from app.routers.ipo import router as ipo_router
 from app.utils.rate_limiter import RateLimiter
 
 
@@ -1039,6 +1040,7 @@ app.include_router(broker_router, prefix="/api/broker", tags=["broker"])
 app.include_router(telegram_router, prefix="/api/telegram", tags=["telegram"])
 app.include_router(sms_router, prefix="/api/sms", tags=["sms"])
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(ipo_router, prefix="/api/ipo", tags=["ipo"])
 app.include_router(ws_router)
 
 
