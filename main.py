@@ -470,6 +470,35 @@ async def daily_stock_learner():
             await asyncio.sleep(600)
 
 
+async def daily_ipo_refresh():
+    """Daily IPO task: refresh upcoming IPOs, freeze close-date recommendations,
+    and backfill listing-day prices. Runs once per day after market close."""
+    await asyncio.sleep(600)  # Let services warm up
+
+    from app.config import IPO_REFRESH_HOUR_IST
+    last_run_date = None
+    while True:
+        try:
+            from app.utils.helpers import now_ist
+            now = now_ist()
+            if now.hour >= IPO_REFRESH_HOUR_IST and last_run_date != now.date():
+                from app.database import SessionLocal
+                from app.services.ipo_service import ipo_service
+                db = SessionLocal()
+                try:
+                    summary = await asyncio.to_thread(ipo_service.refresh_and_score, db)
+                    backfilled = await asyncio.to_thread(ipo_service.backfill_listing_perf, db)
+                    logging.getLogger(__name__).info(
+                        f"IPO refresh: {summary}, backfilled={backfilled}")
+                    last_run_date = now.date()
+                finally:
+                    db.close()
+            await asyncio.sleep(1800)  # Check every 30 minutes
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Daily IPO refresh error: {e}")
+            await asyncio.sleep(1800)
+
+
 async def eod_cleanup_unresolved_trades():
     """End-of-day cleanup: delete any open trades that didn't resolve before market close.
     Runs at 3:35 PM IST (5 min after market close at 3:30 PM).
@@ -884,6 +913,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(news_alert_scanner()),
         asyncio.create_task(live_scanner()),
         asyncio.create_task(daily_stock_learner()),
+        asyncio.create_task(daily_ipo_refresh()),
         asyncio.create_task(eod_cleanup_unresolved_trades()),
         asyncio.create_task(eod_signal_scan()),
         asyncio.create_task(daily_telegram_report()),
