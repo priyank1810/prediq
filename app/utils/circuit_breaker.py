@@ -78,3 +78,5 @@ class CircuitBreaker:
 yahoo_breaker = CircuitBreaker("yahoo", failure_threshold=5, recovery_timeout=60)
 angel_breaker = CircuitBreaker("angel_one", failure_threshold=3, recovery_timeout=90)
 nse_breaker = CircuitBreaker("nse", failure_threshold=5, recovery_timeout=120)
+ipo_nse_breaker = CircuitBreaker("ipo_nse", failure_threshold=5, recovery_timeout=300)
+ipo_gmp_breaker = CircuitBreaker("ipo_gmp", failure_threshold=5, recovery_timeout=300)
