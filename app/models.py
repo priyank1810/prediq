@@ -312,3 +312,47 @@ class JobQueue(Base):
     created_at = Column(DateTime, default=now_ist)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+
+
+class IPO(Base):
+    __tablename__ = "ipos"
+    __table_args__ = (UniqueConstraint("name", "open_date", name="uq_ipo_name_open"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, index=True, nullable=True)
+    name = Column(String, nullable=False)
+    open_date = Column(Date, nullable=True)
+    close_date = Column(Date, nullable=True)
+    listing_date = Column(Date, nullable=True)
+    price_band_low = Column(Float, nullable=True)
+    price_band_high = Column(Float, nullable=True)
+    lot_size = Column(Integer, nullable=True)
+    issue_size = Column(Float, nullable=True)            # rupees crore
+    is_ofs = Column(Boolean, default=False)
+    is_fresh = Column(Boolean, default=False)
+    gmp = Column(Float, nullable=True)                   # latest snapshot, est. listing gain %
+    subscription_total = Column(Float, nullable=True)    # oversubscription multiple
+    listing_price = Column(Float, nullable=True)
+    listing_gain_pct = Column(Float, nullable=True)
+    updated_at = Column(DateTime, default=now_ist, onupdate=now_ist)
+
+    recommendations = relationship("IPORecommendation", back_populates="ipo",
+                                   cascade="all, delete-orphan")
+
+
+class IPORecommendation(Base):
+    __tablename__ = "ipo_recommendations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ipo_id = Column(Integer, ForeignKey("ipos.id"), nullable=False, index=True)
+    verdict = Column(String, nullable=False)             # APPLY / NEUTRAL / AVOID
+    confidence = Column(Integer, nullable=False)         # 0-100
+    final_score = Column(Float, nullable=False)
+    score_gmp = Column(Float, nullable=True)
+    score_subscription = Column(Float, nullable=True)
+    score_fundamentals = Column(Float, nullable=True)
+    reasons = Column(Text, nullable=True)                # JSON-encoded list[str]
+    risk_flags = Column(Text, nullable=True)             # JSON-encoded list[str]
+    created_at = Column(DateTime, default=now_ist)
+
+    ipo = relationship("IPO", back_populates="recommendations")

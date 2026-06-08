@@ -464,3 +464,12 @@ SECTOR_EVENT_MODIFIERS = {
     "pandemic":     {"Metal": 0.8,  "Energy": 1.0,  "IT": -0.3, "Banking": 1.0, "Pharma": -1.0, "Auto": 1.3, "FMCG": 0.5, "Realty": 1.3, "Finance": 1.0},
     "recovery":     {"Metal": 1.4,  "Energy": 1.2,  "IT": 0.8, "Banking": 1.2,  "Pharma": 0.6, "Auto": 1.3, "FMCG": 0.8, "Realty": 1.5, "Finance": 1.3},
 }
+
+# ---------------------------------------------------------------------------
+# IPO advisor
+# ---------------------------------------------------------------------------
+IPO_WEIGHTS = {"gmp": 0.40, "subscription": 0.35, "fundamentals": 0.25}
+IPO_VERDICT_THRESHOLDS = {"apply": 65, "avoid": 40}  # >=apply APPLY, <=avoid AVOID, else NEUTRAL
+IPO_REFRESH_HOUR_IST = 16            # daily refresh hour (IST), after market close
+IPO_APPLY_GAIN_THRESHOLD = 0.0       # listing gain % above this counts an APPLY as a hit
+IPO_GMP_SOURCE_URL = "https://www.investorgain.com/report/live-ipo-gmp/331/ipo/"  # single GMP scrape source; validate at build time
