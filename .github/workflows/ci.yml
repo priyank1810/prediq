@@ -55,5 +55,8 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
-          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+          mkdir -p ~/.ssh
+          # Best-effort known_hosts seeding; ssh below uses StrictHostKeyChecking=no
+          # so this must never fail the deploy.
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -o StrictHostKeyChecking=no -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" 'cd ~/stock-tracker && git pull origin main && source venv/bin/activate && pip install -r requirements.txt --quiet && sudo cp deploy/stocktracker.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl reload-or-restart stocktracker && sudo systemctl restart stocktracker-worker'
