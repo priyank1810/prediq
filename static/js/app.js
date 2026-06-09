@@ -102,6 +102,9 @@ const App = {
                 if (tab.dataset.tab === 'analysis') {
                     Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadAIAnalysis(); }).catch(() => {});
                 }
+                if (tab.dataset.tab === 'ipo') {
+                    Lazy.loadAndInit('ipo').then(() => { const m = Lazy._getGlobal('ipo'); if (m) m.showUpcoming(); }).catch(() => {});
+                }
             });
         });
     },
@@ -1107,7 +1110,7 @@ const App = {
         }
 
         // Activate the correct main tab
-        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'insights', 'analysis'];
+        const validTabs = ['dashboard', 'watchlist', 'portfolio', 'insights', 'analysis', 'ipo'];
         if (validTabs.includes(tab)) {
             const tabBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
             if (tabBtn) {
@@ -1131,6 +1134,7 @@ const App = {
                 if (tab === 'portfolio') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadPortfolio(); }).catch(() => {});
                 if (tab === 'insights') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadTrackRecord(); }).catch(() => {});
                 if (tab === 'analysis') Lazy.loadAndInit('insights').then(() => { const m = Lazy._getGlobal('insights'); if (m) m.loadAIAnalysis(); }).catch(() => {});
+                if (tab === 'ipo') Lazy.loadAndInit('ipo').then(() => { const m = Lazy._getGlobal('ipo'); if (m) m.showUpcoming(); }).catch(() => {});
             }
         }
 

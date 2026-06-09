@@ -13,6 +13,7 @@ const Lazy = {
         insights:     { src: '/static/js/insights.js?v=43' },
         fundamentals: { src: '/static/js/fundamentals.js?v=40' },
         signals:      { src: '/static/js/signals.js?v=41' },
+        ipo:          { src: '/static/js/ipo.js?v=1' },
     },
 
     /**
@@ -50,7 +51,7 @@ const Lazy = {
     // Map module names to their global variable names
     _globalNames: {
         predictions: 'Predictions', watchlist: 'Watchlist', insights: 'Insights',
-        fundamentals: 'Fundamentals', signals: 'Signals',
+        fundamentals: 'Fundamentals', signals: 'Signals', ipo: 'IPO',
     },
 
     /**

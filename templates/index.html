@@ -146,6 +146,7 @@
             <button class="nav-tab" data-tab="portfolio" role="tab" aria-selected="false" aria-controls="tab-portfolio">Portfolio</button>
             <button class="nav-tab" data-tab="insights" role="tab" aria-selected="false" aria-controls="tab-insights">Track Record</button>
             <button class="nav-tab" data-tab="analysis" role="tab" aria-selected="false" aria-controls="tab-analysis">AI Analysis</button>
+            <button class="nav-tab" data-tab="ipo" role="tab" aria-selected="false" aria-controls="tab-ipo">IPO</button>
         </div>
     </nav>
 
@@ -1021,6 +1022,24 @@
                 </div>
                 <div id="modelCompResult" class="text-sm text-gray-500">Enter a stock symbol to compare V1 (regression) vs V2 (classifier)</div>
             </div>
+        </div>
+
+        <!-- IPO Tab -->
+        <div id="tab-ipo" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-ipo">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                    <h2 class="text-lg sm:text-xl font-bold text-white">Upcoming IPOs</h2>
+                    <p class="text-xs text-gray-500">AI Apply / Neutral / Avoid based on GMP, subscription &amp; fundamentals. Not investment advice.</p>
+                </div>
+                <div class="flex gap-1.5">
+                    <button id="ipoTabUpcoming" onclick="IPO.showUpcoming()" class="px-3 py-1.5 bg-accent-blue text-white text-xs rounded hover:bg-blue-600">Upcoming</button>
+                    <button id="ipoTabScorecard" onclick="IPO.showScorecard()" class="px-3 py-1.5 bg-dark-700 text-gray-300 text-xs rounded hover:bg-dark-600">Scorecard</button>
+                </div>
+            </div>
+            <div id="ipoUpcoming">
+                <div class="text-center py-8 text-gray-500">Loading upcoming IPOs...</div>
+            </div>
+            <div id="ipoScorecard" class="hidden"></div>
         </div>
 
     </main>
