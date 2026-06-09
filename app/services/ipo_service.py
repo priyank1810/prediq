@@ -130,8 +130,7 @@ class IPOService:
             })
             row = self._upsert(db, item, gmp_pct)
             upserted += 1
-            if self._should_freeze(db, row):
-                self._freeze(db, row, verdict)
+            if self._upsert_recommendation(db, row, verdict):
                 frozen += 1
         db.commit()
         return {"upserted": upserted, "frozen": frozen, "fetched": len(upcoming)}
@@ -158,23 +157,28 @@ class IPOService:
         db.flush()
         return row
 
-    def _should_freeze(self, db, row) -> bool:
-        if not row.close_date or row.close_date > date.today():
-            return False
-        existing = (db.query(IPORecommendation)
-                    .filter(IPORecommendation.ipo_id == row.id).first())
-        return existing is None
-
-    def _freeze(self, db, row, verdict):
-        db.add(IPORecommendation(
-            ipo_id=row.id, verdict=verdict["verdict"], confidence=verdict["confidence"],
-            final_score=verdict["final_score"],
-            score_gmp=verdict["components"]["gmp"],
-            score_subscription=verdict["components"]["subscription"],
-            score_fundamentals=verdict["components"]["fundamentals"],
-            reasons=json.dumps(verdict["reasons"]),
-            risk_flags=json.dumps(verdict["risk_flags"]),
-        ))
+    def _upsert_recommendation(self, db, row, verdict) -> bool:
+        """Maintain one recommendation per IPO: live (mutable) while the issue is
+        open, frozen once it closes so the scorecard grades a stable verdict.
+        Returns True if this call froze the recommendation."""
+        rec = (db.query(IPORecommendation)
+               .filter(IPORecommendation.ipo_id == row.id).first())
+        if rec is not None and rec.frozen:
+            return False  # immutable — never re-score a closed issue
+        is_closed = bool(row.close_date and row.close_date <= date.today())
+        if rec is None:
+            rec = IPORecommendation(ipo_id=row.id)
+            db.add(rec)
+        rec.verdict = verdict["verdict"]
+        rec.confidence = verdict["confidence"]
+        rec.final_score = verdict["final_score"]
+        rec.score_gmp = verdict["components"]["gmp"]
+        rec.score_subscription = verdict["components"]["subscription"]
+        rec.score_fundamentals = verdict["components"]["fundamentals"]
+        rec.reasons = json.dumps(verdict["reasons"])
+        rec.risk_flags = json.dumps(verdict["risk_flags"])
+        rec.frozen = is_closed
+        return is_closed
 
     # ---- listing backfill ------------------------------------------------
     def backfill_listing_perf(self, db) -> int:

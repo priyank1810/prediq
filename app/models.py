@@ -353,6 +353,8 @@ class IPORecommendation(Base):
     score_fundamentals = Column(Float, nullable=True)
     reasons = Column(Text, nullable=True)                # JSON-encoded list[str]
     risk_flags = Column(Text, nullable=True)             # JSON-encoded list[str]
+    frozen = Column(Boolean, default=False)              # locked at issue close for honest scorecard
     created_at = Column(DateTime, default=now_ist)
+    updated_at = Column(DateTime, default=now_ist, onupdate=now_ist)
 
     ipo = relationship("IPO", back_populates="recommendations")

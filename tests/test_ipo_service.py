@@ -38,6 +38,19 @@ def test_refresh_is_idempotent(mock_fund, _f1, _f2, db):
     assert db.query(IPO).count() == 1
 
 
+@patch.object(ipo_service, "_fetch_gmp_map", return_value={"ACME": 30.0})
+@patch.object(ipo_service, "fetch_upcoming", return_value=SAMPLE_UPCOMING)
+@patch("app.services.ipo_service.fundamental_service")
+def test_open_ipo_gets_live_unfrozen_verdict(mock_fund, _f1, _f2, db):
+    mock_fund.get_fundamentals.return_value = {"pe": 20, "rev_growth": 0.25, "de": 0.4}
+    ipo_service.refresh_and_score(db)
+    rec = db.query(IPORecommendation).one()
+    assert rec.frozen is False           # still open → mutable
+    assert rec.verdict in ("APPLY", "NEUTRAL", "AVOID")
+    # serialized upcoming exposes the live verdict
+    assert ipo_service.get_upcoming(db)[0]["verdict"] == rec.verdict
+
+
 @patch.object(ipo_service, "_fetch_gmp_map", return_value={})
 def test_freeze_recommendation_at_close(_gmp, db):
     closed = [{
